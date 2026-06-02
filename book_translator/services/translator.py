@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from typing import Dict, Generator, List, Optional
 
 from book_translator.config import config
-from book_translator.config.constants import TranslationStatus
+from book_translator.config.constants import TranslationStatus, SUPPORTED_LANGUAGES
 from book_translator.models.translation import TranslationProgress
 from book_translator.services.cache_service import TranslationCache, get_cache
 from book_translator.services.ollama_client import OllamaClient, get_ollama_client
@@ -94,8 +94,7 @@ CONTEXT (for continuity only - do NOT include in output):
 USER TRANSLATION INSTRUCTIONS:
 {custom_instructions}
 """
-        
-        return f"""You are a professional literary translator. Translate the following {source_lang} text to {target_lang}.
+        return f"""You are a professional literary translator. Translate the following {SUPPORTED_LANGUAGES[source_lang]} ({source_lang}) text to {SUPPORTED_LANGUAGES[target_lang]} ({target_lang}).
 
 CRITICAL RULES:
 1. Output ONLY the translated text - nothing else
