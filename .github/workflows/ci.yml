@@ -11,6 +11,9 @@ on:
 env:
   PYTHON_VERSION: "3.12"
 
+permissions:
+  contents: write
+
 jobs:
   lint:
     name: Code Quality
@@ -112,7 +115,7 @@ jobs:
             safety-report.json
 
   build-executable:
-    name: Build Executable
+    name: Build Executable (Windows)
     runs-on: windows-latest
     needs: test
     if: github.event_name == 'release' || github.ref == 'refs/heads/main'
@@ -133,11 +136,11 @@ jobs:
       
       - name: Build executable
         run: |
-          pyinstaller --clean book_translator.spec
+          pyinstaller --clean book_translator_onefile.spec
       
       - name: Test executable exists
         run: |
-          if (Test-Path "dist/BookTranslator/BookTranslator.exe") {
+          if (Test-Path "dist/BookTranslator.exe") {
             Write-Host "✅ Executable built successfully"
           } else {
             Write-Error "❌ Executable not found"
@@ -149,7 +152,73 @@ jobs:
         uses: actions/upload-artifact@v6
         with:
           name: BookTranslator-Windows
-          path: dist/BookTranslator/BookTranslator.exe
+          path: dist/BookTranslator.exe
+          retention-days: 30
+
+  build-appimage:
+    name: Build AppImage (Linux)
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.event_name == 'release' || github.ref == 'refs/heads/main'
+    
+    steps:
+      - uses: actions/checkout@v6
+      
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+      
+      - name: Build Linux executable
+        run: |
+          pyinstaller --clean book_translator_onefile.spec
+      
+      - name: Create AppDir
+        run: |
+          mkdir -p BookTranslator.AppDir
+          cp dist/BookTranslator BookTranslator.AppDir/BookTranslator
+          chmod +x BookTranslator.AppDir/BookTranslator
+          
+          python -c "
+          from PIL import Image
+          img = Image.open('app_icon.ico')
+          img.save('BookTranslator.AppDir/BookTranslator.png')
+          "
+          cp BookTranslator.AppDir/BookTranslator.png BookTranslator.AppDir/.DirIcon
+          
+          cat << 'EOF' > BookTranslator.AppDir/BookTranslator.desktop
+          [Desktop Entry]
+          Type=Application
+          Name=Book Translator
+          Comment=Book Translator - Desktop Edition
+          Exec=BookTranslator
+          Icon=BookTranslator
+          Categories=Utility;
+          Terminal=false
+          EOF
+          
+          cd BookTranslator.AppDir
+          ln -s BookTranslator AppRun
+          cd ..
+          
+      - name: Build AppImage
+        run: |
+          curl -Lo appimagetool https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage
+          chmod +x appimagetool
+          ./appimagetool --appimage-extract
+          ARCH=x86_64 ./squashfs-root/AppRun BookTranslator.AppDir BookTranslator-x86_64.AppImage
+          
+      - name: Upload AppImage
+        uses: actions/upload-artifact@v6
+        with:
+          name: BookTranslator-Linux
+          path: BookTranslator-x86_64.AppImage
           retention-days: 30
 
   build-docker:
@@ -176,19 +245,70 @@ jobs:
   release:
     name: Create Release
     runs-on: ubuntu-latest
-    needs: [build-executable, build-docker]
+    needs: [build-executable, build-appimage, build-docker]
     if: github.event_name == 'release'
     
     steps:
       - uses: actions/checkout@v6
       
-      - name: Download artifacts
+      - name: Download Windows Executable
         uses: actions/download-artifact@v8
         with:
           name: BookTranslator-Windows
           path: artifacts/
+          
+      - name: Download Linux AppImage
+        uses: actions/download-artifact@v8
+        with:
+          name: BookTranslator-Linux
+          path: artifacts/
       
       - name: Upload release assets
-        run: gh release upload "${{ github.event.release.tag_name }}" artifacts/BookTranslator.exe --clobber
+        run: |
+          gh release upload "${{ github.event.release.tag_name }}" artifacts/BookTranslator.exe --clobber
+          gh release upload "${{ github.event.release.tag_name }}" artifacts/BookTranslator-x86_64.AppImage --clobber
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  prerelease:
+    name: Publish Continuous Pre-release
+    runs-on: ubuntu-latest
+    needs: [build-executable, build-appimage]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    
+    steps:
+      - uses: actions/checkout@v6
+      
+      - name: Download Windows Executable
+        uses: actions/download-artifact@v8
+        with:
+          name: BookTranslator-Windows
+          path: artifacts/
+          
+      - name: Download Linux AppImage
+        uses: actions/download-artifact@v8
+        with:
+          name: BookTranslator-Linux
+          path: artifacts/
+          
+      - name: Publish Pre-release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Delete existing 'continuous' release and tag remotely if they exist
+          gh release delete continuous --yes --cleanup-tag || true
+          
+          # Wait a moment for GitHub tag deletion to propagate
+          sleep 3
+          
+          # Create new pre-release with tag 'continuous'
+          COMMIT_SHA="${{ github.sha }}"
+          SHORT_SHA="${COMMIT_SHA:0:7}"
+          DATE_STR="$(date -u +'%Y/%m/%d, %H:%M')"
+          
+          gh release create continuous \
+            --title "Continuous Build" \
+            --notes "$(printf "Triggered on %s UTC by commit %s (@%s)\n\nThis is an automated build of the latest source. It may be unstable or even crash, corrupt your save or eat your kitten. Use with caution!" "${DATE_STR}" "${SHORT_SHA}" "${{ github.actor }}")" \
+            --prerelease \
+            artifacts/BookTranslator.exe \
+            artifacts/BookTranslator-x86_64.AppImage

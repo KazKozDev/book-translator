@@ -138,8 +138,15 @@ a = Analysis(
         'PIL.Image',
         'PIL.ImageDraw',
         'pystray',
-        'pystray._win32',
-    ] + flask_hiddenimports + jinja2_hiddenimports + werkzeug_hiddenimports 
+    ] + ([
+        'pystray._win32'
+    ] if sys.platform == 'win32' else [
+        'pystray._gtk',
+        'pystray._appindicator',
+        'pystray._xorg'
+    ] if sys.platform.startswith('linux') else [
+        'pystray._darwin'
+    ] if sys.platform == 'darwin' else []) + flask_hiddenimports + jinja2_hiddenimports + werkzeug_hiddenimports 
       + pil_hiddenimports + pystray_hiddenimports + book_translator_imports,
     hookspath=[],
     hooksconfig={},

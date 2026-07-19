@@ -88,7 +88,9 @@ class TestOllamaConfig:
         config = OllamaConfig()
         assert "localhost:11434" in config.base_url or "11434" in config.base_url
         assert config.connect_timeout > 0
-        assert config.read_timeout > 0
+        # read_timeout defaults to None (wait indefinitely for Ollama to
+        # respond, since a slow machine/model is not a failure)
+        assert config.read_timeout is None
         assert 0 <= config.temperature <= 1
         assert 0 <= config.top_p <= 1
 

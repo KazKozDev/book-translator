@@ -199,12 +199,9 @@ def clean_translation_response(translation: str, previous_chunk: str = "") -> st
         r"^\s*\*\*\*+\s*\n*",
         r"^\s*```[a-z]*\s*\n*",
         r"\s*```\s*$",
-        # Notes and explanations at the end
-        r"\n+\*?\*?Note:.*$",
-        r"\n+\*?\*?Nota:.*$",
+        # Notes/explanations wrapped in brackets (bounded, safe anywhere)
         r"\n+\[Note:.*?\]",
         r"\n+\[Nota:.*?\]",
-        r"\n+---+\s*\n+.*$",
     ]
 
     for pattern in unwanted_patterns:
@@ -213,6 +210,21 @@ def clean_translation_response(translation: str, previous_chunk: str = "") -> st
         )
 
     translation = translation.strip()
+
+    # ========== PHASE 2B: Remove a trailing meta-commentary note ==========
+    # Models sometimes append a short "Note: I kept the names as-is" remark
+    # after the real translation. Only strip it if it is the LAST block of
+    # text and looks like a short remark - never scan mid-text, since a
+    # story can legitimately contain a paragraph starting with "Nota:"
+    # (a letter, a message, etc.) and everything after it must be kept.
+    _note_re = re.compile(r"^\*{0,2}(?:Note|Nota)\s*:\s*.+$", re.IGNORECASE | re.DOTALL)
+    for _sep in ("\n\n", "\n"):
+        _parts = translation.split(_sep)
+        if len(_parts) > 1:
+            _last = _parts[-1].strip()
+            if _note_re.match(_last) and len(_last) < 300:
+                translation = _sep.join(_parts[:-1]).strip()
+                break
 
     # ========== PHASE 3: Remove prompt context that leaked ==========
     # Sometimes the model includes the "previous translation for continuity" context

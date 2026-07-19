@@ -49,6 +49,7 @@ test_*.db-*
 # Logs
 *.log
 logs/*
+logs/logs/
 !logs/.gitkeep
 
 # Build artifacts

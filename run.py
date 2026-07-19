@@ -205,7 +205,7 @@ def run_simple():
     threading.Thread(target=open_browser, daemon=True).start()
     
     app = create_app()
-    app.run(host='127.0.0.1', port=server_port, debug=False, use_reloader=False)
+    app.run(host='127.0.0.1', port=server_port, debug=False, use_reloader=False, threaded=True)
 
 
 def main():

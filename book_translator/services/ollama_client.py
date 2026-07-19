@@ -27,6 +27,45 @@ class OllamaResponse:
     eval_duration: Optional[int] = None
 
 
+# Reasoning-capable model families and how their "think" field behaves.
+# gpt-oss ONLY accepts a level string ("low"/"medium"/"high") - passing a
+# boolean is silently ignored (per Ollama's docs), while Qwen3/DeepSeek
+# reasoning models take a plain boolean.
+_THINK_LEVEL_MODELS = ("gpt-oss",)
+_THINK_BOOL_MODELS = (
+    "qwen3",
+    "qwen-3",
+    "deepseek-r1",
+    "deepseek-v3.1",
+    "deepseek-v3",
+    "magistral",
+)
+
+
+def _resolve_think_option(model: str, override: str = ""):
+    """
+    Work out what to send as the "think" option for a given model.
+
+    Returns None if the field should be omitted entirely (model isn't a
+    known reasoning model, so we don't want to send it an option it might
+    not understand).
+    """
+    override = (override or "").strip().lower()
+    if override:
+        if override in ("true", "false"):
+            return override == "true"
+        if override in ("low", "medium", "high"):
+            return override
+        return None
+
+    model_lower = (model or "").lower()
+    if any(name in model_lower for name in _THINK_LEVEL_MODELS):
+        return "low"
+    if any(name in model_lower for name in _THINK_BOOL_MODELS):
+        return False
+    return None
+
+
 class OllamaClient:
     """Client for Ollama API interactions."""
 
@@ -119,8 +158,16 @@ class OllamaClient:
             "model": model,
             "prompt": prompt,
             "stream": stream,
-            "options": {"temperature": temperature, "top_p": top_p},
+            "options": {
+                "temperature": temperature,
+                "top_p": top_p,
+                "num_ctx": config.ollama.num_ctx,
+            },
         }
+
+        think_option = _resolve_think_option(model, config.ollama.think)
+        if think_option is not None:
+            payload["think"] = think_option
 
         try:
             response = self.session.post(
@@ -135,9 +182,33 @@ class OllamaClient:
                 return OllamaResponse(success=True, text="", model=model)
 
             result = response.json()
+            text = result.get("response", "")
+
+            if not text:
+                # The model returned HTTP 200 but produced no final answer.
+                # This happens with reasoning models (e.g. gpt-oss) when the
+                # context window fills up with hidden "thinking" tokens
+                # before the real answer is written - it is NOT a network
+                # error, so treat it as an explicit failure rather than
+                # silently succeeding with empty text.
+                thinking = result.get("thinking", "")
+                self.logger.warning(
+                    f"Empty response from {model} "
+                    f"(thinking={len(thinking)} chars, done_reason={result.get('done_reason')})"
+                )
+                return OllamaResponse(
+                    success=False,
+                    error=(
+                        "Empty response from model (likely ran out of context/"
+                        "reasoning budget - try a larger OLLAMA_NUM_CTX or a "
+                        "lower think level)"
+                    ),
+                    model=model,
+                )
+
             return OllamaResponse(
                 success=True,
-                text=result.get("response", ""),
+                text=text,
                 model=model,
                 eval_count=result.get("eval_count"),
                 eval_duration=result.get("eval_duration"),
@@ -173,8 +244,16 @@ class OllamaClient:
             "model": model,
             "prompt": prompt,
             "stream": True,
-            "options": {"temperature": temperature, "top_p": config.ollama.top_p},
+            "options": {
+                "temperature": temperature,
+                "top_p": config.ollama.top_p,
+                "num_ctx": config.ollama.num_ctx,
+            },
         }
+
+        think_option = _resolve_think_option(model, config.ollama.think)
+        if think_option is not None:
+            payload["think"] = think_option
 
         try:
             response = self.session.post(

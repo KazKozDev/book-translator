@@ -8,7 +8,7 @@ import os
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
 
 def _get_bool_env(key: str, default: bool) -> bool:
@@ -34,6 +34,23 @@ def _get_float_env(key: str, default: float) -> float:
     try:
         return float(os.environ.get(key, default))
     except (ValueError, TypeError):
+        return default
+
+
+def _get_optional_int_env(key: str, default: Optional[int]) -> Optional[int]:
+    """
+    Get an optional integer from an environment variable. Unset falls back
+    to `default`; "0"/"none"/"" explicitly means "no limit" (None).
+    """
+    val = os.environ.get(key)
+    if val is None:
+        return default
+    val = val.strip().lower()
+    if val in ("", "0", "none", "null"):
+        return None
+    try:
+        return int(val)
+    except ValueError:
         return default
 
 
@@ -108,8 +125,14 @@ class OllamaConfig:
     connect_timeout: int = field(
         default_factory=lambda: _get_int_env("OLLAMA_CONNECT_TIMEOUT", 30)
     )
-    read_timeout: int = field(
-        default_factory=lambda: _get_int_env("OLLAMA_READ_TIMEOUT", 300)
+    # How long to wait for Ollama to finish generating a response. Once the
+    # request has been sent and Ollama accepted it, there is no point
+    # cutting it off - a slow machine or a big/reasoning model can
+    # legitimately take many minutes, and Ollama WILL eventually respond.
+    # Defaults to no limit (waits indefinitely); set OLLAMA_READ_TIMEOUT to
+    # a number of seconds if you want a hard cap instead.
+    read_timeout: Optional[int] = field(
+        default_factory=lambda: _get_optional_int_env("OLLAMA_READ_TIMEOUT", None)
     )
     health_check_timeout: int = field(
         default_factory=lambda: _get_int_env("OLLAMA_HEALTH_TIMEOUT", 5)
@@ -120,6 +143,20 @@ class OllamaConfig:
         default_factory=lambda: _get_float_env("OLLAMA_TEMPERATURE", 0.3)
     )
     top_p: float = field(default_factory=lambda: _get_float_env("OLLAMA_TOP_P", 0.9))
+
+    # Context window (tokens). Ollama defaults to a mere 4096 tokens for most
+    # models, which reasoning models like gpt-oss can exhaust on hidden
+    # "thinking" tokens before ever writing the actual translation, coming
+    # back with a success response but an empty "response" field. Set a much
+    # larger window so the prompt + reasoning + output all fit.
+    num_ctx: int = field(default_factory=lambda: _get_int_env("OLLAMA_NUM_CTX", 8192))
+
+    # Reasoning effort override for thinking-capable models ("", "false",
+    # "true", "low", "medium", "high"). Empty string = auto-detect from the
+    # model name (see ollama_client._resolve_think_option).
+    think: str = field(
+        default_factory=lambda: os.environ.get("OLLAMA_THINK", "").strip().lower()
+    )
 
     @property
     def api_url(self) -> str:
@@ -143,12 +180,13 @@ class TranslationConfig:
     # Retry settings
     max_retries: int = field(default_factory=lambda: _get_int_env("MAX_RETRIES", 3))
     retry_delay: float = field(
-        default_factory=lambda: _get_float_env("RETRY_DELAY", 1.0)
+        default_factory=lambda: _get_float_env("RETRY_DELAY", 2.0)
     )
 
-    # Sleep between chunks (0 to disable)
+    # Sleep between chunks (0 to disable). Gives Ollama a breather between
+    # requests instead of firing the next one immediately.
     chunk_delay: float = field(
-        default_factory=lambda: _get_float_env("CHUNK_DELAY", 0.3)
+        default_factory=lambda: _get_float_env("CHUNK_DELAY", 1.5)
     )
 
     # Parallel processing

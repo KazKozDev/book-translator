@@ -86,10 +86,12 @@ def validate_model_name(model_name: str) -> Tuple[bool, Optional[str]]:
     if not model_name:
         return False, "Model name is required"
 
-    # Basic validation - model name should be alphanumeric with some special chars
+    # Basic validation - model name should be alphanumeric with some special
+    # chars. Includes "/" since models pulled from Hugging Face are named
+    # like "hf.co/mradermacher/Qwen3-8B-heretic-i1-GGUF:Q4_0".
     import re
 
-    if not re.match(r"^[a-zA-Z0-9._:-]+$", model_name):
+    if not re.match(r"^[a-zA-Z0-9._:/-]+$", model_name):
         return False, "Invalid model name format"
 
     return True, None
