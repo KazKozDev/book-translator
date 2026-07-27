@@ -31,23 +31,26 @@
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
             -webkit-font-smoothing: antialiased;
         }
-        /* Two rows, so the first one is the same header every other page has:
-           wordmark left, nav right. The log's own controls get the row below
-           rather than competing with the site nav for the same line. */
+        /* Two rows. The first is the other pages' header, copied down to the
+           padding and type sizes — same wordmark left, same nav right — so
+           moving between Home, Guide, Settings and here does not move the
+           header. The log's own controls get the row below rather than
+           competing with the site nav for the same line. */
         header { border-bottom: 1px solid var(--line); background: var(--paper); }
         .topbar {
             display: flex; align-items: center; justify-content: space-between; gap: 24px;
-            padding: 11px 16px; border-bottom: 1px solid var(--line);
+            padding: 16px 26px; border-bottom: 1px solid var(--line);
         }
         .toolbar {
             display: flex; align-items: center; flex-wrap: wrap; gap: 14px;
-            padding: 9px 16px;
+            padding: 9px 26px;
         }
-        .brand { display: flex; align-items: baseline; gap: 10px; font-size: .74rem; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; }
+        .brand { display: flex; align-items: baseline; gap: 15px; letter-spacing: .09em; text-transform: uppercase; }
         /* The wordmark doubles as the way back to the workspace. */
-        .brand-name { color: var(--ink); text-decoration: none; }
+        .brand-name { font-size: .95rem; font-weight: 700; color: var(--ink); text-decoration: none; }
         a.brand-name:hover { color: var(--accent); }
-        .brand .sub { color: var(--faint); font-weight: 500; }
+        .brand-descriptor { font-size: .8rem; font-weight: 500; color: var(--ink); opacity: .65; }
+        .brand-version { font-size: .72rem; font-weight: 500; color: var(--faint); }
         /* Same nav as every other page. */
         .local-status { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: .72rem; font-weight: 500; letter-spacing: .09em; text-transform: uppercase; }
         .local-status .sep { color: #d1d5db; }
@@ -136,7 +139,7 @@
         .msg .bad { color: var(--error); font-weight: 700; }
         .msg .sep { color: var(--faint); }
         .row.hit .msg mark { background: color-mix(in srgb, var(--accent) 30%, transparent); color: inherit; border-radius: 2px; }
-        footer { padding: 7px 16px; border-top: 1px solid var(--line); background: var(--paper); color: var(--faint); font-size: .72rem; }
+        footer { padding: 7px 26px; border-top: 1px solid var(--line); background: var(--paper); color: var(--faint); font-size: .72rem; }
         .empty { padding: 24px 16px; color: var(--faint); font-size: .8rem; }
     </style>
     <script>
@@ -146,7 +149,7 @@
 <body>
     <header>
         <div class="topbar">
-            <div class="brand"><a class="brand-name" href="/">Tolmach</a><span class="sub">Log</span></div>
+            <div class="brand"><a class="brand-name" href="/">Tolmach</a><span class="brand-descriptor">Book Translator</span><span class="brand-version">v3.0</span></div>
             <nav class="local-status" aria-label="Primary navigation">
                 <a class="repo-link" href="/">Home</a>
                 <span class="sep">•</span><a class="repo-link" href="/guide.html">Guide</a>

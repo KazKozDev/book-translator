@@ -24,14 +24,15 @@ rapidfuzz==3.9.7
 # already here through sentence-transformers, so this adds lightning and a few
 # small packages, not a second deep-learning stack; the multi-GB checkpoint is
 # still downloaded on demand, the first time the test is actually run.
-unbabel-comet==2.2.2
+#
+# 2.2.7, not the 2.2.2 this started on: 2.2.2 requires sentencepiece <0.2.0,
+# which ships no wheels for Python 3.12 on macOS or Windows, so pip falls back
+# to building it from source and the install dies in CMake. Since this file is
+# what the launcher runs on every start, that failure would have hit every Mac
+# and Windows user, not just CI. 2.2.4 onwards asks for sentencepiece >=0.2.0,
+# which has wheels everywhere.
+unbabel-comet==2.2.7
 # Pinned, not a range: it backs both COMET-Kiwi and the Language ID classifier,
 # and `transformers<5.0` from unbabel-comet would otherwise resolve to whatever
 # is newest on the day of the install.
-#
-# Known problem with this pin: COMET-Kiwi has been observed failing here with
-# "XLMRobertaTokenizer has no attribute build_inputs_with_special_tokens",
-# which is unbabel-comet 2.2.2 calling a tokenizer method this transformers
-# release no longer exposes. Unverified, but an older transformers is the first
-# thing to try if that test fails.
 transformers==4.57.6
