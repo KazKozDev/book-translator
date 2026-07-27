@@ -843,7 +843,12 @@ class BookTranslator:
     # count over capitalised runs finds the recurring names for free.
     # ------------------------------------------------------------------
 
-    PNR_MAX_TERMS = 40
+    # A ceiling on how many candidates reach the rendering call. It was 40,
+    # set when Stage 0 was a single model call; batching means the only cost
+    # of raising it is more calls, and 40 is far too few for a text that
+    # names a lot of things once each — a critical essay mentions six novels
+    # and a dozen authors in as many pages.
+    PNR_MAX_TERMS = 120
     # How much source text a single Stage 0 model call is shown. Kept well
     # inside _ollama_payload's num_ctx so the whole excerpt plus the answer
     # fits without silent truncation by the runtime.
@@ -905,7 +910,7 @@ class BookTranslator:
     @classmethod
     def harvest_proper_noun_candidates(cls, text: str, limit: int = PNR_MAX_TERMS) -> List[Dict]:
         """Frequency-ranked proper-noun candidates from the source, found
-        without a model call.
+        without a model call. ``limit=0`` returns all of them.
 
         A candidate is a run of up to three consecutive capitalised words.
         The discriminator is position: a capitalised word that also occurs
@@ -986,13 +991,32 @@ class BookTranslator:
             if record['mid_sentence'] > 0:
                 harvested.append(record)
                 continue
-            # Never mid-sentence: keep only if it recurs and the plain
-            # lowercase word is not used elsewhere in the same text.
-            if record['count'] >= 3 and lowercase_counts.get(surface.casefold(), 0) == 0:
+            # Never mid-sentence: the lowercase form being absent from the
+            # whole document is the evidence, not the number of mentions.
+            # Requiring three cost the essay "Persuasion" and "Walt Whitman",
+            # each named once and each at the head of its sentence, while
+            # letting through nothing the lowercase test would have caught —
+            # a sentence-opening "Also" or "Yet" is written in lowercase
+            # elsewhere in any text of length.
+            if lowercase_counts.get(surface.casefold(), 0) == 0:
                 harvested.append(record)
 
+        # A run that only ever opens a sentence, and whose tail is a candidate
+        # in its own right, is that candidate with a sentence-opening word
+        # stuck to the front: "Although Miss Austen" beside "Miss Austen".
+        # Deciding it by asking the document, rather than by a list of
+        # function words, keeps the harvest language-neutral — which is also
+        # why "Walt Whitman" and "Mansfield Park" survive: nothing in the text
+        # uses "Whitman" or "Park" on its own.
+        surfaces = {record['surface'] for record in harvested}
+        harvested = [
+            record for record in harvested
+            if record['mid_sentence'] > 0
+            or ' ' not in record['surface']
+            or record['surface'].split(maxsplit=1)[1] not in surfaces
+        ]
         harvested.sort(key=lambda record: (-record['count'], record['surface']))
-        return harvested[:limit]
+        return harvested[:limit] if limit else harvested
 
     @staticmethod
     def _parse_json_array(raw: Optional[str]) -> List[Dict]:
@@ -1076,13 +1100,28 @@ class BookTranslator:
         is what its prompt already asks for.
         """
         merged: Dict[str, Dict] = {}
+        # Harvest without a limit and cut once, at the end. Truncating here
+        # first threw away most of what the union exists to recover: the
+        # harvest is ordered by frequency, everything named once ties, and
+        # the tie broke alphabetically — so on one essay the surviving forty
+        # ran out at "L" and Mansfield Park, Northanger Abbey, Scott,
+        # Smollett and Thackeray were gone for no reason but their initials.
         harvested = [
             {'surface': record['surface'], 'count': record['count'], 'kind': 'other', 'evidence': []}
-            for record in cls.harvest_proper_noun_candidates(text)
+            for record in cls.harvest_proper_noun_candidates(text, limit=0)
         ]
         for record in list(candidates) + harvested:
             surface = str(record.get('surface') or '').strip()
-            if not surface:
+            if not surface or not cls.is_glossary_source(text, surface):
+                continue
+            # GLiNER labels the pronoun "she" a person, 13 mentions and all,
+            # and a single-word candidate the document also writes in
+            # lowercase is a common word wearing a capital at the start of a
+            # sentence. This is the harvest's own discriminator, applied to
+            # the neural list, which had none.
+            if ' ' not in surface and re.search(
+                rf'(?<![^\W\d_]){re.escape(surface.lower())}(?![^\W\d_])', text,
+            ):
                 continue
             existing = merged.get(surface.casefold())
             if existing is None:
@@ -1112,7 +1151,33 @@ class BookTranslator:
             if not record.get('evidence'):
                 record['evidence'] = cls.evidence_for(text, record['surface'])
             collapsed.append(record)
+        collapsed = cls.drop_ambiguous_given_names(collapsed)
+        # Frequency first, then where the document introduces the term. Any
+        # tie-break has to be a fact about the text; the alphabet is not one,
+        # and it decided which names a reader got to see.
+        collapsed.sort(key=lambda record: (-record.get('count', 0), text.find(record['surface'])))
         return collapsed[:cls.PNR_MAX_TERMS]
+
+    @staticmethod
+    def drop_ambiguous_given_names(candidates: List[Dict]) -> List[Dict]:
+        """Remove a bare first name that several full names in the list share.
+
+        One glossary line is one rendering for every occurrence of its source
+        string, so ``Jane`` cannot serve Jane Austen, Jane Bennet and Jane
+        Fairfax at once. Keeping the full names and dropping the bare form
+        agrees what can actually be agreed, instead of quietly pinning three
+        people to one rendering.
+        """
+        full_names: Dict[str, set] = {}
+        for record in candidates:
+            parts = record['surface'].split()
+            if len(parts) > 1:
+                full_names.setdefault(parts[0].casefold(), set()).add(record['surface'])
+        return [
+            record for record in candidates
+            if ' ' in record['surface']
+            or len(full_names.get(record['surface'].casefold(), ())) < 2
+        ]
 
     # How much of the sentence around a mention to quote on each side.
     EVIDENCE_WINDOW_CHARS = 140

@@ -285,3 +285,76 @@ def test_a_harvested_candidate_arrives_with_context_of_its_own():
 
     assert 'a firm called Grunnings' in ' '.join(merged['Grunnings']['evidence'])
     assert all(record['evidence'] for record in merged.values())
+
+
+ESSAY = """Walt Whitman has somewhere a fine and just distinction. And in the sect
+of Austenians or Janites, there would be found partisans. To some the freshness of
+Northanger Abbey obscures the critical facts. Persuasion, relatively faint in tone,
+has devotees. The catastrophe of Mansfield Park is theatrical, and Edmund only took
+Fanny because Mary shocked him. Although Miss Austen liked the misunderstanding kind,
+she was satisfied here. Miss Austen was barely twenty-one. A fondness for Miss Austen
+is a patent of exemption. The transactions between Frank Churchill and Jane Fairfax
+contribute to the intrigue. Jane Austen's genius had nothing mannish in it.
+"""
+
+
+def test_equal_counts_are_ordered_by_first_appearance_not_by_spelling():
+    """Every term named once ties on frequency, and the tie used to break on
+    the surface string. A budget that then cuts the list ran out mid-alphabet,
+    so which names a reader saw depended on their initials."""
+    once = [
+        record for record in BookTranslator.merge_harvested_candidates(ESSAY, [])
+        if record['count'] == 1
+    ]
+    positions = [ESSAY.find(record['surface']) for record in once]
+
+    assert positions == sorted(positions), [record['surface'] for record in once]
+    # Not a tautology: the two orders genuinely disagree on this text.
+    assert [record['surface'] for record in once] != sorted(
+        record['surface'] for record in once
+    )
+
+
+def test_a_name_that_only_ever_opens_a_sentence_is_still_harvested():
+    """"Persuasion" and "Walt Whitman" are each named once, each at the head
+    of a sentence. Requiring three mentions lost both."""
+    surfaces = {record['surface'] for record in BookTranslator.merge_harvested_candidates(ESSAY, [])}
+
+    assert 'Persuasion' in surfaces
+    assert 'Walt Whitman' in surfaces
+    assert 'Northanger Abbey' in surfaces
+    assert 'Mansfield Park' in surfaces
+
+
+def test_a_sentence_opener_is_not_glued_to_the_name_behind_it():
+    """The document decides, not a list of function words: the tail of
+    "Although Miss Austen" is a candidate on its own, the tail of "Walt
+    Whitman" is not."""
+    surfaces = {record['surface'] for record in BookTranslator.merge_harvested_candidates(ESSAY, [])}
+
+    assert 'Although Miss Austen' not in surfaces
+    assert 'Walt Whitman' in surfaces
+
+
+def test_a_bare_given_name_shared_by_two_people_is_not_pinned():
+    """One glossary line is one rendering for every occurrence of its source,
+    so "Jane" cannot serve Jane Austen and Jane Fairfax at once."""
+    surfaces = {record['surface'] for record in BookTranslator.merge_harvested_candidates(ESSAY, [])}
+
+    assert 'Jane' not in surfaces
+    assert 'Jane Austen' in surfaces and 'Jane Fairfax' in surfaces
+
+
+def test_a_pronoun_the_neural_extractor_calls_a_person_is_rejected():
+    """GLiNER labels "she" a person, thirteen mentions and all. A one-word
+    candidate the document also writes in lowercase is a common word wearing
+    a capital at the start of a sentence."""
+    surfaces = {
+        record['surface'] for record in BookTranslator.merge_harvested_candidates(ESSAY, [
+            {'surface': 'she', 'count': 13, 'kind': 'person', 'evidence': [], 'variants': []},
+            {'surface': 'Fanny', 'count': 1, 'kind': 'person', 'evidence': [], 'variants': []},
+        ])
+    }
+
+    assert 'she' not in surfaces
+    assert 'Fanny' in surfaces
