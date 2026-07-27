@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Guide — Tolmach</title>
+    <link rel="icon" href="/static/assets/tolmach-favicon.svg" type="image/svg+xml">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        :root {
+            --canvas: #f7f8f9; --paper: #ffffff; --ink: #111827; --muted: #6b7280; --faint: #9ca3af;
+            --line: #e5e7eb; --line-soft: #f0f1f3; --accent: #5b7c99; --accent-dark: #46647c;
+            --good: #2e7d32; --bad: #b91c1c;
+        }
+        :root.theme-dark {
+            --canvas: #17181c; --paper: #1f2126; --ink: #e8e9ec; --muted: #9195a1; --faint: #6b6f7b;
+            --line: #2c2e35; --line-soft: #26282e; --accent: #86a4bd; --accent-dark: #a2bdd1;
+            --good: #4ade80; --bad: #f87171;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: var(--canvas); color: var(--ink); -webkit-font-smoothing: antialiased;
+            min-height: 100vh;
+        }
+
+        .container { max-width: 1920px; margin: 0 auto; padding: 0 26px 40px; }
+
+        .app-topbar { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 16px 0; margin-bottom: 18px; border-bottom: 1px solid var(--line); }
+        .brand { display: flex; align-items: baseline; gap: 15px; letter-spacing: .09em; text-transform: uppercase; }
+        .brand-name { font-size: .95rem; font-weight: 700; color: var(--ink); }
+        .brand-descriptor { font-size: .8rem; font-weight: 500; color: var(--ink); opacity: .65; }
+        .brand-version { font-size: .72rem; font-weight: 500; color: var(--faint); }
+        .local-status { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: .72rem; font-weight: 500; letter-spacing: .09em; text-transform: uppercase; }
+        .local-status .sep { color: #d1d5db; }
+        .repo-link { color: var(--muted); text-decoration: none; }
+        .repo-link:hover { color: var(--accent); text-decoration: underline; }
+        .current-nav { color: var(--ink); }
+        .theme-toggle { border: none; background: none; padding: 0; color: var(--muted); font-size: .9rem; line-height: 1; cursor: pointer; text-transform: none; letter-spacing: 0; }
+        .theme-toggle:hover { color: var(--accent); }
+
+        .page-head { padding: 18px 0 8px; }
+        .eyebrow { color: var(--faint); font-size: .74rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+        .page-head h1 { margin: 10px 0 0; font-size: 1.7rem; font-weight: 700; letter-spacing: -.01em; }
+        .page-head p { margin-top: 10px; color: var(--muted); font-size: .92rem; line-height: 1.65; max-width: 640px; }
+
+        .card { margin-top: 26px; padding: 26px 28px; border: 1px solid var(--line); border-radius: 12px; background: var(--paper); }
+        .card h2 { font-size: 1.05rem; font-weight: 700; letter-spacing: -.01em; }
+        .card > .section-title { margin-bottom: 4px; }
+        .section-title { color: var(--faint); font-size: .74rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+
+        /* Step list */
+        .steps { list-style: none; margin-top: 18px; counter-reset: step; }
+        .steps li { position: relative; padding: 14px 0 14px 40px; border-bottom: 1px solid var(--line-soft); }
+        .steps li:last-child { border-bottom: none; }
+        .steps li::before {
+            counter-increment: step; content: counter(step);
+            position: absolute; left: 0; top: 12px;
+            width: 24px; height: 24px; border-radius: 50%;
+            background: var(--line-soft); color: var(--ink);
+            font-size: .78rem; font-weight: 700; line-height: 24px; text-align: center;
+        }
+        .steps .step-title { font-weight: 600; font-size: .92rem; }
+        .steps .step-title code { padding: 1px 6px; margin: 0 2px; border-radius: 4px; background: var(--line-soft); color: var(--accent-dark); font-size: .85em; font-weight: 700; }
+        .steps p { margin-top: 5px; color: var(--muted); font-size: .85rem; line-height: 1.6; }
+
+        /* Quality check reference */
+        .qc-group { margin-top: 22px; }
+        .qc-group:first-of-type { margin-top: 18px; }
+        .qc-group > .section-title { margin-bottom: 10px; }
+        .qc-item { padding: 16px 0; border-bottom: 1px solid var(--line-soft); }
+        .qc-item:last-child { border-bottom: none; }
+        .qc-item h3 { font-size: .92rem; font-weight: 700; }
+        .qc-row { display: flex; gap: 10px; margin-top: 8px; font-size: .84rem; line-height: 1.6; }
+        .qc-row .qc-label { flex: none; width: 88px; color: var(--faint); font-weight: 600; font-size: .74rem; letter-spacing: .04em; text-transform: uppercase; padding-top: .15em; }
+        .qc-row .qc-body { color: var(--ink); }
+        .qc-row .qc-body.is-muted { color: var(--muted); }
+        .qc-tag { display: inline-block; margin-left: 8px; padding: 1px 8px; border-radius: 999px; background: var(--line-soft); color: var(--muted); font-size: .68rem; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; vertical-align: middle; }
+
+        .good { color: var(--good); font-weight: 600; }
+        .bad { color: var(--bad); font-weight: 600; }
+
+        .footer-note { margin-top: 30px; color: var(--faint); font-size: .78rem; line-height: 1.6; }
+
+        .guide-columns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px; align-items: start; }
+        .guide-columns .card { min-width: 0; }
+
+        @media (max-width: 980px) {
+            .guide-columns { grid-template-columns: 1fr; }
+        }
+
+        @media (max-width: 1180px) {
+            .container { padding: 0 16px 32px; }
+        }
+
+        @media (max-width: 640px) {
+            .app-topbar { align-items: flex-start; flex-direction: column; gap: 12px; }
+            .card { padding: 22px 20px; }
+        }
+    </style>
+    <script>
+        (function () {
+            try {
+                const saved = localStorage.getItem('theme');
+                const isDark = saved ? saved === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches;
+                document.documentElement.classList.toggle('theme-dark', isDark);
+            } catch (e) {}
+        })();
+    </script>
+</head>
+<body>
+    <div class="container">
+        <header class="app-topbar">
+            <div class="brand"><span class="brand-name">Tolmach</span><span class="brand-descriptor">Book Translator</span><span class="brand-version">v3.0</span></div>
+            <div class="local-status">
+                <a class="repo-link" href="/">Home</a>
+                <span class="sep">•</span><span class="current-nav" aria-current="page">Guide</span>
+                <span class="sep">•</span><a class="repo-link" href="/settings.html">Settings</a>
+                <span class="sep">•</span><a class="repo-link" href="https://github.com/KazKozDev/book-translator" target="_blank" rel="noopener">GitHub</a>
+                <span class="sep">•</span><button type="button" class="theme-toggle" id="themeToggle" title="Switch to dark mode">🌙</button>
+            </div>
+        </header>
+
+        <div class="page-head">
+            <div class="eyebrow">Guide</div>
+            <h1>Translate, inspect, then export</h1>
+            <p>Tolmach keeps the draft, refinement and quality evidence separate. The final panel is the text you export; the draft remains available to compare whenever refinement needs a second look.</p>
+        </div>
+
+        <div class="guide-columns">
+        <section class="card">
+            <div class="section-title">Workflow</div>
+            <h2>Step by step</h2>
+            <ol class="steps">
+                <li>
+                    <div class="step-title">Upload a file — <code>→ 1 UPLOAD</code></div>
+                    <p>Click Upload on the Original text panel, or drag a <code>.txt</code> or <code>.epub</code> file onto it. The source preview appears immediately; the full file is what actually gets translated.</p>
+                </li>
+                <li>
+                    <div class="step-title">Set language pair and genre</div>
+                    <p>Choose source, target and genre. Genre guides the translation prompt; it is not a claim that the app can identify genre automatically. In <a href="/settings.html">Settings</a>, assign separate local Ollama models to Translation, Refinement, Prepare and Judge. Keeping the judge separate avoids a model grading its own output.</p>
+                    <p><strong>TranslateGemma</strong> (<code>translategemma:4b</code>, <code>12b</code> or <code>27b</code>) is supported for Start and receives its native translation prompt with the glossary and nearby context included. It is translation-only: use a general instruct model for Prepare, Continue and LLM judge tests. Backtranslation is allowed because it is another translation pass.</p>
+                </li>
+                <li>
+                    <div class="step-title">Prepare and review the glossary — optional</div>
+                    <p>Open <strong>Glossary</strong> and press <strong>→ PREPARE</strong> after uploading the source. This is a document-wide analysis, not translation: GLiNER finds entity candidates, recurring source forms are clustered, and the selected general instruct model proposes target renderings.</p>
+                    <p>The result is a proposal, not verified terminology. Review every line, remove noise, correct bad renderings and add anything it missed. If you already wrote a glossary, Prepare deliberately leaves it untouched rather than silently replacing your work. When two distinct source entities receive the same target rendering, the panel warns you to resolve that conflict before Start.</p>
+                </li>
+                <li>
+                    <div class="step-title">Adjust the glossary by hand — optional</div>
+                    <p>Use one entry per line: <code>source =&gt; target | mode</code>, for example <code>Mr. Darcy =&gt; мистер Дарси | exact</code>. Tab-separated rows are accepted too: <code>source[TAB]target[TAB]mode</code>. If omitted, the mode is <code>inflectable</code>.</p>
+                    <p><code>exact</code> keeps the target text letter-for-letter and is suited to fixed labels. If a model leaves that exact source spelling in an otherwise translated chunk, Tolmach replaces the literal leak deterministically; it does not guess at a different model-made rendering. <code>inflectable</code> keeps the agreed term but permits grammatical endings, which is normally right for names. <code>preferred</code> is a suggestion the model may depart from when context requires it. Only <code>exact</code> entries are enforced by Terminology delta; all entries contribute to the document-wide consistency check.</p>
+                </li>
+                <li>
+                    <div class="step-title">Press START — <code>→ 2 START</code></div>
+                    <p>Runs the first pass: a straight draft translation. Progress and each finished batch stream into the Translation panel as they complete.</p>
+                </li>
+                <li>
+                    <div class="step-title">Press CONTINUE — <code>→ 3 CONTINUE</code></div>
+                    <p>Refinement is a guarded patch pass, not a free rewrite. It first identifies quoted draft spans and labels the issue (for example mistranslation, omission, terminology or grammar). Python applies only those located replacements; text outside a valid span is copied unchanged.</p>
+                    <p>The proposed patch is compared with the draft against the source twice, with the order swapped. It is kept only when the verifier accepts it both times. Objective terminology and consistency fixes can be applied directly. Style-only and minor subjective suggestions are reported but not applied. A small diff — or no change in a chunk — is normal and preferable to a fluent rewrite that loses meaning.</p>
+                </li>
+                <li>
+                    <div class="step-title">Run Quality Check tests — optional</div>
+                    <p>Each test runs on demand in <strong>Current job</strong>. Draft tests become available after Start; refinement tests after Continue. Model calls and COMET-Kiwi can be slow, so the app never runs them automatically.</p>
+                    <p>Deterministic checks read the whole document and catch consistency, missing chunks and factual changes across distant pages. Model-based checks select five high-risk chunks (names, dialogue and numbers). Use a judge model different from the translation model. A result is evidence for investigation, not a substitute for reading an important manuscript.</p>
+                </li>
+                <li>
+                    <div class="step-title">Export</div>
+                    <p>Copy, TXT, PDF and EPUB become available after a translation completes. PDF saves a printable HTML file for your browser's Print → Save as PDF flow. EPUB export preserves EPUB input as a translated EPUB; TXT input can be exported as an EPUB too.</p>
+                </li>
+                <li>
+                    <div class="step-title">Archive</div>
+                    <p>Every job is saved locally in SQLite. Open restores its panels and saved checks; Continue resumes a draft; Retry re-runs a failed job; Delete permanently removes that job and its chunks.</p>
+                </li>
+            </ol>
+        </section>
+
+        <section class="card">
+            <div class="section-title">Quality Check reference</div>
+            <h2>What each test tells you</h2>
+
+            <div class="qc-group">
+                <div class="section-title">Translation — needs a draft (after Start)</div>
+
+                <div class="qc-item">
+                    <h3>Backtranslation chrF <span class="qc-tag">diagnostic only</span></h3>
+                    <div class="qc-row"><span class="qc-label">Shows</span><span class="qc-body">Translates the draft back into the source language and scores how close that round-trip is to the original, on a 0–100 scale (chrF).</span></div>
+                    <div class="qc-row"><span class="qc-label">Read it</span><span class="qc-body">Not a quality score, and no longer part of any composite. chrF measures character overlap with a <em>reference</em>, and a back-translation is not a reference — the number is the combined error of the forward and reverse translations, so it cannot be read as the quality of either. <span class="bad">Flagged below 40</span>, which is worth a look, but do not compare the figure across runs.</span></div>
+                    <div class="qc-row"><span class="qc-label">Do</span><span class="qc-body is-muted">Left on the default (same model that translated), the reverse leg is really testing self round-trip consistency: a model that translates literally can round-trip itself back almost word-for-word and score high even if the forward translation reads badly, while a model that translates freely and naturally can score lower for a good translation just because it doesn't round-trip cleanly. Fine as a single-run sanity check — but if you're comparing translation models, pick <strong>one fixed model here and keep it the same across every model you test</strong>. That way the reverse leg is a constant and the only thing changing between runs is the translation model itself, so the chrF difference actually reflects forward-translation quality.</span></div>
+                </div>
+
+                <div class="qc-item">
+                    <h3>LLM judge <span class="qc-tag">choose a judge model</span></h3>
+                    <div class="qc-row"><span class="qc-label">Shows</span><span class="qc-body">A separate model rates five sampled chunks 1–5 on adequacy (is the meaning preserved) and fluency (does it read naturally). Chunks are picked by risk — names, dialogue, numbers — not evenly spaced.</span></div>
+                    <div class="qc-row"><span class="qc-label">Read it</span><span class="qc-body"><span class="bad">Flagged if either average is below 3/5.</span> Pick a judge model different from the one that translated, so it isn't grading its own work. TranslateGemma isn't offered here — asked for a score it would translate the question instead of answering it.</span></div>
+                    <div class="qc-row"><span class="qc-label">Do</span><span class="qc-body is-muted">Low fluency but high adequacy → fine for a draft, the refinement pass should fix it. Low adequacy → the draft has real translation errors.</span></div>
+                </div>
+
+                <div class="qc-item">
+                    <h3>COMET-Kiwi <span class="qc-tag">optional dependency</span></h3>
+                    <div class="qc-row"><span class="qc-label">Shows</span><span class="qc-body">A reference-free neural quality estimate for the draft (and, after Continue, for the final).</span></div>
+                    <div class="qc-row"><span class="qc-label">Read it</span><span class="qc-body">Higher is better; values below 60 are flagged. It is an estimate over chunks, not proof of literary quality or long-range consistency.</span></div>
+                    <div class="qc-row"><span class="qc-label">Setup</span><span class="qc-body is-muted">Install <code>requirements-eval.txt</code>; the selected model may require Hugging Face access on first use. The app reports a missing dependency instead of fabricating a score.</span></div>
+                </div>
+
+            </div>
+
+            <div class="qc-group">
+                <div class="section-title">Refinement — needs a refined text (after Continue)</div>
+
+                <div class="qc-item">
+                    <h3>Named-entity consistency <span class="qc-tag">no model needed</span></h3>
+                    <div class="qc-row"><span class="qc-label">Shows</span><span class="qc-body">For each glossary term, source chunks where no form of the agreed rendering appears in the final. It reads every aligned chunk; inflected forms count.</span></div>
+                    <div class="qc-row"><span class="qc-label">Read it</span><span class="qc-body"><span class="bad">Missing terms are flagged.</span> An empty glossary cannot prove consistency, so run Prepare or add terms manually before relying on this check.</span></div>
+                    <div class="qc-row"><span class="qc-label">Limit</span><span class="qc-body is-muted">Stem matching cannot reliably distinguish renderings that differ only by an ending. Inspect those cases manually.</span></div>
+                </div>
+
+                <div class="qc-item">
+                    <h3>Numbers and dates <span class="qc-tag">no model needed</span></h3>
+                    <div class="qc-row"><span class="qc-label">Shows</span><span class="qc-body">Digit-written values from the source that are absent or changed in the final.</span></div>
+                    <div class="qc-row"><span class="qc-label">Read it</span><span class="qc-body"><span class="bad">Any missing source number or date component is flagged.</span> Extra target values are listed for review.</span></div>
+                    <div class="qc-row"><span class="qc-label">Limit</span><span class="qc-body is-muted">Spelled-out numbers require language-specific parsing and are not covered.</span></div>
+                </div>
+
+                <div class="qc-item">
+                    <h3>Chunk coverage <span class="qc-tag">no model needed</span></h3>
+                    <div class="qc-row"><span class="qc-label">Shows</span><span class="qc-body">Whether every source chunk has a non-empty final chunk in the same position.</span></div>
+                    <div class="qc-row"><span class="qc-label">Read it</span><span class="qc-body"><span class="bad">A count mismatch or blank final chunk is a blocking integrity issue.</span> It catches dropped content but does not judge how well a chunk was translated.</span></div>
+                </div>
+
+                <div class="qc-item">
+                    <h3>Untranslated words <span class="qc-tag">no model needed</span></h3>
+                    <div class="qc-row"><span class="qc-label">Shows</span><span class="qc-body">Words in the final text still written in the source's script, listed with counts — <code>Grunnings</code> sitting in the middle of a Cyrillic page.</span></div>
+                    <div class="qc-row"><span class="qc-label">Read it</span><span class="qc-body"><span class="bad">Any leakage is flagged</span>, because it cannot be judged automatically: a brand kept in Latin on purpose looks identical to a name nobody translated. When source and target share an alphabet (English → German) the test says so and stays quiet — there is no signal there to read.</span></div>
+                    <div class="qc-row"><span class="qc-label">Do</span><span class="qc-body is-muted">Look at the list. Anything that should have been transcribed goes into the glossary, and then re-run Continue.</span></div>
+                </div>
+
+                <div class="qc-item">
+                    <h3>Terminology delta <span class="qc-tag">no model needed</span></h3>
+                    <div class="qc-row"><span class="qc-label">Shows</span><span class="qc-body">Violations of <code>exact</code> glossary constraints in the draft vs. the final text.</span></div>
+                    <div class="qc-row"><span class="qc-label">Read it</span><span class="qc-body"><span class="good">"Refinement fixed N violation(s)"</span> is good news. <span class="bad">"Introduced N new violation(s)"</span> or any remaining violations are flagged.</span></div>
+                    <div class="qc-row"><span class="qc-label">Do</span><span class="qc-body is-muted">Only <code>exact</code> terms are policed here — that is what <code>exact</code> means. Names proposed by Prepare are <code>inflectable</code> on purpose, since pinning a name to one surface form would make the sentence around it ungrammatical; those are covered by Named-entity consistency instead.</span></div>
+                </div>
+
+                <div class="qc-item">
+                    <h3>Length ratio <span class="qc-tag">no model needed</span></h3>
+                    <div class="qc-row"><span class="qc-label">Shows</span><span class="qc-body">Final length ÷ <strong>source</strong> length, with final ÷ draft reported as a secondary number.</span></div>
+                    <div class="qc-row"><span class="qc-label">Read it</span><span class="qc-body"><span class="bad">Flagged outside 0.55x–1.6x</span> — truncation or duplication. The band is deliberately wide, because expansion is language-pair specific and this test has no table to compare against.</span></div>
+                    <div class="qc-row"><span class="qc-label">Do</span><span class="qc-body is-muted">Compare against what your pair normally does: English → Russian usually lands around 1.10–1.20, so a ratio near 1.00 means the translation is compressing even though nothing is flagged. The final ÷ draft number is nearly useless on its own — both texts came out of the same pipeline, so it sits near 1.00 whatever happened to the meaning. That is why it is no longer the headline.</span></div>
+                </div>
+
+                <div class="qc-item">
+                    <h3>Diff ratio <span class="qc-tag">no model needed</span></h3>
+                    <div class="qc-row"><span class="qc-label">Shows</span><span class="qc-body">How similar the draft and final text are (0–1).</span></div>
+                    <div class="qc-row"><span class="qc-label">Read it</span><span class="qc-body"><span class="bad">Below 0.75 is flagged</span> — over a quarter of the text moved, which a span-level patch cannot do, so something rewrote it wholesale. <span class="good">High similarity is now the expected outcome</span>, not a complaint: refinement patches reported spans and leaves the rest byte-identical. Above 0.995 means almost nothing was applied — check how many errors the pass reported.</span></div>
+                    <div class="qc-row"><span class="qc-label">Do</span><span class="qc-body is-muted">A few percent is the healthy range.</span></div>
+                </div>
+
+                <div class="qc-item">
+                    <h3>Repetition ratio <span class="qc-tag">no model needed</span></h3>
+                    <div class="qc-row"><span class="qc-label">Shows</span><span class="qc-body">Share of repeated 4-word phrases in the final text — a common local-model failure mode where it loops.</span></div>
+                    <div class="qc-row"><span class="qc-label">Read it</span><span class="qc-body"><span class="bad">Flagged above 15%.</span> A little repetition is normal in natural prose.</span></div>
+                    <div class="qc-row"><span class="qc-label">Do</span><span class="qc-body is-muted">Read this as a duplication detector, not a quality score — a low number says the model didn't get stuck, nothing more. If flagged, search the panel for the repeated phrase; it's usually one stuck passage rather than the whole text.</span></div>
+                </div>
+
+                <div class="qc-item">
+                    <h3>LaBSE alignment <span class="qc-tag">optional dependency</span></h3>
+                    <div class="qc-row"><span class="qc-label">Shows</span><span class="qc-body">Document-wide multilingual semantic alignment for every source/final chunk pair. It flags chunks that fall far below the document's own median similarity.</span></div>
+                    <div class="qc-row"><span class="qc-label">Read it</span><span class="qc-body">A flagged chunk is a semantic-drift lead to inspect, not a proven mistranslation. The threshold is document-relative so it does not pretend one absolute score fits every language pair.</span></div>
+                    <div class="qc-row"><span class="qc-label">Setup</span><span class="qc-body is-muted">Install <code>requirements-quality.txt</code>. Model weights download locally the first time it runs.</span></div>
+                </div>
+
+                <div class="qc-item">
+                    <h3>Target-language segments <span class="qc-tag">optional dependency</span></h3>
+                    <div class="qc-row"><span class="qc-label">Shows</span><span class="qc-body">Final chunks confidently classified as a language other than the selected target language.</span></div>
+                    <div class="qc-row"><span class="qc-label">Read it</span><span class="qc-body">Use it to find untranslated or wrong-language segments. Short passages and low-confidence classifications are intentionally not treated as failures.</span></div>
+                    <div class="qc-row"><span class="qc-label">Setup</span><span class="qc-body is-muted">Also uses <code>requirements-quality.txt</code> and downloads its classifier on first use.</span></div>
+                </div>
+
+                <div class="qc-item">
+                    <h3>LLM judge — final <span class="qc-tag">choose a judge model</span></h3>
+                    <div class="qc-row"><span class="qc-label">Shows</span><span class="qc-body">The same adequacy/fluency rubric as the draft judge, scored on the final text.</span></div>
+                    <div class="qc-row"><span class="qc-label">Read it</span><span class="qc-body">Identical in every respect to the draft judge except which translation it scores — same prompt, same sampled chunks — which is what makes the two numbers subtractable. <span class="bad">Flagged if either average is below 3/5.</span></span></div>
+                    <div class="qc-row"><span class="qc-label">Do</span><span class="qc-body is-muted">Run this together with the draft judge; the pair is what feeds the adequacy-regression gate in Verdict. Both are averages of five 1–5 ratings, so treat a difference under about 0.5 as noise.</span></div>
+                </div>
+
+                <div class="qc-item">
+                    <h3>LLM judge — draft vs final <span class="qc-tag">choose a judge model</span></h3>
+                    <div class="qc-row"><span class="qc-label">Shows</span><span class="qc-body">Side-by-side comparison of the chunks refinement actually changed, order randomised, with <strong>the source in front of the judge</strong>. Two separate questions: which version conveys the source more faithfully, and which reads better as prose.</span></div>
+                    <div class="qc-row"><span class="qc-label">Read it</span><span class="qc-body">Reports final / draft / tie for each question separately. <span class="bad">Flagged when the draft wins on accuracy.</span> The case worth catching is the split: the final reads better and the draft is more accurate. That is polish bought with meaning, and it is called out in words.</span></div>
+                    <div class="qc-row"><span class="qc-label">Do</span><span class="qc-body is-muted">This test used to show two target-language passages with no source and ask which read better — so it graded refinement on exactly the axis refinement optimises, and reported the pass as harmless while accuracy fell. Unchanged chunks are skipped rather than counted as ties, so a low sample count here just means the pass changed little.</span></div>
+                </div>
+
+                <div class="qc-item">
+                    <h3>COMET-Kiwi — final</h3>
+                    <div class="qc-row"><span class="qc-label">Shows</span><span class="qc-body">The same neural quality-estimation score, run on the final text instead of the draft.</span></div>
+                    <div class="qc-row"><span class="qc-label">Read it</span><span class="qc-body">Higher is better. <span class="bad">Flagged below 60.</span> Sentence-level by design, so it is blind to anything spanning chunks — it cannot see a name drifting.</span></div>
+                    <div class="qc-row"><span class="qc-label">Do</span><span class="qc-body is-muted">The shipped text is the final one, so this is the number to quote. Run the draft version too if you want to know whether refinement moved it.</span></div>
+                </div>
+            </div>
+
+            <div class="qc-group">
+                <div class="section-title">Verdict</div>
+
+                <div class="qc-item">
+                    <h3>Why there is no single score</h3>
+                    <div class="qc-row"><span class="qc-label">Shows</span><span class="qc-body">Draft → final vectors for adequacy, fluency, COMET-Kiwi and consistency, plus the gates that fired.</span></div>
+                    <div class="qc-row"><span class="qc-label">Read it</span><span class="qc-body">There is no composite score because fluency can improve while adequacy falls. The important failure is a polished final that conveys less than the draft.</span></div>
+                    <div class="qc-row"><span class="qc-label">Do</span><span class="qc-body is-muted">An adequacy regression of 0.3 or more, a pairwise judge preferring the draft on accuracy, missing agreed renderings, or unsatisfied exact terms blocks shipment. Source-script leakage warns. Tests that were not run provide no evidence.</span></div>
+                </div>
+            </div>
+        </section>
+        </div>
+
+        <p class="footer-note">Ollama calls stay local. Optional GLiNER, LaBSE, Language ID and COMET model weights may be downloaded from Hugging Face on first use; after they are present, checks run against local text and local models.</p>
+    </div>
+
+    <script>
+        function isDarkThemeActive() { return document.documentElement.classList.contains('theme-dark'); }
+        function applyThemeButton() {
+            const btn = document.getElementById('themeToggle');
+            const isDark = isDarkThemeActive();
+            btn.textContent = isDark ? '☀️' : '🌙';
+            btn.title = isDark ? 'Switch to light mode' : 'Switch to dark mode';
+        }
+        document.getElementById('themeToggle').addEventListener('click', () => {
+            const next = isDarkThemeActive() ? 'light' : 'dark';
+            document.documentElement.classList.toggle('theme-dark', next === 'dark');
+            try { localStorage.setItem('theme', next); } catch (e) {}
+            applyThemeButton();
+        });
+        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
+            if (localStorage.getItem('theme')) return;
+            document.documentElement.classList.toggle('theme-dark', e.matches);
+            applyThemeButton();
+        });
+        applyThemeButton();
+    </script>
+</body>
+</html>

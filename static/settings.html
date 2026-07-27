@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Settings — Tolmach</title>
+    <link rel="icon" href="/static/assets/tolmach-favicon.svg" type="image/svg+xml">
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        :root { --canvas:#f7f8f9; --paper:#fff; --ink:#111827; --muted:#6b7280; --faint:#9ca3af; --line:#e5e7eb; --soft:#f0f1f3; --accent:#5b7c99; --accent-dark:#46647c; --warning:#a16207; }
+        :root.theme-dark { --canvas:#17181c; --paper:#1f2126; --ink:#e8e9ec; --muted:#9195a1; --faint:#6b6f7b; --line:#2c2e35; --soft:#26282e; --accent:#86a4bd; --accent-dark:#a2bdd1; --warning:#facc15; }
+        body { min-height:100vh; background:var(--canvas); color:var(--ink); font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif; -webkit-font-smoothing:antialiased; }
+        .container { max-width:1920px; margin:0 auto; padding:0 26px 44px; }
+        .app-topbar { display:flex; align-items:center; justify-content:space-between; gap:24px; padding:16px 0; margin-bottom:30px; border-bottom:1px solid var(--line); }
+        .brand { display:flex; align-items:baseline; gap:15px; letter-spacing:.09em; text-transform:uppercase; }
+        .brand-name { font-size:.95rem; font-weight:700; }.brand-descriptor { font-size:.8rem; font-weight:500; opacity:.65; }.brand-version { font-size:.72rem; color:var(--faint); }
+        .local-status { display:flex; align-items:center; gap:10px; color:var(--muted); font-size:.72rem; font-weight:500; letter-spacing:.09em; text-transform:uppercase; }.sep { color:var(--faint); }
+        .repo-link { color:var(--muted); text-decoration:none; }.repo-link:hover { color:var(--accent); text-decoration:underline; }.current-nav { color:var(--ink); }
+        .theme-toggle { border:0; background:none; color:var(--muted); font-size:.9rem; cursor:pointer; }
+        .eyebrow { color:var(--faint); font-size:.74rem; font-weight:700; letter-spacing:.08em; text-transform:uppercase; }.page-head h1 { margin-top:10px; font-size:1.2rem; font-weight:700; letter-spacing:-.01em; }.page-head p { margin-top:10px; max-width:620px; color:var(--muted); font-size:.92rem; line-height:1.6; }
+        .card { margin-top:26px; padding:26px 28px; border:1px solid var(--line); border-radius:12px; background:var(--paper); }.card h2 { font-size:1.05rem; }.card > p { margin-top:7px; color:var(--muted); font-size:.86rem; line-height:1.55; }
+        .section-kicker, .role-heading { color:var(--faint); font-size:.72rem; font-weight:700; letter-spacing:.08em; text-transform:uppercase; }
+        .form-group { margin-top:22px; }.role-heading { display:block; }.form-group select { width:100%; margin-top:8px; padding:11px 12px; border:1px solid var(--line); border-radius:6px; background:var(--paper); color:var(--ink); font:inherit; appearance:none; -webkit-appearance:none; background-image:none; cursor:pointer; }.form-group select:focus { outline:2px solid color-mix(in srgb, var(--accent) 40%, transparent); border-color:var(--accent); }
+        .hint { margin-top:7px; color:var(--muted); font-size:.8rem; line-height:1.5; }.warning { color:var(--warning); font-weight:600; }.actions { display:flex; align-items:center; gap:14px; margin-top:28px; }.save-action { border:0; padding:0; background:transparent; color:var(--accent); font:inherit; font-size:.8rem; font-weight:700; letter-spacing:.08em; text-transform:uppercase; cursor:pointer; }.save-action:hover { color:var(--accent-dark); text-decoration:underline; }.save-action:disabled { color:var(--faint); cursor:not-allowed; text-decoration:none; }.saved { color:var(--muted); font-size:.82rem; }
+        .neural-list { margin-top:18px; border-top:1px solid var(--line); }.neural-row { display:flex; flex-direction:column; gap:5px; padding:15px 0; border-bottom:1px solid var(--line); }.neural-name { font-size:.88rem; font-weight:700; }.neural-role { margin-top:4px; color:var(--muted); font-size:.8rem; line-height:1.45; }.neural-kind { order:-1; color:var(--faint); font-size:.72rem; font-weight:700; letter-spacing:.06em; text-transform:uppercase; }
+        .settings-columns { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:22px; align-items:start; }.settings-columns .card { min-width:0; }
+        @media (max-width:980px) { .settings-columns { grid-template-columns:1fr; } }
+        @media (max-width:1180px) { .container { padding:0 16px 32px; } }
+        @media (max-width:640px) { .app-topbar { align-items:flex-start; flex-direction:column; gap:12px; }.local-status { flex-wrap:wrap; }.card { padding:20px; } }
+    </style>
+    <script>
+        (function () { try { const saved = localStorage.getItem('theme'); document.documentElement.classList.toggle('theme-dark', saved ? saved === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches); } catch (e) {} })();
+    </script>
+</head>
+<body>
+    <div class="container">
+        <header class="app-topbar">
+            <div class="brand"><span class="brand-name">Tolmach</span><span class="brand-descriptor">Book Translator</span><span class="brand-version">v3.0</span></div>
+            <nav class="local-status" aria-label="Primary navigation">
+                <a class="repo-link" href="/">Home</a><span class="sep">•</span><a class="repo-link" href="/guide.html">Guide</a><span class="sep">•</span><span class="current-nav" aria-current="page">Settings</span><span class="sep">•</span><a class="repo-link" href="https://github.com/KazKozDev/book-translator" target="_blank" rel="noopener">GitHub</a><span class="sep">•</span><button type="button" class="theme-toggle" id="themeToggle" title="Switch theme">🌙</button>
+            </nav>
+        </header>
+        <main>
+            <div class="page-head"><div class="eyebrow">Settings</div></div>
+            <div class="settings-columns">
+            <section class="card">
+                <div class="section-kicker">LLMs</div>
+                <p>Keep every role independent: the judge does not grade its own output, and a translation-only model is never used for instruction or editing.</p>
+                <div class="form-group"><label class="role-heading" for="translationModel">Translation</label><select id="translationModel" disabled><option>Loading models…</option></select><p class="hint" id="translationHint">Used only for Start.</p></div>
+                <div class="form-group"><label class="role-heading" for="refinementModel">Refinement</label><select id="refinementModel" disabled><option>Loading models…</option></select><p class="hint">Used only for Continue, the editing pass after the draft is ready.</p></div>
+                <div class="form-group"><label class="role-heading" for="generalInstructModel">General instruct</label><select id="generalInstructModel" disabled><option>Loading models…</option></select><p class="hint">Used only for Prepare: the document brief and glossary proposal.</p></div>
+                <div class="form-group"><label class="role-heading" for="judgeModel">Judge</label><select id="judgeModel" disabled><option>Loading models…</option></select><p class="hint">Used for LLM judge and the backtranslation diagnostic. Translation-only TranslateGemma models are excluded.</p></div>
+                <div class="actions"><button type="button" class="save-action" id="saveSettings" disabled>Save setup</button><span class="saved" id="saveStatus" aria-live="polite"></span></div>
+            </section>
+            <section class="card">
+                <div class="section-kicker">Neural models</div>
+                <p>These models are chosen by the application for their specific task, not from the Ollama list.</p>
+                <div class="neural-list">
+                    <div class="neural-row"><div><div class="neural-name">GLiNER multilingual NER</div><p class="neural-role">Finds candidate names and entities during Prepare.</p></div><span class="neural-kind">Entity recognition</span></div>
+                    <div class="neural-row"><div><div class="neural-name">LaBSE</div><p class="neural-role">Checks document-wide source/final semantic alignment.</p></div><span class="neural-kind">Alignment</span></div>
+                    <div class="neural-row"><div><div class="neural-name">COMET-Kiwi</div><p class="neural-role">Reference-free quality estimate for draft and final translation.</p></div><span class="neural-kind">Quality estimate</span></div>
+                </div>
+            </section>
+            </div>
+        </main>
+    </div>
+    <script>
+        const PREFERRED_MODEL = 'translategemma:12b';
+        const isTranslateGemma = name => (name || '').toLowerCase().includes('translategemma');
+        const translationModel = document.getElementById('translationModel');
+        const refinementModel = document.getElementById('refinementModel');
+        const generalInstructModel = document.getElementById('generalInstructModel');
+        const judgeModel = document.getElementById('judgeModel');
+        const hint = document.getElementById('translationHint');
+        const save = document.getElementById('saveSettings');
+        const status = document.getElementById('saveStatus');
+        const optionsFor = models => models.map(model => `<option value="${model.name}">${model.name}</option>`).join('');
+        function updateTranslationHint() { hint.innerHTML = isTranslateGemma(translationModel.value) ? '<span class="warning">TranslateGemma is supported here:</span> it is used only for the first translation pass.' : 'Used only for Start.'; }
+        async function loadModels() {
+            try {
+                const response = await fetch(`/models?t=${Date.now()}`, { cache: 'no-cache' });
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                const data = await response.json();
+                if (!data.models || !data.models.length) throw new Error('No models available');
+                const models = [...data.models].sort((a, b) => a.name === PREFERRED_MODEL ? -1 : b.name === PREFERRED_MODEL ? 1 : 0);
+                const instructModels = models.filter(model => !isTranslateGemma(model.name));
+                translationModel.innerHTML = optionsFor(models);
+                [refinementModel, generalInstructModel, judgeModel].forEach(select => {
+                    select.innerHTML = instructModels.length ? optionsFor(instructModels) : '<option value="">No suitable instruct model installed</option>';
+                });
+                const savedTranslation = localStorage.getItem('translationModel');
+                translationModel.value = models.some(m => m.name === savedTranslation) ? savedTranslation : models.some(m => m.name === PREFERRED_MODEL) ? PREFERRED_MODEL : models[0].name;
+                const valueFor = key => { const saved = localStorage.getItem(key); return instructModels.some(m => m.name === saved) ? saved : instructModels.some(m => m.name === translationModel.value) ? translationModel.value : instructModels[0]?.name || ''; };
+                refinementModel.value = valueFor('refinementModel');
+                generalInstructModel.value = valueFor('generalInstructModel');
+                judgeModel.value = valueFor('judgeModel');
+                translationModel.disabled = false;
+                [refinementModel, generalInstructModel, judgeModel].forEach(select => select.disabled = !instructModels.length);
+                save.disabled = !instructModels.length; updateTranslationHint();
+            } catch (error) {
+                [translationModel, refinementModel, generalInstructModel, judgeModel].forEach(select => select.innerHTML = `<option>Could not load models: ${error.message}</option>`); status.textContent = 'Start Ollama, then reload this page.';
+            }
+        }
+        save.addEventListener('click', () => { localStorage.setItem('translationModel', translationModel.value); localStorage.setItem('refinementModel', refinementModel.value); localStorage.setItem('generalInstructModel', generalInstructModel.value); localStorage.setItem('judgeModel', judgeModel.value); status.textContent = 'Saved. Return to the app when ready.'; });
+        translationModel.addEventListener('change', updateTranslationHint);
+        document.getElementById('themeToggle').addEventListener('click', () => { const dark = !document.documentElement.classList.contains('theme-dark'); document.documentElement.classList.toggle('theme-dark', dark); localStorage.setItem('theme', dark ? 'dark' : 'light'); });
+        loadModels();
+    </script>
+</body>
+</html>

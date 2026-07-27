@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Book Translator</title>
+    <title>Tolmach — Book Translator</title>
+    <link rel="icon" href="/static/assets/tolmach-favicon.svg" type="image/svg+xml">
     <style>
         * {
             margin: 0;
@@ -15,52 +16,14 @@
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
             background: #f5f5f5;
             min-height: 100vh;
-            padding: 20px;
+            padding: 20px 0;
         }
 
         .container {
-            max-width: 1200px;
+            max-width: 100%;
             margin: 0 auto;
+            padding: 0 24px;
         }
-
-        /* Stats Cards */
-        .stats {
-            display: grid;
-            grid-template-columns: repeat(4, 1fr);
-            gap: 15px;
-            margin-bottom: 30px;
-        }
-
-        .stat-card {
-            background: white;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-        }
-
-        .stat-card.blue { background: #e3f2fd; }
-        .stat-card.green { background: #e8f5e9; }
-        .stat-card.purple { background: #f3e5f5; }
-        .stat-card.gray { background: #f5f5f5; }
-
-        .stat-label {
-            font-size: 0.75rem;
-            color: #666;
-            margin-bottom: 5px;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-
-        .stat-value {
-            font-size: 1.75rem;
-            font-weight: 700;
-            color: #333;
-        }
-
-        .stat-card.blue .stat-value { color: #1976d2; }
-        .stat-card.green .stat-value { color: #388e3c; }
-        .stat-card.purple .stat-value { color: #7b1fa2; }
-        .stat-card.gray .stat-value { color: #424242; }
 
         /* Main Card */
         .main-card {
@@ -69,67 +32,6 @@
             box-shadow: 0 1px 3px rgba(0,0,0,0.1);
             padding: 30px;
             margin-bottom: 20px;
-        }
-
-        .header {
-            margin-bottom: 25px;
-        }
-
-        .header h1 {
-            font-size: 1.75rem;
-            font-weight: 600;
-            color: #333;
-            margin-bottom: 5px;
-        }
-
-        .header p {
-            color: #666;
-            font-size: 0.95rem;
-        }
-
-        /* Tabs */
-        .tabs {
-            display: flex;
-            gap: 10px;
-            margin-bottom: 25px;
-            border-bottom: 1px solid #e0e0e0;
-        }
-
-        .tab {
-            padding: 12px 20px;
-            background: none;
-            border: none;
-            border-bottom: 2px solid transparent;
-            cursor: pointer;
-            font-size: 0.95rem;
-            color: #666;
-            transition: all 0.3s;
-        }
-
-        .tab.active {
-            color: #333;
-            border-bottom-color: #2196f3;
-            font-weight: 500;
-        }
-
-        .tab:hover {
-            color: #333;
-        }
-
-        .tab-content {
-            display: none;
-        }
-
-        .tab-content.active {
-            display: block;
-        }
-
-        /* Form */
-        .form-row {
-            display: grid;
-            grid-template-columns: 1fr 1fr 1fr 1fr;
-            gap: 20px;
-            margin-bottom: 25px;
         }
 
         .form-group {
@@ -159,66 +61,33 @@
             border-color: #2196f3;
         }
 
-        /* Upload Section */
-        .upload-section {
-            border: 2px dashed #ddd;
+        .form-group textarea {
+            width: 100%;
+            min-height: 112px;
+            resize: vertical;
+            padding: 12px;
+            border: 1px solid #ddd;
             border-radius: 4px;
-            padding: 50px;
-            text-align: center;
-            cursor: pointer;
-            transition: all 0.3s;
-            margin-bottom: 25px;
-            background: #fafafa;
-        }
-
-        .upload-section:hover {
-            border-color: #2196f3;
-            background: #f5f9ff;
-        }
-
-        .upload-section.dragover {
-            border-color: #2196f3;
-            background: #e3f2fd;
-        }
-
-        .upload-icon {
-            font-size: 2.5rem;
-            margin-bottom: 15px;
-            color: #999;
-        }
-
-        .upload-section h3 {
-            font-size: 1rem;
-            font-weight: 500;
+            background: white;
             color: #333;
-            margin-bottom: 5px;
+            font: inherit;
+            line-height: 1.45;
         }
 
-        .upload-section p {
-            font-size: 0.85rem;
-            color: #999;
+        .form-group textarea:focus {
+            outline: none;
+            border-color: #2196f3;
+        }
+
+        .form-hint {
+            margin: 7px 0 0;
+            color: #777;
+            font-size: .78rem;
+            line-height: 1.4;
         }
 
         .file-input {
             display: none;
-        }
-
-        /* Button */
-        .btn-translate {
-            width: 100%;
-            padding: 14px;
-            background: #2196f3;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            font-size: 1rem;
-            font-weight: 500;
-            cursor: pointer;
-            transition: background 0.3s;
-        }
-
-        .btn-translate:hover {
-            background: #1976d2;
         }
 
         /* Export Buttons */
@@ -254,11 +123,6 @@
 
         .btn-export:active {
             transform: translateY(0);
-        }
-
-        .btn-translate:disabled {
-            background: #ccc;
-            cursor: not-allowed;
         }
 
         /* Text Panels */
@@ -323,12 +187,6 @@
             height: 100%;
             background: #2196f3;
             transition: width 0.3s;
-        }
-
-        .progress-info {
-            text-align: center;
-            color: #666;
-            font-size: 0.85rem;
         }
 
         /* History */
@@ -396,208 +254,1224 @@
             background: #1976d2;
         }
 
-        .selected-file {
-            background: #e3f2fd;
-            padding: 12px;
-            border-radius: 4px;
-            margin-bottom: 20px;
-            display: none;
-            font-size: 0.9rem;
-            color: #1976d2;
+        .history-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            justify-content: flex-end;
+            margin-left: 16px;
         }
 
-        .selected-file.show {
-            display: block;
+        .btn-delete {
+            background: transparent;
+            border: 1px solid #d92d20;
+            color: #b42318;
         }
+
+        .btn-delete:hover {
+            background: #fff1f0;
+        }
+
+        /* Workbench — light neutral grey, blue accent */
+        :root {
+            --canvas: #f7f8f9; --paper: #ffffff; --ink: #111827; --muted: #6b7280; --faint: #9ca3af;
+            --line: #e5e7eb; --line-soft: #f0f1f3; --accent: #5b7c99; --accent-dark: #46647c;
+        }
+        body { overflow-x: hidden; background: var(--canvas); color: var(--ink); padding: 0; -webkit-font-smoothing: antialiased; }
+        .container { max-width: 1920px; padding: 0 26px 40px; }
+
+        .app-topbar { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 16px 0; margin-bottom: 18px; border-bottom: 1px solid var(--line); }
+        .brand { display: flex; align-items: baseline; gap: 15px; letter-spacing: .09em; text-transform: uppercase; }
+        .brand-name { font-size: .95rem; font-weight: 700; color: var(--ink); }
+        .brand-descriptor { font-size: .8rem; font-weight: 500; color: var(--ink); opacity: .65; }
+        .brand-version { font-size: .72rem; font-weight: 500; color: var(--faint); }
+        .local-status { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: .72rem; font-weight: 500; letter-spacing: .09em; text-transform: uppercase; }
+        .local-status .sep { color: #d1d5db; }
+        .repo-link { color: var(--muted); text-decoration: none; }
+        .repo-link:hover { color: var(--accent); text-decoration: underline; }
+        .current-nav { color: var(--ink); }
+        .theme-toggle { border: none; background: none; padding: 0; color: var(--muted); font-size: .9rem; line-height: 1; cursor: pointer; text-transform: none; letter-spacing: 0; }
+        .theme-toggle:hover { color: var(--accent); }
+
+        /* Top toolbar */
+        .toolbar { display: flex; align-items: flex-end; flex-wrap: wrap; gap: 14px; margin-bottom: 34px; }
+        .toolbar .form-group { min-width: 168px; flex: 0 1 200px; }
+        .form-group label, .toolbar-label { margin-bottom: -6px; color: var(--muted); font-size: .78rem; font-weight: 500; letter-spacing: 0; text-transform: none; }
+        .toolbar-label { display: block; }
+        .form-group select { width: 100%; min-height: 38px; padding: 7px 0; border: none; border-bottom: 1px solid var(--line); border-radius: 0; background-color: transparent; color: var(--ink); font-size: .9rem; appearance: none; accent-color: var(--accent); text-overflow: ellipsis; }
+        .form-group select:hover { border-bottom-color: #babdc2; }
+        .form-group select:focus, .form-group textarea:focus { outline: none; border-color: var(--accent); box-shadow: none; }
+        .btn-more { display: inline-flex; align-items: center; gap: 8px; width: 100%; min-width: 168px; flex: 0 1 200px; min-height: 38px; padding: 7px 2px; border: none; border-bottom: 1px solid var(--line); border-radius: 0; background: transparent; color: var(--ink); font-size: .88rem; font-weight: 500; cursor: pointer; }
+        .glossary-control { position: relative; }
+        .glossary-control .toolbar-label {
+            position: relative;
+            z-index: 1;
+            align-self: flex-start;
+            width: max-content;
+            padding: 0 4px;
+            margin-left: -4px;
+            background: var(--canvas);
+        }
+        .glossary-control .btn-more { flex: none; }
+        .btn-more:hover { border-bottom-color: #babdc2; }
+        .btn-more[aria-expanded="true"] { border-bottom-color: var(--accent); color: var(--accent); }
+        .btn-more span { color: var(--faint); font-size: .95rem; line-height: 1; }
+
+        .model-note { max-width: 720px; margin: -22px 0 22px; color: var(--muted); font-size: .78rem; line-height: 1.6; }
+        .model-note[hidden] { display: none; }
+
+        /* Glossary follows the workspace-panel construction: a single shell with
+           two equal reading zones, separated by one structural rule. */
+        /* Align the two glossary columns with the first two text panels below.
+           The workspace reserves 304px for the job rail and 24px of padding
+           at the end of its main column, so this is 2/3 of the text-panel width. */
+        .glossary-row { display: flex; align-items: stretch; width: calc(100% - 328px); margin-bottom: 18px; }
+        .glossary-row[hidden] { display: none; }
+        .more-panel { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); flex: 0 0 66.666667%; gap: 0; min-width: 0; max-width: none; padding: 0; margin: 0; border: 1px solid var(--line); border-radius: 10px; background: #eceef0; overflow: hidden; }
+        /* The source image has generous transparent-looking headroom above the
+           wordmark, so lift the image itself to place the visible mark beside
+           the top of the expanded glossary. */
+        .glossary-mark { display: block; flex: 0 0 500px; width: 500px; max-width: none; align-self: flex-start; margin: -55px 0 0 -20px; mix-blend-mode: multiply; opacity: .28; transform: translate(-20px, 120px) scale(2); transform-origin: left center; }
+        .glossary-editor, .glossary-guide { min-width: 0; padding: 24px 26px; border: none; border-radius: 0; background: #eceef0; }
+        .glossary-editor { background: #f1f2f4; }
+        .glossary-editor-header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin: -24px -26px 8px; padding: 14px 18px; border-bottom: 1px solid var(--line); background: #f1f2f4; color: var(--ink); font-size: .74rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+        .glossary-group { margin: 0 0 0 -8px; }
+        .glossary-group + .glossary-group { margin-top: 20px; }
+        .glossary-group label { display: block; margin-bottom: 10px; }
+        /* The empty glossary reads like an empty source panel, rather than a
+           second nested card. Its example is only a placeholder. */
+        .glossary-group textarea { box-sizing: border-box; width: 100%; min-height: 160px; padding: 18px 18px 18px 0; border: none; border-radius: 0; background: transparent; color: var(--ink); font-family: inherit; font-size: .87rem; line-height: 1.7; overflow-y: auto; resize: vertical; }
+        .glossary-group textarea::placeholder { color: var(--faint); opacity: .55; }
+        .form-hint { margin-top: 12px; color: var(--faint); font-size: .74rem; line-height: 1.6; }
+        .form-hint code { padding: 1px 5px; border-radius: 4px; background: #f3f4f6; color: var(--muted); font-size: .95em; }
+        .glossary-status { margin-top: 8px; color: var(--muted); font-size: .74rem; line-height: 1.6; min-height: 1.1em; }
+        .glossary-status.has-errors { color: #b91c1c; }
+        .glossary-guide { display: flex; flex-direction: column; border-left: 1px solid var(--line); }
+        .glossary-guide .eyebrow { margin: -10px 0 10px; }
+        .glossary-guide h2 { margin: 4px 0 0; color: var(--ink); font-family: inherit; font-size: 1.2rem; font-weight: 700; letter-spacing: -.01em; }
+        .glossary-guide h2 + .form-hint { margin-top: 10px; }
+        .glossary-guide > .form-hint { margin: 0; color: var(--muted); font-size: .78rem; line-height: 1.55; }
+        .glossary-guide > .form-hint + .form-hint { margin-top: 12px; }
+        /* Glossary modes deliberately reuse the job rail's quiet row language:
+           an uppercase section label, then a label/value reading with hairlines. */
+        .guide-section { padding-top: 22px; margin-top: 22px; border-top: 1px solid var(--line); }
+        .guide-section h3 { margin: 0 0 4px; color: var(--faint); font-size: .74rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+        .guide-mode { display: grid; grid-template-columns: minmax(92px, .72fr) minmax(0, 1.6fr); align-items: start; gap: 12px; padding: 11px 0; border-bottom: 1px solid var(--line-soft); color: var(--muted); font-size: .82rem; line-height: 1.4; }
+        .guide-mode:last-child { border-bottom: none; }
+        .guide-mode-label { color: var(--ink); font-family: inherit; font-size: inherit; font-weight: 400; }
+        .guide-mode-description { min-width: 0; color: var(--muted); font-weight: 400; }
+        /* Workspace: three columns + job rail */
+        .workspace { display: grid; grid-template-columns: minmax(0, 1fr) 304px; gap: 0; align-items: start; }
+        .main-card, .job-card, .history-card { background: transparent; border: none; border-radius: 0; box-shadow: none; }
+        .main-card { grid-column: 1; grid-row: 1; padding: 0 24px 0 0; margin: 0; }
+        .job-card {
+            grid-column: 2; grid-row: 1; position: sticky; top: 14px; max-height: calc(100vh - 258px); min-height: 420px;
+            padding: 14px 20px 24px 24px; border-left: 1px solid var(--line); overflow-y: auto;
+            /* A near-invisible fiber grain, so the rail reads as paper rather than flat UI chrome. */
+            background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='f'><feTurbulence type='fractalNoise' baseFrequency='0.012 0.9' numOctaves='2' seed='7' stitchTiles='stitch'/><feColorMatrix type='matrix' values='0 0 0 0 0.1  0 0 0 0 0.11  0 0 0 0 0.12  0 0 0 0.045 0'/></filter><rect width='100%25' height='100%25' filter='url(%23f)'/></svg>");
+            background-repeat: repeat;
+        }
+        .job-card::-webkit-scrollbar { width: 5px; }
+        .job-card::-webkit-scrollbar-thumb { background: #dfe1e5; border-radius: 3px; }
+
+        .text-panels { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; height: calc(100vh - 258px); min-height: 420px; margin: 0; border: 1px solid var(--line); border-radius: 10px; background: var(--paper); overflow: hidden; }
+        .text-panel { display: flex; flex-direction: column; min-height: 0; padding: 0; border: none; border-left: 1px solid var(--line); border-radius: 0; overflow: hidden; }
+        .text-panel:first-child { border-left: none; }
+        .text-panel h3 { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin: 0; padding: 14px 18px; border-bottom: 1px solid var(--line); background: var(--paper); color: var(--ink); font-size: .74rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+        .panel-title { overflow: hidden; min-width: 0; text-overflow: ellipsis; white-space: nowrap; }
+        .header-action { flex: none; border: none; background: none; padding: 0; color: var(--accent); font: inherit; font-weight: 700; letter-spacing: inherit; text-transform: none; cursor: pointer; }
+        .header-action:hover { color: var(--accent-dark); text-decoration: underline; }
+        .header-action:disabled { color: var(--faint); cursor: not-allowed; text-decoration: none; }
+        .text-panel-content { flex: 1; height: auto; max-height: none; min-height: 0; padding: 18px; overflow-y: auto; font-family: inherit; font-size: .87rem; line-height: 1.7; transition: background-color .15s; }
+        .text-panel-content::-webkit-scrollbar { width: 5px; }
+        .text-panel-content::-webkit-scrollbar-thumb { background: #dfe1e5; border-radius: 3px; }
+        .text-panel-content.dragover { background-color: #eef2f5; }
+
+        .panel-source { background: #f1f2f4; }
+        .panel-source h3 { background: #f1f2f4; }
+        .panel-source .text-panel-content { color: #4b5563; }
+        .panel-draft { background: #f8f9fa; }
+        .panel-draft h3 { background: #f8f9fa; }
+        .panel-draft .text-panel-content { color: #374151; }
+        .panel-final { background: #ffffff; }
+        .panel-final h3 { background: #ffffff; }
+        .panel-final .text-panel-content { color: var(--ink); }
+        .text-panel-content.is-placeholder { color: var(--faint); opacity: .55; }
+
+        .deck-bar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; padding: 12px 2px 0; }
+        .deck-status-group { display: flex; align-items: center; gap: 12px; }
+        .deck-status { color: var(--muted); font-size: .78rem; }
+        .deck-status-group .header-action { font-size: .78rem; font-weight: 600; }
+        .export-buttons { gap: 8px; margin: 0; padding: 0; border: none; background: transparent; justify-content: flex-end; }
+        .btn-export { padding: 8px 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--paper); box-shadow: none; color: var(--ink); font-size: .8rem; font-weight: 500; }
+        .btn-export:hover { border-color: #d1d5db; background: #f9fafb; box-shadow: none; transform: none; }
+        .btn-export:disabled { border-color: var(--line-soft); background: transparent; color: var(--faint); cursor: not-allowed; }
+        .btn-export:disabled:hover { border-color: var(--line-soft); background: transparent; }
+
+        /* Job rail */
+        .eyebrow { color: var(--faint); font-size: .74rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+        .job-card h2 { margin: 10px 0 0; color: var(--ink); font-family: inherit; font-size: 1.2rem; font-weight: 700; letter-spacing: -.01em; }
+        .job-card > p { margin-top: 10px; color: var(--muted); font-size: .82rem; line-height: 1.65; }
+        .rail-section { padding-top: 22px; margin-top: 22px; border-top: 1px solid var(--line); }
+        .section-title { margin-bottom: 4px; color: var(--faint); font-size: .74rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+
+        /* One row language for the whole rail: label left, value right, hairline between rows */
+        .rail-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 11px 0; border-bottom: 1px solid var(--line-soft); font-size: .82rem; line-height: 1.4; }
+        .rail-row:last-child { border-bottom: none; }
+        .rail-label { display: flex; align-items: center; gap: 10px; min-width: 0; color: var(--muted); }
+        .rail-value { flex: none; overflow: hidden; max-width: 60%; color: var(--ink); font-weight: 600; text-align: right; text-overflow: ellipsis; white-space: nowrap; }
+        .rail-note { margin: 10px 0 0; color: var(--muted); font-size: .8rem; line-height: 1.6; }
+        .rail-note.is-quiet { color: var(--faint); font-size: .76rem; }
+        .rail-note.has-violations { color: var(--ink); font-weight: 500; }
+        .rail-value.has-violations { color: #b91c1c; }
+        .rail-value.is-placeholder { color: var(--faint); font-weight: 400; }
+        /* Verdict rows carry two readings side by side, which does not fit the
+           rail's single-line-with-ellipsis default. */
+        .rail-value.value-wrap { flex: 1 1 auto; overflow: visible; min-width: 0; max-width: none; white-space: normal; text-overflow: clip; }
+        .rail-row:has(> .value-wrap) .rail-label { flex: none; }
+
+        /* Tests panel: one row per test with its own Run button, result note below.
+           test-run-btn reuses .header-action (the Start/Continue look) so it doesn't
+           introduce a second button style. */
+        .test-row { padding: 11px 0; border-bottom: 1px solid var(--line-soft); }
+        .test-row:last-child { border-bottom: none; }
+        .test-row .rail-row { padding: 0; border-bottom: none; }
+        .test-run-btn { font-size: .78rem; letter-spacing: .08em; text-transform: uppercase; }
+        .test-note { margin: 6px 0 0; color: var(--ink); font-size: .78rem; line-height: 1.55; }
+        .test-note:empty { margin: 0; color: var(--muted); }
+        .rail-label-group { display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1 1 auto; color: var(--muted); }
+        .test-note.test-flagged { color: #b91c1c; font-weight: 500; }
+        .theme-dark .test-note.test-flagged { color: #f87171; }
+        .rail-value.signature-score { color: #a1841f; font-size: 1.05rem; font-weight: 700; }
+        .theme-dark .rail-value.signature-score { color: #cfab52; }
+        .rail-value.signature-score.test-flagged { color: #b91c1c; }
+        .theme-dark .rail-value.signature-score.test-flagged { color: #f87171; }
+
+        .progress-bar-container { height: 3px; margin: 2px 0 14px; border-radius: 2px; background: var(--line); overflow: hidden; }
+        .progress-bar { display: block; width: 0; height: 100%; background: var(--accent); transition: width .3s; }
+
+        .metric-row { display: block; margin: 0; }
+        .metric { display: grid; grid-template-columns: 34px 56px 1fr; align-items: center; column-gap: 10px; padding: 11px 0; border-bottom: 1px solid var(--line-soft); font-size: .82rem; }
+        .metric:last-child { border-bottom: none; }
+        .metric label { color: var(--muted); }
+        .metric-value { display: contents; }
+        .metric strong { overflow: hidden; color: var(--ink); font-weight: 600; text-overflow: ellipsis; white-space: nowrap; text-align: right; }
+        .metric .bar { width: 56px; height: 3px; border-radius: 2px; background: var(--line); overflow: hidden; }
+        .metric .bar i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .3s; }
+
+        /* Archive */
+        .history-card { margin-top: 26px; padding: 18px 0 0; border-top: 1px solid var(--line); }
+        .history-card-header { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin-bottom: 10px; }
+        .history-card h2, .history-card-header h2 { margin: 6px 0 0; color: var(--ink); font-family: inherit; font-size: 1.05rem; font-weight: 700; letter-spacing: -.01em; }
+        .history-card-header span { color: var(--faint); font-size: .76rem; }
+        .history-search { width: 100%; max-width: 320px; min-height: 34px; padding: 6px 0; margin-bottom: 14px; border: none; border-bottom: 1px solid var(--line); background: transparent; color: var(--ink); font: inherit; font-size: .82rem; }
+        .history-search::placeholder { color: var(--faint); }
+        .history-search:focus { outline: none; border-color: var(--accent); }
+        .history-search::-webkit-search-cancel-button { cursor: pointer; }
+        .history-item { padding: 12px 0; margin: 0; border: none; border-bottom: 1px solid var(--line-soft); border-radius: 0; background: transparent; }
+        .history-item-title { font-size: .86rem; font-weight: 500; }
+        .history-item-meta { color: var(--faint); font-size: .74rem; }
+        .status-badge { padding: 2px 8px; border-radius: 999px; background: #f3f4f6; color: var(--muted); font-size: .65rem; font-weight: 600; letter-spacing: .05em; }
+        .status-completed { background: #eef2f5; color: var(--accent); }
+        .status-in-progress { background: #f3f4f6; color: var(--muted); }
+        .status-error { background: #fef2f2; color: #b91c1c; }
+        .btn-small { padding: 6px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--paper); color: var(--ink); font-size: .76rem; }
+        .btn-small:hover { border-color: #d1d5db; background: #f9fafb; }
+        .btn-delete { border-color: var(--line); background: transparent; color: var(--muted); }
+        .btn-delete:hover { border-color: #fca5a5; background: #fef2f2; color: #b91c1c; }
+
+        @media (max-width: 1180px) {
+            .container { padding: 0 16px 32px; }
+            .workspace { grid-template-columns: 1fr; gap: 22px; }
+            .main-card, .job-card { grid-column: auto; grid-row: auto; }
+            .main-card { padding: 0; }
+            .job-card { position: static; max-height: none; padding: 18px 0 0; border-left: none; border-top: 1px solid var(--line); }
+            .text-panels { height: 66vh; }
+            .glossary-row { width: 100%; }
+            .more-panel { flex: 1 1 100%; width: 100%; }
+            .glossary-mark { display: none; }
+        }
+        @media (max-width: 820px) {
+            .toolbar .form-group { flex: 1 1 160px; }
+        }
+        @media (max-width: 720px) {
+            .glossary-row { display: block; }
+            .more-panel { grid-template-columns: 1fr; width: 100%; }
+            .glossary-mark { display: none; }
+            .glossary-editor, .glossary-guide { padding: 20px; }
+            .glossary-editor-header { margin: -20px -20px 20px; }
+            .glossary-guide { border-left: none; border-top: 1px solid var(--line); }
+            .text-panels { grid-template-columns: 1fr; height: auto; min-height: 0; }
+            .text-panel { border-left: none; border-top: 1px solid var(--line); }
+            .text-panel:first-child { border-top: none; }
+            .text-panel-content { height: 220px; flex: none; }
+        }
+        @media (max-width: 480px) {
+            .container { padding: 0 12px 28px; }
+            .app-topbar { align-items: flex-start; flex-wrap: wrap; gap: 10px; }
+            .brand { gap: 8px; flex-wrap: wrap; }
+            .local-status { width: 100%; justify-content: space-between; gap: 6px; font-size: .67rem; letter-spacing: .06em; }
+            .toolbar { gap: 10px; margin-bottom: 24px; }
+            .toolbar .form-group, .btn-more { min-width: 0; }
+            .glossary-editor, .glossary-guide { padding: 18px; }
+            .glossary-editor-header { margin: -18px -18px 18px; }
+            .guide-mode { grid-template-columns: minmax(82px, .72fr) minmax(0, 1.6fr); gap: 8px; }
+        }
+
+        /* Dark theme — applied via the .theme-dark class, set by JS from the
+           saved preference or (absent one) the OS setting. See the toggle
+           button script for how the class gets there. */
+        :root.theme-dark {
+            --canvas: #17181c; --paper: #1f2126; --ink: #e8e9ec; --muted: #9195a1; --faint: #6b6f7b;
+            --line: #2c2e35; --line-soft: #26282e; --accent: #86a4bd; --accent-dark: #a2bdd1;
+        }
+        .theme-dark .job-card { background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='f'><feTurbulence type='fractalNoise' baseFrequency='0.012 0.9' numOctaves='2' seed='7' stitchTiles='stitch'/><feColorMatrix type='matrix' values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 0.035 0'/></filter><rect width='100%25' height='100%25' filter='url(%23f)'/></svg>"); }
+        .theme-dark .job-card::-webkit-scrollbar-thumb, .theme-dark .text-panel-content::-webkit-scrollbar-thumb { background: #383b44; }
+        .theme-dark .panel-source { background: #1a1b1f; }
+        .theme-dark .panel-source h3 { background: #1a1b1f; }
+        .theme-dark .panel-source .text-panel-content { color: #9195a1; }
+        .theme-dark .more-panel,
+        .theme-dark .glossary-guide { background: #17181c; }
+        .theme-dark .glossary-editor, .theme-dark .glossary-editor-header { background: #1a1b1f; }
+        .theme-dark .panel-draft { background: #1d1f24; }
+        .theme-dark .panel-draft h3 { background: #1d1f24; }
+        .theme-dark .panel-draft .text-panel-content { color: #c3c6cc; }
+        .theme-dark .panel-final { background: var(--paper); }
+        .theme-dark .panel-final h3 { background: var(--paper); }
+        .theme-dark .form-hint code { background: #2c2e35; color: var(--muted); }
+        .theme-dark .status-badge { background: #2c2e35; }
+        .theme-dark .status-completed { background: rgba(134, 164, 189, .16); }
+        .theme-dark .status-error { background: rgba(248, 113, 113, .14); color: #f87171; }
+        .theme-dark .rail-value.has-violations { color: #f87171; }
+        .theme-dark .glossary-status.has-errors { color: #f87171; }
+        .theme-dark .btn-export:hover, .theme-dark .btn-small:hover { background: #24262c; }
+        .theme-dark .btn-delete:hover { background: rgba(248, 113, 113, .1); color: #f87171; border-color: #f87171; }
+        .theme-dark .text-panel-content.dragover { background-color: #24262c; }
     </style>
+    <script>
+        // Applied before the body paints, so there's no flash of the wrong theme.
+        (function () {
+            try {
+                const saved = localStorage.getItem('theme');
+                const isDark = saved ? saved === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches;
+                document.documentElement.classList.toggle('theme-dark', isDark);
+            } catch (e) {}
+        })();
+    </script>
 </head>
 <body>
     <div class="container">
-        <!-- Stats -->
-        <div class="stats">
-            <div class="stat-card blue">
-                <div class="stat-label">Success Rate</div>
-                <div class="stat-value" id="successRate">100.0%</div>
+        <header class="app-topbar">
+            <div class="brand"><span class="brand-name">Tolmach</span><span class="brand-descriptor">Book Translator</span><span class="brand-version">v3.0</span></div>
+            <div class="local-status">
+                <span class="current-nav" aria-current="page">Home</span>
+                <span class="sep">•</span><a class="repo-link" href="/guide.html">Guide</a>
+                <span class="sep">•</span><a class="repo-link" href="/settings.html">Settings</a>
+                <span class="sep">•</span><a class="repo-link" href="https://github.com/KazKozDev/book-translator" target="_blank" rel="noopener">GitHub</a>
+                <span class="sep">•</span><button type="button" class="theme-toggle" id="themeToggle" title="Switch to dark mode">🌙</button>
             </div>
-            <div class="stat-card green">
-                <div class="stat-label">Avg Translation Time</div>
-                <div class="stat-value" id="avgTime">86.1s</div>
-            </div>
-            <div class="stat-card purple">
-                <div class="stat-label">CPU Usage</div>
-                <div class="stat-value" id="cpuUsage">10.6%</div>
-            </div>
-            <div class="stat-card gray">
-                <div class="stat-label">Memory Usage</div>
-                <div class="stat-value" id="memoryUsage">55.8%</div>
-            </div>
-        </div>
+        </header>
 
-        <!-- Main Card -->
-        <div class="main-card">
-            <div class="header">
-                <h1>Book Translator</h1>
-                <p>Translate your books and large documents</p>
-            </div>
-
-            <!-- Tabs -->
-            <div class="tabs">
-                <button class="tab active" onclick="switchTab('new')">New Translation</button>
-                <button class="tab" onclick="switchTab('history')">Translation History</button>
-            </div>
-
-            <!-- New Translation Tab -->
-            <div class="tab-content active" id="newTranslationTab">
-                <form id="translationForm">
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label for="sourceLanguage">Source Language</label>
-                            <select id="sourceLanguage" required>
-                                <option value="en">English</option>
-                                <option value="ru">Russian</option>
-                                <option value="es">Spanish</option>
-                                <option value="fr">French</option>
-                                <option value="de">German</option>
-                                <option value="it">Italian</option>
-                                <option value="zh">Chinese</option>
-                                <option value="ja">Japanese</option>
-                            </select>
-                        </div>
-
-                        <div class="form-group">
-                            <label for="targetLanguage">Target Language</label>
-                            <select id="targetLanguage" required>
-                                <option value="ru">Russian</option>
-                                <option value="en">English</option>
-                                <option value="es">Spanish</option>
-                                <option value="fr">French</option>
-                                <option value="de">German</option>
-                                <option value="it">Italian</option>
-                                <option value="zh">Chinese</option>
-                                <option value="ja">Japanese</option>
-                            </select>
-                        </div>
-
-                        <div class="form-group">
-                            <label for="model">Select Model</label>
-                            <select id="model" required>
-                                <option value="">⏳ Loading models...</option>
-                            </select>
-                        </div>
-
-                        <div class="form-group">
-                            <label for="genre">Text Genre</label>
-                            <select id="genre" required>
-                                <option value="unknown">Unknown / Auto</option>
-                                <option value="fiction">Fiction / Novel</option>
-                                <option value="technical">Technical</option>
-                                <option value="academic">Academic</option>
-                                <option value="business">Business</option>
-                                <option value="poetry">Poetry</option>
-                            </select>
-                        </div>
-                    </div>
-
-                    <div class="selected-file" id="selectedFile">
-                        <span id="selectedFileName"></span>
-                    </div>
-
-                    <div class="upload-section" id="uploadSection">
-                        <div class="upload-icon">☁️</div>
-                        <h3>Click to upload or drag and drop</h3>
-                        <p>TXT files only (max 10MB)</p>
-                        <input type="file" id="fileInput" class="file-input" accept=".txt" required>
-                    </div>
-
-                    <button type="submit" class="btn-translate" id="translateBtn">
-                        Start Translation
+        <form id="translationForm">
+            <div class="toolbar">
+                <div class="form-group glossary-control">
+                    <span class="toolbar-label">Terminology</span>
+                    <button type="button" class="btn-more" id="glossaryOptionsBtn" aria-expanded="false" aria-controls="glossaryPanel">
+                        Glossary <span class="btn-more-arrow" id="glossaryArrow">▾</span>
                     </button>
+                </div>
 
-                    <div class="progress-section" id="progressSection">
-                        <div class="progress-bar-container">
-                            <div class="progress-bar" id="progressBar"></div>
-                        </div>
-                        <div class="progress-info" id="progressInfo">Initializing...</div>
-                    </div>
+                <div class="form-group">
+                    <label for="sourceLanguage">Source language</label>
+                    <select id="sourceLanguage" required>
+                        <option value="en">English</option>
+                        <option value="ru">Russian</option>
+                        <option value="es">Spanish</option>
+                        <option value="fr">French</option>
+                        <option value="de">German</option>
+                        <option value="it">Italian</option>
+                        <option value="pt">Portuguese</option>
+                        <option value="zh">Chinese</option>
+                        <option value="ja">Japanese</option>
+                        <option value="ko">Korean</option>
+                    </select>
+                </div>
 
-                    <div class="text-panels">
-                        <div class="text-panel">
-                            <h3>Original Text</h3>
-                            <div class="text-panel-content" id="originalText">
-                                No content yet
-                            </div>
-                        </div>
-                        <div class="text-panel">
-                            <h3>Stage 1: Primary Translation</h3>
-                            <div class="text-panel-content" id="machineTranslation">
-                                No content yet
-                            </div>
-                        </div>
-                        <div class="text-panel">
-                            <h3>Stage 2: Self-Reflection</h3>
-                            <div class="text-panel-content" id="literaryRefinement">
-                                No content yet
-                            </div>
-                        </div>
-                    </div>
+                <div class="form-group">
+                    <label for="targetLanguage">Target language</label>
+                    <select id="targetLanguage" required>
+                        <option value="ru">Russian</option>
+                        <option value="en">English</option>
+                        <option value="es" selected>Spanish</option>
+                        <option value="fr">French</option>
+                        <option value="de">German</option>
+                        <option value="it">Italian</option>
+                        <option value="pt">Portuguese</option>
+                        <option value="zh">Chinese</option>
+                        <option value="ja">Japanese</option>
+                        <option value="ko">Korean</option>
+                    </select>
+                </div>
 
-                    <!-- Export Buttons -->
-                    <div class="export-buttons" id="exportButtons" style="display: none;">
-                        <button type="button" class="btn-export" onclick="copyToClipboard()">
-                            Copy to Clipboard
-                        </button>
-                        <button type="button" class="btn-export" onclick="saveAsTxt()">
-                            Save as TXT
-                        </button>
-                        <button type="button" class="btn-export" onclick="saveAsPdf()">
-                            Save as PDF
-                        </button>
-                        <button type="button" class="btn-export" onclick="saveAsEpub()">
-                            Save as EPUB
-                        </button>
-                    </div>
-                </form>
+                <!-- Model choices live in Settings. These controls keep the
+                     active choices available to their respective workflows. -->
+                <select id="model" required hidden aria-hidden="true"><option value="">Loading models…</option></select>
+                <select id="refinementModel" required hidden aria-hidden="true"><option value="">Loading models…</option></select>
+                <select id="generalInstructModel" required hidden aria-hidden="true"><option value="">Loading models…</option></select>
+                <select id="judgeModel" required hidden aria-hidden="true"><option value="">Loading models…</option></select>
+
+                <div class="form-group">
+                    <label for="genre">Text genre</label>
+                    <select id="genre" required>
+                        <option value="unknown">Unknown / Auto</option>
+                        <option value="fiction">Fiction / Novel</option>
+                        <option value="technical">Technical</option>
+                        <option value="academic">Academic</option>
+                        <option value="business">Business</option>
+                        <option value="poetry">Poetry</option>
+                    </select>
+                </div>
+
             </div>
 
-            <!-- Translation History Tab -->
-            <div class="tab-content" id="historyTab">
-                <div id="historyList">
-                    <p style="text-align: center; color: #999; padding: 40px;">No translations yet</p>
+            <div class="glossary-row" id="glossaryPanel" hidden>
+                <div class="more-panel">
+                    <section class="glossary-editor" aria-label="Glossary editor">
+                    <h3 class="glossary-editor-header">
+                        <span class="panel-title">Glossary</span>
+                        <button type="button" class="header-action" id="prepareBtn" disabled title="Upload a file first">→ PREPARE</button>
+                    </h3>
+                    <div class="form-group glossary-group">
+                        <textarea id="glossary" aria-label="Glossary" spellcheck="false" placeholder="Use: source =&gt; target | mode"></textarea>
+                        <p class="glossary-status" id="glossaryStatus"></p>
+                    </div>
+                </section>
+
+                <aside class="glossary-guide" aria-label="Glossary guidance">
+                    <div class="eyebrow">HELP</div>
+                    <h2>Format and modes</h2>
+                    <p class="form-hint" id="prepareStatus" data-default="Upload the source text with → 1 UPLOAD below, then click → PREPARE. The app scans the text, collects names and repeated terms, and fills the list on the left. This step is optional, but it improves translation quality and keeps names consistent across the whole book.">Upload the source text with → 1 UPLOAD below, then click → PREPARE. The app scans the text, collects names and repeated terms, and fills the list on the left. This step is optional, but it improves translation quality and keeps names consistent across the whole book.</p>
+                    <p class="form-hint">Review the list before you start: delete what you don't need, correct a wrong translation, add what the scan missed. Entries can be edited until you click → 2 START.</p>
+                    <p class="form-hint">Format: <code>source term =&gt; translation [| mode]</code><br>One entry per line. The <code>=&gt;</code> is required. If you omit the mode, inflectable is used.</p>
+
+                    <section class="guide-section" aria-labelledby="guideModesTitle">
+                        <h3 id="guideModesTitle">MODES</h3>
+                        <div class="guide-mode"><span class="guide-mode-label">exact</span><span class="guide-mode-description">Use this translation letter for letter, everywhere.</span></div>
+                        <div class="guide-mode"><span class="guide-mode-label">inflectable</span><span class="guide-mode-description">Use this translation, but let it change form to fit the sentence.</span></div>
+                        <div class="guide-mode"><span class="guide-mode-label">preferred</span><span class="guide-mode-description">Use this translation where it fits, otherwise the app translates freely.</span></div>
+                    </section>
+                    </aside>
+                </div>
+                <img class="glossary-mark" src="/static/assets/tolmach.png" alt="" aria-hidden="true">
+            </div>
+        </form>
+
+        <div class="workspace">
+        <section class="main-card">
+            <div class="text-panels">
+                <div class="text-panel panel-source">
+                    <h3>
+                        <span class="panel-title">Original text</span>
+                        <button type="button" class="header-action" id="uploadHeaderBtn">→ 1 UPLOAD</button>
+                    </h3>
+                    <input type="file" id="fileInput" class="file-input" accept=".txt,.epub" hidden>
+                    <div class="text-panel-content is-placeholder" id="originalText">No content yet</div>
+                </div>
+                <div class="text-panel panel-draft">
+                    <h3>
+                        <span class="panel-title">Translation</span>
+                        <button type="button" class="header-action" id="translateBtn">→ 2 START</button>
+                    </h3>
+                    <div class="text-panel-content is-placeholder" id="machineTranslation">No content yet</div>
+                </div>
+                <div class="text-panel panel-final">
+                    <h3>
+                        <span class="panel-title">Refinement</span>
+                        <button type="button" class="header-action" id="refineHeaderBtn">→ 3 CONTINUE</button>
+                    </h3>
+                    <div class="text-panel-content is-placeholder" id="literaryRefinement">No content yet</div>
                 </div>
             </div>
+
+            <div class="deck-bar">
+                <span class="deck-status-group">
+                    <span class="deck-status" id="deckStatus">No translation yet</span>
+                    <button type="button" class="header-action" id="newTranslationBtn">↺ New translation</button>
+                </span>
+                <div class="export-buttons" id="exportButtons">
+                    <button type="button" class="btn-export" onclick="copyToClipboard()" disabled title="Available once a translation completes">Copy</button>
+                    <button type="button" class="btn-export" onclick="saveAsTxt()" disabled title="Available once a translation completes">TXT</button>
+                    <button type="button" class="btn-export" onclick="saveAsPdf()" disabled title="Available once a translation completes">PDF</button>
+                    <button type="button" class="btn-export" onclick="saveAsEpub()" disabled title="Available once a translation completes">EPUB</button>
+                </div>
+            </div>
+        </section>
+
+        <aside class="job-card">
+            <div class="eyebrow">Current job</div>
+            <h2>Your translation desk</h2>
+            <p>Press <span style="letter-spacing: .08em;">UPLOAD</span> to add a file.<br>Choose a language pair and genre. Set translation, refinement, general-instruct, and judge models in <span style="letter-spacing: .08em;">SETTINGS</span>.<br>Open <span style="letter-spacing: .08em;">GLOSSARY</span> and prepare it from the source. Press <span style="letter-spacing: .08em;">PREPARE</span> to generate and review the proposed terms.<br>Press <span style="letter-spacing: .08em;">START</span> to translate.<br>Once the draft is ready, press <span style="letter-spacing: .08em;">CONTINUE</span> to refine.</p>
+
+            <div class="rail-section">
+                <div class="section-title">Progress</div>
+                <div class="progress-section" id="progressSection">
+                    <div class="progress-bar-container"><div class="progress-bar" id="progressBar"></div></div>
+                    <p class="rail-note" id="progressInfo">Waiting for a translation</p>
+                    <div class="rail-row">
+                        <span class="rail-label">Time remaining</span>
+                        <span class="rail-value" id="etaValue">—</span>
+                    </div>
+                    <div class="rail-row">
+                        <span class="rail-label">Glossary</span>
+                        <span class="rail-value" id="terminologyStatus">No verified terms</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="rail-section">
+                <div class="section-title">Length</div>
+                <div class="rail-row">
+                    <span class="rail-label">Original</span>
+                    <span class="rail-value is-placeholder" id="originalMeta">— chr · — w</span>
+                </div>
+                <div class="rail-row">
+                    <span class="rail-label">Translation</span>
+                    <span class="rail-value is-placeholder" id="machineMeta">— chr · — w</span>
+                </div>
+                <div class="rail-row">
+                    <span class="rail-label">Refinement</span>
+                    <span class="rail-value is-placeholder" id="refinedMeta">— chr · — w</span>
+                </div>
+            </div>
+
+            <div class="rail-section">
+                <div class="section-title">Quality Check</div>
+
+                <div class="section-title">Translation</div>
+
+                <div class="test-row">
+                    <div class="rail-row">
+                        <span class="rail-label">Backtranslation chrF</span>
+                        <button type="button" class="header-action test-run-btn" data-test="backtranslation_chrf" data-stage="1" disabled>Run</button>
+                    </div>
+                    <p class="test-note" data-test-note="backtranslation_chrf"></p>
+                </div>
+
+                <div class="test-row">
+                    <div class="rail-row">
+                        <span class="rail-label">LLM judge</span>
+                        <button type="button" class="header-action test-run-btn" data-test="llm_judge_stage1" data-stage="1" disabled>Run</button>
+                    </div>
+                    <p class="test-note" data-test-note="llm_judge_stage1"></p>
+                </div>
+
+                <div class="test-row">
+                    <div class="rail-row">
+                        <span class="rail-label">COMET-Kiwi</span>
+                        <button type="button" class="header-action test-run-btn" data-test="comet_kiwi" data-stage="1" disabled>Run</button>
+                    </div>
+                    <p class="test-note" data-test-note="comet_kiwi"></p>
+                </div>
+
+            </div>
+
+            <div class="rail-section">
+                <div class="section-title">Quality Check</div>
+
+                <div class="section-title">Refinement</div>
+
+                <div class="test-row">
+                    <div class="rail-row">
+                        <span class="rail-label">Named-entity consistency</span>
+                        <button type="button" class="header-action test-run-btn" data-test="entity_consistency" data-stage="2" disabled>Run</button>
+                    </div>
+                    <p class="test-note" data-test-note="entity_consistency"></p>
+                </div>
+
+                <div class="test-row">
+                    <div class="rail-row">
+                        <span class="rail-label">Numbers and dates</span>
+                        <button type="button" class="header-action test-run-btn" data-test="numeric_preservation" data-stage="2" disabled>Run</button>
+                    </div>
+                    <p class="test-note" data-test-note="numeric_preservation"></p>
+                </div>
+
+                <div class="test-row">
+                    <div class="rail-row">
+                        <span class="rail-label">Chunk coverage</span>
+                        <button type="button" class="header-action test-run-btn" data-test="chunk_coverage" data-stage="2" disabled>Run</button>
+                    </div>
+                    <p class="test-note" data-test-note="chunk_coverage"></p>
+                </div>
+
+                <div class="test-row">
+                    <div class="rail-row">
+                        <span class="rail-label">Untranslated words</span>
+                        <button type="button" class="header-action test-run-btn" data-test="script_leakage" data-stage="2" disabled>Run</button>
+                    </div>
+                    <p class="test-note" data-test-note="script_leakage"></p>
+                </div>
+
+                <div class="test-row">
+                    <div class="rail-row">
+                        <span class="rail-label">Terminology delta</span>
+                        <button type="button" class="header-action test-run-btn" data-test="terminology_delta" data-stage="2" disabled>Run</button>
+                    </div>
+                    <p class="test-note" data-test-note="terminology_delta"></p>
+                </div>
+
+                <div class="test-row">
+                    <div class="rail-row">
+                        <span class="rail-label">Length ratio</span>
+                        <button type="button" class="header-action test-run-btn" data-test="length_ratio" data-stage="2" disabled>Run</button>
+                    </div>
+                    <p class="test-note" data-test-note="length_ratio"></p>
+                </div>
+
+                <div class="test-row">
+                    <div class="rail-row">
+                        <span class="rail-label">Diff ratio</span>
+                        <button type="button" class="header-action test-run-btn" data-test="diff_ratio" data-stage="2" disabled>Run</button>
+                    </div>
+                    <p class="test-note" data-test-note="diff_ratio"></p>
+                </div>
+
+                <div class="test-row">
+                    <div class="rail-row">
+                        <span class="rail-label">Repetition ratio</span>
+                        <button type="button" class="header-action test-run-btn" data-test="ngram_repetition" data-stage="2" disabled>Run</button>
+                    </div>
+                    <p class="test-note" data-test-note="ngram_repetition"></p>
+                </div>
+
+                <div class="test-row">
+                    <div class="rail-row">
+                        <span class="rail-label">LaBSE alignment</span>
+                        <button type="button" class="header-action test-run-btn" data-test="labse_alignment" data-stage="2" disabled>Run</button>
+                    </div>
+                    <p class="test-note" data-test-note="labse_alignment"></p>
+                </div>
+
+                <div class="test-row">
+                    <div class="rail-row">
+                        <span class="rail-label">Target-language segments</span>
+                        <button type="button" class="header-action test-run-btn" data-test="language_id" data-stage="2" disabled>Run</button>
+                    </div>
+                    <p class="test-note" data-test-note="language_id"></p>
+                </div>
+
+                <div class="test-row">
+                    <div class="rail-row">
+                        <span class="rail-label">LLM judge — final</span>
+                        <button type="button" class="header-action test-run-btn" data-test="llm_judge_final" data-stage="2" disabled>Run</button>
+                    </div>
+                    <p class="test-note" data-test-note="llm_judge_final"></p>
+                </div>
+
+                <div class="test-row">
+                    <div class="rail-row">
+                        <span class="rail-label">LLM judge — draft vs final</span>
+                        <button type="button" class="header-action test-run-btn" data-test="llm_judge_stage2" data-stage="2" disabled>Run</button>
+                    </div>
+                    <p class="test-note" data-test-note="llm_judge_stage2"></p>
+                </div>
+
+                <div class="test-row">
+                    <div class="rail-row">
+                        <span class="rail-label">COMET-Kiwi — final</span>
+                        <button type="button" class="header-action test-run-btn" data-test="comet_kiwi_final" data-stage="2" disabled>Run</button>
+                    </div>
+                    <p class="test-note" data-test-note="comet_kiwi_final"></p>
+                </div>
+            </div>
+
+            <div class="rail-section">
+                <div class="section-title">Verdict</div>
+                <p class="rail-note" id="verdictEmpty">Run the tests above. There is no single number here on purpose: adequacy, fluency and consistency can move in opposite directions, and averaging them hides exactly the case worth catching.</p>
+                <div id="verdictVector" hidden>
+                    <div class="rail-row">
+                        <span class="rail-label">Adequacy</span>
+                        <span class="rail-value value-wrap" id="verdictAdequacy">—</span>
+                    </div>
+                    <div class="rail-row">
+                        <span class="rail-label">Fluency</span>
+                        <span class="rail-value value-wrap" id="verdictFluency">—</span>
+                    </div>
+                    <div class="rail-row">
+                        <span class="rail-label">COMET-Kiwi</span>
+                        <span class="rail-value value-wrap" id="verdictComet">—</span>
+                    </div>
+                    <div class="rail-row">
+                        <span class="rail-label">Consistency</span>
+                        <span class="rail-value value-wrap" id="verdictConsistency">—</span>
+                    </div>
+                    <div class="rail-row">
+                        <span class="rail-label">Ship</span>
+                        <span class="rail-value signature-score value-wrap" id="verdictShip">—</span>
+                    </div>
+                    <div id="verdictGates"></div>
+                </div>
+            </div>
+
+            <div class="rail-section">
+                <div class="section-title">Model</div>
+                <div class="rail-row"><span class="rail-label">Ollama</span><span class="rail-value" id="ollamaStatusValue">Checking…</span></div>
+                <div class="rail-row"><span class="rail-label">Active model</span><span class="rail-value" id="gpuModel">Checking Ollama</span></div>
+                <div class="rail-row"><span class="rail-label">Success rate</span><span class="rail-value" id="successRate">—</span></div>
+                <div class="rail-row"><span class="rail-label">Avg. time</span><span class="rail-value" id="avgTime">—</span></div>
+            </div>
+
+            <div class="rail-section">
+                <div class="section-title">System</div>
+                <div class="metric-row" aria-label="Local engine status">
+                    <div class="metric"><label>CPU</label><div class="metric-value"><div class="bar"><i id="cpuBar"></i></div><strong id="cpuUsage">—</strong></div></div>
+                    <div class="metric"><label>RAM</label><div class="metric-value"><div class="bar"><i id="memoryBar"></i></div><strong id="memoryUsage">—</strong></div></div>
+                    <div class="metric"><label>GPU</label><div class="metric-value"><div class="bar"><i id="gpuBar"></i></div><strong id="gpuUsage">—</strong></div></div>
+                </div>
+            </div>
+        </aside>
         </div>
+
+        <section class="history-card" id="historyTab">
+            <div class="history-card-header">
+                <div><div class="eyebrow">Archive</div><h2>Recent translations</h2></div>
+                <span>Saved locally in SQLite</span>
+            </div>
+            <input type="search" id="historySearch" class="history-search" placeholder="Filter by filename or language…">
+            <div id="historyList">
+                <p style="text-align: center; color: #9ca3af; padding: 32px;">No translations yet</p>
+            </div>
+        </section>
     </div>
 
     <script>
-        const API_URL = 'http://localhost:5001';
+        // Use the same browser origin as Settings, including when the app is
+        // opened through 127.0.0.1 or a LAN address.
+        const API_URL = window.location.origin;
+        // Keep this fallback identical to Settings. Translation has its own
+        // role, so an unset browser preference must not silently become the
+        // general-instruct fallback used by earlier versions of this screen.
+        const PREFERRED_MODEL = 'translategemma:12b';
+        const SOURCE_PREVIEW_LIMIT = 100000;
+        const PANEL_PREVIEW_LIMIT = 12000;
         let selectedFile = null;
+        let translationPreviews = {};
+        let allTranslations = [];
+        let historySearchQuery = '';
+        let translationStartTime = null;
+        // Set once Start (Stage 1) finishes, so Continue knows which draft to refine.
+        let currentTranslationId = null;
+        const ACTIVE_TRANSLATION_KEY = 'activeTranslationId';
+
+        function rememberActiveTranslation(id) {
+            currentTranslationId = id;
+            try { localStorage.setItem(ACTIVE_TRANSLATION_KEY, String(id)); } catch (e) {}
+        }
+
+        function forgetActiveTranslation() {
+            currentTranslationId = null;
+            try { localStorage.removeItem(ACTIVE_TRANSLATION_KEY); } catch (e) {}
+        }
+
+        async function restoreActiveTranslation() {
+            let savedId;
+            try { savedId = Number(localStorage.getItem(ACTIVE_TRANSLATION_KEY)); } catch (e) { return; }
+            if (!Number.isInteger(savedId) || savedId < 1) return;
+            await loadTranslationIntoWorkspace(savedId, { scroll: false, silent: true });
+        }
+
+        function isDarkThemeActive() {
+            return document.documentElement.classList.contains('theme-dark');
+        }
+
+        function applyThemeButton() {
+            const btn = document.getElementById('themeToggle');
+            const isDark = isDarkThemeActive();
+            btn.textContent = isDark ? '☀️' : '🌙';
+            btn.title = isDark ? 'Switch to light mode' : 'Switch to dark mode';
+        }
+
+        function toggleTheme() {
+            const next = isDarkThemeActive() ? 'light' : 'dark';
+            document.documentElement.classList.toggle('theme-dark', next === 'dark');
+            try { localStorage.setItem('theme', next); } catch (e) {}
+            applyThemeButton();
+        }
+
+        function formatDuration(ms) {
+            const totalSeconds = Math.max(0, Math.round(ms / 1000));
+            const minutes = Math.floor(totalSeconds / 60);
+            const seconds = totalSeconds % 60;
+            return minutes > 0 ? `${minutes}m ${seconds}s` : `${seconds}s`;
+        }
+
+        function updateEta(progress) {
+            const etaValue = document.getElementById('etaValue');
+            if (!translationStartTime || !progress || progress <= 0 || progress >= 100) {
+                etaValue.textContent = progress >= 100 ? 'Done' : '—';
+                return;
+            }
+            const elapsed = Date.now() - translationStartTime;
+            const totalEstimate = elapsed / (progress / 100);
+            etaValue.textContent = `~${formatDuration(totalEstimate - elapsed)}`;
+        }
+
+        // Mirrors the parsing rules in TerminologyGlossary.from_text (translator.py)
+        // so malformed lines are caught before the file is even uploaded.
+        const GLOSSARY_VALID_MODES = new Set(['exact', 'inflectable', 'preferred']);
+        const GLOSSARY_MAX_TERM_LENGTH = 200;
+        const GLOSSARY_PLACEHOLDERS = {
+            ru: 'Mr. Darcy => мистер Дарси | exact\nmachine learning => машинное обучение | inflectable\nhome => дом | preferred',
+            en: 'Mr. Darcy => Mr. Darcy | exact\nmachine learning => machine learning | inflectable\nhome => home | preferred',
+            es: 'Mr. Darcy => señor Darcy | exact\nmachine learning => aprendizaje automático | inflectable\nhome => hogar | preferred',
+            fr: 'Mr. Darcy => monsieur Darcy | exact\nmachine learning => apprentissage automatique | inflectable\nhome => maison | preferred',
+            de: 'Mr. Darcy => Herr Darcy | exact\nmachine learning => maschinelles Lernen | inflectable\nhome => Zuhause | preferred',
+            it: 'Mr. Darcy => signor Darcy | exact\nmachine learning => apprendimento automatico | inflectable\nhome => casa | preferred',
+            pt: 'Mr. Darcy => Sr. Darcy | exact\nmachine learning => aprendizado de máquina | inflectable\nhome => lar | preferred',
+            zh: 'Mr. Darcy => 达西先生 | exact\nmachine learning => 机器学习 | inflectable\nhome => 家 | preferred',
+            ja: 'Mr. Darcy => ダーシー氏 | exact\nmachine learning => 機械学習 | inflectable\nhome => 家 | preferred',
+            ko: 'Mr. Darcy => 다아시 씨 | exact\nmachine learning => 기계 학습 | inflectable\nhome => 집 | preferred',
+        };
+
+        function updateGlossaryPlaceholder() {
+            const glossary = document.getElementById('glossary');
+            const targetLanguage = document.getElementById('targetLanguage').value;
+            glossary.placeholder = GLOSSARY_PLACEHOLDERS[targetLanguage]
+                || 'source => target | mode';
+        }
+
+        function validateGlossaryText(text) {
+            let valid = 0;
+            let invalid = 0;
+            let firstError = '';
+
+            text.split('\n').forEach((rawLine, index) => {
+                const line = rawLine.trim();
+                if (!line || line.startsWith('#')) return;
+                const lineNo = index + 1;
+
+                let source = '';
+                let target = '';
+                let mode = 'inflectable';
+                let reason = '';
+
+                if (line.includes('\t')) {
+                    const parts = line.split('\t').map(p => p.trim());
+                    if (parts.length !== 2 && parts.length !== 3) {
+                        reason = 'use source<TAB>target<TAB>mode';
+                    } else {
+                        [source, target] = parts;
+                        if (parts.length === 3) mode = parts[2].toLowerCase();
+                    }
+                } else {
+                    const sep = line.includes('=>') ? '=>' : line.includes('=') ? '=' : null;
+                    if (!sep) {
+                        reason = 'use source => target | mode';
+                    } else {
+                        const sepIndex = line.indexOf(sep);
+                        source = line.slice(0, sepIndex).trim();
+                        let remainder = line.slice(sepIndex + sep.length).trim();
+                        const pipeIndex = remainder.lastIndexOf('|');
+                        if (pipeIndex !== -1) {
+                            target = remainder.slice(0, pipeIndex).trim();
+                            mode = remainder.slice(pipeIndex + 1).trim().toLowerCase();
+                        } else {
+                            target = remainder;
+                        }
+                    }
+                }
+
+                if (!reason && (!source || !target)) reason = 'both terms are required';
+                if (!reason && (source.length > GLOSSARY_MAX_TERM_LENGTH || target.length > GLOSSARY_MAX_TERM_LENGTH)) {
+                    reason = `a term exceeds ${GLOSSARY_MAX_TERM_LENGTH} characters`;
+                }
+                if (!reason && !GLOSSARY_VALID_MODES.has(mode)) reason = 'mode must be exact, inflectable, or preferred';
+
+                if (reason) {
+                    invalid++;
+                    if (!firstError) firstError = `Line ${lineNo}: ${reason}`;
+                } else {
+                    valid++;
+                }
+            });
+
+            return { valid, invalid, firstError };
+        }
+
+        function updateGlossaryStatus() {
+            const text = document.getElementById('glossary').value;
+            const statusEl = document.getElementById('glossaryStatus');
+            if (!text.trim()) {
+                statusEl.textContent = '';
+                statusEl.classList.remove('has-errors');
+                return;
+            }
+            const { valid, invalid, firstError } = validateGlossaryText(text);
+            if (invalid === 0) {
+                statusEl.textContent = `${valid} valid term${valid === 1 ? '' : 's'}`;
+                statusEl.classList.remove('has-errors');
+            } else {
+                statusEl.textContent = `${valid} valid · ${invalid} malformed — ${firstError}`;
+                statusEl.classList.add('has-errors');
+            }
+        }
+
+        function setExportButtonsEnabled(enabled) {
+            document.querySelectorAll('#exportButtons .btn-export').forEach(btn => {
+                btn.disabled = !enabled;
+                btn.title = enabled ? '' : 'Available once a translation completes';
+            });
+        }
+
+        // Stage 1 tests need a draft (Start); Stage 2 tests need a
+        // refinement (Continue) — same gating as the Continue button itself
+        // and the export buttons.
+        function setTestButtonsEnabled(stage, enabled) {
+            document.querySelectorAll(`.test-run-btn[data-stage="${stage}"]`).forEach(btn => {
+                btn.disabled = !enabled;
+                btn.title = enabled ? '' : (stage === '1' ? 'Available once Start produces a draft' : 'Available once Continue produces a refined translation');
+            });
+        }
+
+        const KNOWN_TEST_NAMES = [
+            'backtranslation_chrf', 'llm_judge_stage1', 'comet_kiwi',
+            'entity_consistency', 'numeric_preservation', 'chunk_coverage',
+            'script_leakage', 'terminology_delta',
+            'length_ratio', 'diff_ratio', 'ngram_repetition',
+            'labse_alignment', 'language_id',
+            'llm_judge_final', 'llm_judge_stage2', 'comet_kiwi_final',
+        ];
+
+        // Fills the Quality Check panel with previously-saved test results
+        // (from evaluation_results, returned alongside the translation) —
+        // used when opening a translation from history, and to clear stale
+        // notes from a prior translation when starting a fresh one.
+        function applySavedEvaluationResults(results) {
+            const saved = results || {};
+            KNOWN_TEST_NAMES.forEach(testName => {
+                const note = document.querySelector(`[data-test-note="${testName}"]`);
+                if (!note) return;
+                const entry = saved[testName];
+                note.textContent = entry ? (entry.note || '') : '';
+                note.classList.toggle('test-flagged', !!(entry && entry.flagged));
+            });
+
+            currentEvalResults = saved;
+            updateVerdict();
+        }
+
+        // Holds the latest known result object for each test (live from a
+        // Run, or loaded from evaluation_results on Open) — the Verdict block
+        // reads from this rather than re-parsing rendered note text.
+        let currentEvalResults = {};
+
+        // What the panel says about the translation, as a vector rather than
+        // a score.
+        //
+        // This used to be one number: 0.5 x COMET-Kiwi + 0.3 x
+        // backtranslation chrF + 0.2 x a rescaled Likert average, over the
+        // DRAFT. Three problems, all of them the same problem. It averaged a
+        // character-overlap percentage, a 1-5 human-style rating and a neural
+        // QE score as if they were the same kind of quantity. It included a
+        // back-translation metric that measures two models' combined error.
+        // And it scored the draft while the user ships the final.
+        //
+        // Worst of all, averaging is what hid the actual finding: adequacy
+        // falling while fluency rose. A mean cannot show two things moving in
+        // opposite directions — so the two things are shown instead, draft
+        // value next to final value, with the gates stated as gates.
+        function updateVerdict() {
+            const vector = document.getElementById('verdictVector');
+            const empty = document.getElementById('verdictEmpty');
+            if (!vector || !empty) return;
+
+            const draftJudge = currentEvalResults.llm_judge_stage1;
+            const finalJudge = currentEvalResults.llm_judge_final;
+            const draftComet = currentEvalResults.comet_kiwi;
+            const finalComet = currentEvalResults.comet_kiwi_final;
+            const entities = currentEvalResults.entity_consistency;
+            const leakage = currentEvalResults.script_leakage;
+            const pairwise = currentEvalResults.llm_judge_stage2;
+            const terminology = currentEvalResults.terminology_delta;
+
+            const anythingRun = [draftJudge, finalJudge, draftComet, finalComet, entities, leakage, pairwise, terminology]
+                .some(entry => entry && (typeof entry.value === 'number' || entry.details));
+            vector.hidden = !anythingRun;
+            empty.hidden = anythingRun;
+            if (!anythingRun) return;
+
+            const detail = (entry, key) => (entry && entry.details && typeof entry.details[key] === 'number')
+                ? entry.details[key] : null;
+            const pair = (draftValue, finalValue, suffix) => {
+                if (draftValue === null && finalValue === null) return '—';
+                const left = draftValue === null ? '—' : `${draftValue}${suffix}`;
+                const right = finalValue === null ? '—' : `${finalValue}${suffix}`;
+                return `${left} → ${right}`;
+            };
+
+            const draftAdequacy = detail(draftJudge, 'avg_adequacy');
+            const finalAdequacy = detail(finalJudge, 'avg_adequacy');
+            const draftFluency = detail(draftJudge, 'avg_fluency');
+            const finalFluency = detail(finalJudge, 'avg_fluency');
+            const draftCometValue = (draftComet && typeof draftComet.value === 'number') ? draftComet.value : null;
+            const finalCometValue = (finalComet && typeof finalComet.value === 'number') ? finalComet.value : null;
+
+            document.getElementById('verdictAdequacy').textContent = pair(draftAdequacy, finalAdequacy, '/5');
+            document.getElementById('verdictFluency').textContent = pair(draftFluency, finalFluency, '/5');
+            document.getElementById('verdictComet').textContent = pair(draftCometValue, finalCometValue, '/100');
+
+            const entityIssues = (entities && typeof entities.value === 'number') ? entities.value : null;
+            const leakedWords = (leakage && typeof leakage.value === 'number') ? leakage.value : null;
+            const consistencyParts = [];
+            if (entityIssues !== null) consistencyParts.push(`${entityIssues} name(s) adrift`);
+            if (leakedWords !== null) consistencyParts.push(`${leakedWords} untranslated`);
+            const consistencyEl = document.getElementById('verdictConsistency');
+            consistencyEl.textContent = consistencyParts.length ? consistencyParts.join(' · ') : '—';
+            consistencyEl.classList.toggle('test-flagged', !!entityIssues || !!leakedWords);
+
+            // The gates. Each one names a specific defect and what to do
+            // about it — a metric that only ever moves a number nobody acts
+            // on is not a check, it is decoration.
+            const gates = [];
+            let blocked = false;
+
+            // A regression gate on five 1-5 ratings needs a threshold wider
+            // than the noise it sits in, hence 0.3 rather than any drop.
+            if (draftAdequacy !== null && finalAdequacy !== null) {
+                const delta = Math.round((finalAdequacy - draftAdequacy) * 100) / 100;
+                if (delta <= -0.3) {
+                    blocked = true;
+                    gates.push({
+                        severity: 'block',
+                        text: `Adequacy regression: ${delta.toFixed(2)} (draft ${draftAdequacy} → final ${finalAdequacy}). Refinement lost meaning. Ship the draft, or re-run Continue with a different judge model.`,
+                    });
+                } else if (delta < 0) {
+                    gates.push({
+                        severity: 'warn',
+                        text: `Adequacy is ${Math.abs(delta).toFixed(2)} lower on the final than the draft — inside the noise of five samples, but do not read it as an improvement.`,
+                    });
+                }
+            }
+
+            const accuracy = pairwise && pairwise.details && pairwise.details.accuracy;
+            const readability = pairwise && pairwise.details && pairwise.details.readability;
+            if (accuracy && readability && accuracy.draft_wins > accuracy.final_wins) {
+                blocked = true;
+                gates.push({
+                    severity: 'block',
+                    text: `The judge prefers the draft on accuracy (${accuracy.draft_wins} vs ${accuracy.final_wins})${readability.final_wins >= readability.draft_wins ? ' while preferring the final on readability — that is polish bought with meaning' : ''}.`,
+                });
+            }
+
+            if (entityIssues) {
+                blocked = true;
+                gates.push({
+                    severity: 'block',
+                    text: `${entityIssues} agreed name rendering(s) missing from chunks where the name occurs. These are document-level errors; no chunk-level test can see them.`,
+                });
+            }
+            if (leakedWords) {
+                gates.push({
+                    severity: 'warn',
+                    text: `${leakedWords} word(s) left in the source's script. Check whether each is a brand kept on purpose or a name that was never translated.`,
+                });
+            }
+            if (terminology && terminology.details && terminology.details.final_violations) {
+                blocked = true;
+                gates.push({
+                    severity: 'block',
+                    text: `${terminology.details.final_violations} exact glossary constraint(s) still violated in the final text.`,
+                });
+            }
+            if (entities && entities.value === null) {
+                gates.push({
+                    severity: 'warn',
+                    text: 'Consistency was not actually checked — the glossary is empty. Press "Propose from the source" before translating.',
+                });
+            }
+
+            const shipEl = document.getElementById('verdictShip');
+            const checksRun = KNOWN_TEST_NAMES.filter(name => currentEvalResults[name]).length;
+            shipEl.textContent = blocked ? 'No — see below' : (gates.length ? 'With caveats' : 'Nothing blocking');
+            shipEl.classList.toggle('test-flagged', blocked);
+
+            const gatesEl = document.getElementById('verdictGates');
+            gatesEl.innerHTML = '';
+            gates.forEach(gate => {
+                const line = document.createElement('p');
+                line.className = gate.severity === 'block' ? 'test-note test-flagged' : 'test-note';
+                line.textContent = (gate.severity === 'block' ? '⨯ ' : '! ') + gate.text;
+                gatesEl.appendChild(line);
+            });
+            if (!gates.length) {
+                const line = document.createElement('p');
+                line.className = 'test-note';
+                line.textContent = `No gate tripped across the ${checksRun} test(s) run so far. Tests not run cannot pass — the ones that read the whole document (consistency, untranslated words) are the ones a chunk-level judge cannot replace.`;
+                gatesEl.appendChild(line);
+            }
+        }
+        let revealedLiveTranslation = false;
+        function setPrepareEnabled(enabled) {
+            const button = document.getElementById('prepareBtn');
+            if (!button) return;
+            button.disabled = !enabled;
+            button.title = enabled ? '' : 'Upload a file first';
+        }
+
+        // STAGE 0. Asks the server to read the uploaded book and propose the
+        // contract the translation will run under: one rendering per
+        // recurring name, plus a brief about the document.
+        //
+        // The result lands in the two textareas rather than being applied
+        // straight to the run, because the whole value of deciding this up
+        // front is that a person gets to decide the agreed renderings.
+        async function handlePrepare() {
+            const status = document.getElementById('prepareStatus');
+            const button = document.getElementById('prepareBtn');
+            const file = selectedFile || fileFromPastedText();
+            if (!file) {
+                status.textContent = 'Upload a file (or paste text) first.';
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('sourceLanguage', document.getElementById('sourceLanguage').value);
+            formData.append('targetLanguage', document.getElementById('targetLanguage').value);
+            formData.append('model', document.getElementById('generalInstructModel').value);
+            formData.append('genre', document.getElementById('genre').value);
+
+            button.disabled = true;
+            status.classList.remove('has-errors');
+            status.textContent = 'Scanning recurring entities, clustering source variants, and proposing the translation contract — no translation yet…';
+            const glossaryField = document.getElementById('glossary');
+            const glossaryHadContentBeforePrepare = glossaryField.value.trim().length > 0;
+            if (!glossaryHadContentBeforePrepare) {
+                glossaryField.placeholder = 'Prepared glossary entries will appear here when analysis finishes.';
+                glossaryField.setAttribute('aria-busy', 'true');
+            }
+
+            try {
+                const response = await fetch(`${API_URL}/prepare`, { method: 'POST', body: formData });
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
+
+                // Never silently overwrite work already in the boxes.
+                const glossaryHadContent = glossaryField.value.trim().length > 0;
+                if (data.glossary && !glossaryHadContent) glossaryField.value = data.glossary;
+                updateGlossaryStatus();
+
+                const entityCount = (data.entities || []).length;
+                const resolution = data.entity_resolution || {};
+                const candidateCount = Number(resolution.clustered_candidates || 0);
+                const reviewPairs = Number(resolution.review_pairs || 0);
+                const confirmed = Number(resolution.clusters_confirmed || 0);
+                const split = Number(resolution.clusters_split || 0);
+                const addedByModel = resolution.added_by_model || [];
+                const kept = [];
+                if (glossaryHadContent && data.glossary) kept.push('glossary');
+                const renderingConflicts = data.rendering_conflicts || [];
+                // Zero records with candidates on the table is not the same
+                // answer as zero candidates: the scan found names and the
+                // instruct model failed to render them, so say that instead
+                // of blaming the source text.
+                if (entityCount) {
+                    status.textContent = `Found ${candidateCount} clustered source candidate(s); proposed ${entityCount} translation record(s). Review the glossary before translating.`
+                        + (kept.length ? ` Your existing ${kept.join(' and ')} was left alone — clear it and press again to replace.` : '');
+                } else if (candidateCount) {
+                    status.classList.add('has-errors');
+                    status.textContent = `Found ${candidateCount} source candidate(s), but the general-instruct model returned no usable renderings — it most likely timed out or answered in prose instead of JSON. Pick a smaller or faster instruct model in SETTINGS and press PREPARE again.`;
+                } else {
+                    status.textContent = 'No recurring proper nouns found. Check the language pair, or add terms by hand.';
+                }
+                // What the model ruled on the clustering. Previously the
+                // review queue was reported as a bare count of pairs that
+                // nothing ever looked at.
+                if (confirmed || split) {
+                    status.textContent += ` The model reviewed ${confirmed + split} clustering guess(es):`
+                        + (confirmed ? ` confirmed ${confirmed} as one entity;` : '')
+                        + (split ? ` split ${split} back apart;` : '');
+                    status.textContent = status.textContent.replace(/;$/, '.');
+                } else if (reviewPairs) {
+                    status.textContent += ` ${reviewPairs} similar source pair(s) were kept separate.`;
+                }
+                if (addedByModel.length) {
+                    status.textContent += ` Added by the model from context, missed by extraction: ${addedByModel.join(', ')}.`;
+                }
+                if (renderingConflicts.length) {
+                    status.classList.add('has-errors');
+                    status.textContent += ' Do not press Start yet: '
+                        + renderingConflicts.map(conflict =>
+                            `${conflict.sources.join(' / ')} all became “${conflict.target}”`
+                        ).join('; ')
+                        + '. These are distinct entities; correct the glossary or rerun PREPARE with a stronger instruct model.';
+                }
+            } catch (error) {
+                status.classList.add('has-errors');
+                status.textContent = `Prepare failed: ${error.message}`;
+            } finally {
+                glossaryField.removeAttribute('aria-busy');
+                if (!glossaryField.value.trim()) updateGlossaryPlaceholder();
+                button.disabled = false;
+            }
+        }
+
+        // The Start path accepts pasted text as well as a file; Prepare takes
+        // the same input, so the wrapping lives in one place.
+        function fileFromPastedText() {
+            const textArea = document.getElementById('textInput');
+            const text = textArea ? textArea.value.trim() : '';
+            if (!text) return null;
+            return new File([new Blob([text], { type: 'text/plain' })], 'pasted_text.txt', { type: 'text/plain' });
+        }
 
         // Initialize
         document.addEventListener('DOMContentLoaded', () => {
-            loadModels();
+            loadModels().then(restoreActiveTranslation);
             loadTranslations();
             loadStats();
             setupEventListeners();
+            applyThemeButton();
+        });
+
+        // A Settings page can be open in another tab, or Home can be restored
+        // from the browser's back-forward cache. Refresh the hidden role
+        // selectors before any subsequent Start, Prepare, Continue, or judge run.
+        window.addEventListener('storage', (event) => {
+            if (Object.values(MODEL_PREFERENCE_KEYS).includes(event.key)) {
+                syncModelsFromSettings();
+            }
+        });
+        window.addEventListener('pageshow', syncModelsFromSettings);
+        document.addEventListener('visibilitychange', () => {
+            if (!document.hidden) syncModelsFromSettings();
+        });
+
+        // Follow the OS theme live, but only while the user hasn't picked one explicitly.
+        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
+            if (localStorage.getItem('theme')) return;
+            document.documentElement.classList.toggle('theme-dark', e.matches);
+            applyThemeButton();
         });
 
         function setupEventListeners() {
-            const uploadSection = document.getElementById('uploadSection');
+            const originalPanel = document.getElementById('originalText');
             const fileInput = document.getElementById('fileInput');
 
-            uploadSection.addEventListener('click', () => fileInput.click());
+            document.getElementById('uploadHeaderBtn').addEventListener('click', () => fileInput.click());
 
-            uploadSection.addEventListener('dragover', (e) => {
+            originalPanel.addEventListener('dragover', (e) => {
                 e.preventDefault();
-                uploadSection.classList.add('dragover');
+                originalPanel.classList.add('dragover');
             });
 
-            uploadSection.addEventListener('dragleave', () => {
-                uploadSection.classList.remove('dragover');
+            originalPanel.addEventListener('dragleave', () => {
+                originalPanel.classList.remove('dragover');
             });
 
-            uploadSection.addEventListener('drop', (e) => {
+            originalPanel.addEventListener('drop', (e) => {
                 e.preventDefault();
-                uploadSection.classList.remove('dragover');
+                originalPanel.classList.remove('dragover');
                 const files = e.dataTransfer.files;
                 if (files.length > 0) {
                     fileInput.files = files;
@@ -612,20 +1486,141 @@
             });
 
             document.getElementById('translationForm').addEventListener('submit', handleSubmit);
+            document.getElementById('translateBtn').addEventListener('click', handleSubmit);
+            document.getElementById('refineHeaderBtn').addEventListener('click', handleRefine);
+            document.getElementById('refineHeaderBtn').disabled = true;
+
+            document.getElementById('newTranslationBtn').addEventListener('click', () => {
+                if (selectedFile && !confirm('Start a new translation? This clears the current file and results.')) return;
+                resetForm();
+            });
+
+            setupPanelToggle('glossaryOptionsBtn', 'glossaryPanel');
+
+            document.getElementById('historySearch').addEventListener('input', (e) => {
+                historySearchQuery = e.target.value;
+                renderHistoryList();
+            });
+
+            document.getElementById('glossary').addEventListener('input', updateGlossaryStatus);
+            document.getElementById('targetLanguage').addEventListener('change', updateGlossaryPlaceholder);
+            document.getElementById('prepareBtn').addEventListener('click', handlePrepare);
+
+            updateGlossaryPlaceholder();
+
+            document.getElementById('themeToggle').addEventListener('click', toggleTheme);
+
+            document.querySelectorAll('.test-run-btn').forEach(btn => {
+                btn.addEventListener('click', () => runEvaluationTest(btn.dataset.test));
+            });
+        }
+
+        // Stage 3: on-demand quality tests. Each button hits /evaluate/<id>/<test>
+        // independently — never triggered automatically, since several tests
+        // (LLM judge, backtranslation) call the model again and are too slow
+        // to run on every translation.
+        async function runEvaluationTest(testName) {
+            if (!currentTranslationId) {
+                alert('Run a translation first — tests need a draft (and Stage 2 tests need a refined translation) to evaluate.');
+                return;
+            }
+
+            const btn = document.querySelector(`.test-run-btn[data-test="${testName}"]`);
+            const note = document.querySelector(`[data-test-note="${testName}"]`);
+            if (btn) btn.disabled = true;
+            if (note) {
+                note.textContent = 'Running…';
+                note.classList.remove('test-flagged');
+            }
+
+            try {
+                const modelBasedTests = new Set([
+                    'backtranslation_chrf', 'llm_judge_stage1',
+                    'llm_judge_stage2', 'llm_judge_final',
+                ]);
+                const judgeSelect = modelBasedTests.has(testName)
+                    ? document.getElementById('judgeModel')
+                    : null;
+
+                const response = await fetch(`${API_URL}/evaluate/${currentTranslationId}/${testName}`, {
+                    method: 'POST',
+                    headers: judgeSelect ? { 'Content-Type': 'application/json' } : undefined,
+                    body: judgeSelect ? JSON.stringify({ judge_model: judgeSelect.value }) : undefined,
+                });
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.error || 'Test failed');
+
+                if (note) {
+                    note.textContent = data.note || 'No result.';
+                    note.classList.toggle('test-flagged', !!data.flagged);
+                }
+                currentEvalResults[testName] = data;
+                updateVerdict();
+            } catch (error) {
+                if (note) {
+                    note.textContent = `Error: ${error.message}`;
+                    note.classList.add('test-flagged');
+                }
+            } finally {
+                if (btn) btn.disabled = false;
+            }
+        }
+
+        function setupPanelToggle(buttonId, panelId) {
+            const btn = document.getElementById(buttonId);
+            const panel = document.getElementById(panelId);
+            const arrow = btn.querySelector('.btn-more-arrow');
+            btn.addEventListener('click', () => {
+                const open = panel.hasAttribute('hidden');
+                panel.toggleAttribute('hidden', !open);
+                btn.setAttribute('aria-expanded', String(open));
+                if (arrow) arrow.textContent = open ? '▴' : '▾';
+            });
+        }
+
+        // Fades placeholder/status text (e.g. "No content yet", "Loading…") so it
+        // reads as quieter than real translated content once that arrives.
+        function updatePanelMeta(panelId) {
+            const metaIds = {
+                originalText: 'originalMeta',
+                machineTranslation: 'machineMeta',
+                literaryRefinement: 'refinedMeta',
+            };
+            const panel = document.getElementById(panelId);
+            const text = panel.textContent;
+            const isPlaceholder = !text || text === 'No content yet' || text.startsWith('Loading')
+                || text.startsWith('Draft batches') || text.startsWith('Refined batches')
+                || text.startsWith('Could not display') || text.includes('EPUB loaded —');
+            panel.classList.toggle('is-placeholder', isPlaceholder);
+
+            const meta = document.getElementById(metaIds[panelId]);
+            if (!meta) return;
+            meta.classList.toggle('is-placeholder', isPlaceholder);
+            if (isPlaceholder) {
+                meta.textContent = '— chr · — w';
+                return;
+            }
+            const words = text.trim().split(/\s+/).filter(Boolean).length;
+            meta.textContent = `${text.length.toLocaleString()} chr · ${words.toLocaleString()} w`;
         }
 
         function handleFileSelect(file) {
             selectedFile = file;
-            document.getElementById('selectedFileName').textContent = `Selected: ${file.name} (${formatFileSize(file.size)})`;
-            document.getElementById('selectedFile').classList.add('show');
-            
+            forgetActiveTranslation();
+            document.getElementById('refineHeaderBtn').disabled = true;
+            setPrepareEnabled(true);
+
             // Clear previous translation results
             document.getElementById('machineTranslation').textContent = 'No content yet';
             document.getElementById('literaryRefinement').textContent = 'No content yet';
-            
+            updatePanelMeta('machineTranslation');
+            updatePanelMeta('literaryRefinement');
+
             // Hide export buttons and progress section
-            document.getElementById('exportButtons').style.display = 'none';
-            
+            setExportButtonsEnabled(false);
+            translationStartTime = null;
+            updateEta(0);
+
             const progressSection = document.getElementById('progressSection');
             if (progressSection) {
                 progressSection.style.display = 'none';
@@ -637,18 +1632,41 @@
                 progressBar.style.width = '0%';
             }
             
-            // Read and display file content
+            const originalPanel = document.getElementById('originalText');
+
+            if (isEpubFile(file)) {
+                // It's a zip archive, not text — the server extracts chapter text
+                // from it, so there's nothing meaningful to preview client-side.
+                originalPanel.textContent =
+                    `${file.name} (${formatFileSize(file.size)})\n\nEPUB loaded — chapters will be extracted and translated on the server, then reassembled into a translated EPUB.`;
+                updatePanelMeta('originalText');
+                document.getElementById('deckStatus').textContent = `${file.name} ready · Press START to translate`;
+                return;
+            }
+
+            originalPanel.textContent = 'Loading source preview…';
+            updatePanelMeta('originalText');
+
+            // Show the selected text immediately, while keeping exceptionally
+            // large books bounded in the DOM. The full file is still uploaded.
             const reader = new FileReader();
-            reader.onload = function(e) {
-                const content = e.target.result;
-                document.getElementById('originalText').textContent = content;
-                console.log('File loaded, length:', content.length);
+            reader.onload = (event) => {
+                const preview = event.target.result;
+                originalPanel.textContent = file.size > SOURCE_PREVIEW_LIMIT
+                    ? `${preview}\n\n[Showing the first ${SOURCE_PREVIEW_LIMIT.toLocaleString()} characters. The full book will be translated.]`
+                    : preview;
+                updatePanelMeta('originalText');
+                document.getElementById('deckStatus').textContent = `${file.name} ready · Press START to translate`;
             };
-            reader.onerror = function(e) {
-                console.error('Error reading file:', e);
-                document.getElementById('originalText').textContent = 'Error reading file';
+            reader.onerror = () => {
+                originalPanel.textContent = 'Could not display the source preview. The file can still be translated.';
+                updatePanelMeta('originalText');
             };
-            reader.readAsText(file);
+            reader.readAsText(file.slice(0, SOURCE_PREVIEW_LIMIT));
+        }
+
+        function isEpubFile(file) {
+            return file.name.toLowerCase().endsWith('.epub');
         }
 
         function formatFileSize(bytes) {
@@ -657,8 +1675,39 @@
             return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
         }
 
+        // TranslateGemma is translation-only: Stage 1 uses its own prompt format,
+        // and it cannot run refinement or score a translation. Mirrors
+        // is_translategemma() in translator.py.
+        function isTranslateGemma(modelName) {
+            return (modelName || '').toLowerCase().includes('translategemma');
+        }
+
+        function updateModelNote() {
+            // The explanatory warning is shown beside the selector in Settings.
+        }
+
+        const MODEL_PREFERENCE_KEYS = {
+            model: 'translationModel',
+            refinementModel: 'refinementModel',
+            generalInstructModel: 'generalInstructModel',
+            judgeModel: 'judgeModel',
+        };
+
+        function syncModelsFromSettings() {
+            for (const [selectId, storageKey] of Object.entries(MODEL_PREFERENCE_KEYS)) {
+                const select = document.getElementById(selectId);
+                const saved = localStorage.getItem(storageKey);
+                if (select && saved && [...select.options].some(option => option.value === saved)) {
+                    select.value = saved;
+                }
+            }
+        }
+
         async function loadModels() {
             const modelSelect = document.getElementById('model');
+            const refinementSelect = document.getElementById('refinementModel');
+            const generalInstructSelect = document.getElementById('generalInstructModel');
+            const judgeSelect = document.getElementById('judgeModel');
             try {
                 console.log('Fetching models from:', `${API_URL}/models`);
                 const response = await fetch(`${API_URL}/models?t=${Date.now()}`, {
@@ -682,9 +1731,47 @@
                     throw new Error('No models available');
                 }
                 
-                modelSelect.innerHTML = data.models.map(model => 
+                const models = [...data.models].sort((a, b) => {
+                    if (a.name === PREFERRED_MODEL) return -1;
+                    if (b.name === PREFERRED_MODEL) return 1;
+                    return 0;
+                });
+                const optionsFor = list => list.map(model =>
                     `<option value="${model.name}">${model.name}</option>`
                 ).join('');
+                modelSelect.innerHTML = optionsFor(models);
+                const savedTranslationModel = localStorage.getItem('translationModel');
+                modelSelect.value = models.some(model => model.name === savedTranslationModel)
+                    ? savedTranslationModel
+                    : models.some(model => model.name === PREFERRED_MODEL)
+                    ? PREFERRED_MODEL
+                    : models[0].name;
+
+                // TranslateGemma is translation-only. The remaining three roles
+                // need a general-instruct model selected independently.
+                const instructModels = models.filter(model => !isTranslateGemma(model.name));
+                [refinementSelect, generalInstructSelect, judgeSelect].forEach(select => {
+                    select.innerHTML = instructModels.length
+                        ? optionsFor(instructModels)
+                        : '<option value="">No suitable instruct model installed</option>';
+                });
+                if (!instructModels.length) {
+                    return;
+                } else {
+                    const valueFor = key => {
+                        const saved = localStorage.getItem(key);
+                        return instructModels.some(model => model.name === saved)
+                            ? saved
+                            : instructModels.some(model => model.name === modelSelect.value)
+                            ? modelSelect.value
+                            : instructModels[0].name;
+                    };
+                    refinementSelect.value = valueFor('refinementModel');
+                    generalInstructSelect.value = valueFor('generalInstructModel');
+                    judgeSelect.value = valueFor('judgeModel');
+                }
+                syncModelsFromSettings();
+                updateModelNote();
 
                 const statValue = document.getElementById('availableModels');
                 if (statValue) {
@@ -697,11 +1784,20 @@
                 if (modelSelect) {
                     modelSelect.innerHTML = `<option value="">❌ ${error.message}</option>`;
                 }
+                [refinementSelect, generalInstructSelect, judgeSelect].forEach(select => {
+                    if (select) select.innerHTML = `<option value="">❌ ${error.message}</option>`;
+                });
                 const statValue = document.getElementById('availableModels');
                 if (statValue) {
                     statValue.textContent = '0';
                 }
             }
+        }
+
+        function setOllamaStatus(connected) {
+            const value = document.getElementById('ollamaStatusValue');
+            value.textContent = connected ? 'Running' : 'Not found';
+            value.classList.toggle('has-violations', !connected);
         }
 
         async function loadStats() {
@@ -711,32 +1807,27 @@
                 
                 const tm = data.translation_metrics;
                 const sm = data.system_metrics;
+                const gpu = data.ollama_gpu;
                 
                 // Update stats
                 const successRate = tm.success_rate || 100.0;
-                document.getElementById('successRate').textContent = successRate.toFixed(1) + '%';
-                document.getElementById('avgTime').textContent = (tm.average_translation_time || 0).toFixed(1) + 's';
-                document.getElementById('cpuUsage').textContent = (sm.cpu_percent || 0).toFixed(1) + '%';
-                document.getElementById('memoryUsage').textContent = (sm.memory_percent || 0).toFixed(1) + '%';
+                const successRateElement = document.getElementById('successRate');
+                const avgTimeElement = document.getElementById('avgTime');
+                if (successRateElement) successRateElement.textContent = successRate.toFixed(1) + '%';
+                if (avgTimeElement) avgTimeElement.textContent = (tm.average_translation_time || 0).toFixed(1) + 's';
+                const cpu = sm.cpu_percent || 0;
+                const mem = sm.memory_percent || 0;
+                document.getElementById('cpuUsage').textContent = cpu.toFixed(1) + '%';
+                document.getElementById('memoryUsage').textContent = mem.toFixed(1) + '%';
+                document.getElementById('cpuBar').style.width = Math.min(cpu, 100) + '%';
+                document.getElementById('memoryBar').style.width = Math.min(mem, 100) + '%';
+                document.getElementById('gpuUsage').textContent = gpu?.status || 'Unavailable';
+                document.getElementById('gpuBar').style.width = gpu?.status && gpu.status !== 'Idle' ? '100%' : '0%';
+                document.getElementById('gpuModel').textContent = gpu?.model || 'Ollama not reachable';
+                setOllamaStatus(!!gpu);
             } catch (error) {
                 console.error('Error loading stats:', error);
-            }
-        }
-
-        function switchTab(tab) {
-            const tabs = document.querySelectorAll('.tab');
-            const tabContents = document.querySelectorAll('.tab-content');
-            
-            tabs.forEach(t => t.classList.remove('active'));
-            tabContents.forEach(tc => tc.classList.remove('active'));
-            
-            if (tab === 'new') {
-                tabs[0].classList.add('active');
-                document.getElementById('newTranslationTab').classList.add('active');
-            } else {
-                tabs[1].classList.add('active');
-                document.getElementById('historyTab').classList.add('active');
-                loadTranslations();
+                setOllamaStatus(false);
             }
         }
 
@@ -744,71 +1835,114 @@
             try {
                 const response = await fetch(`${API_URL}/translations`);
                 const data = await response.json();
-                
-                const historyList = document.getElementById('historyList');
-                
-                if (data.translations.length === 0) {
-                    historyList.innerHTML = '<p style="text-align: center; color: #999;">No translations yet</p>';
-                    return;
-                }
-
-                historyList.innerHTML = data.translations.slice(0, 10).map(t => `
-                    <div class="history-item">
-                        <div class="history-item-info">
-                            <div class="history-item-title">
-                                <span class="status-badge status-${t.status}">${t.status}</span>
-                                ${t.filename || 'Unknown'}
-                            </div>
-                            <div class="history-item-meta">
-                                ${t.source_lang} → ${t.target_lang} | ${new Date(t.created_at).toLocaleString()}
-                                ${t.progress ? ` | ${t.progress.toFixed(0)}%` : ''}
-                            </div>
-                        </div>
-                        ${t.status === 'completed' ? 
-                            `<button class="btn btn-small" onclick="downloadTranslation(${t.id})">⬇ Download</button>` : 
-                            t.status === 'error' ? 
-                            `<button class="btn btn-small" onclick="retryTranslation(${t.id})">🔄 Retry</button>` : 
-                            ''
-                        }
-                    </div>
-                `).join('');
+                allTranslations = data.translations || [];
+                renderHistoryList();
             } catch (error) {
                 console.error('Error loading translations:', error);
             }
         }
 
-        async function handleSubmit(e) {
-            e.preventDefault();
+        function renderHistoryList() {
+            const historyList = document.getElementById('historyList');
+            const query = historySearchQuery.trim().toLowerCase();
 
-            // Get text from textarea or file
-            const textArea = document.getElementById('textInput');
-            const textContent = textArea ? textArea.value.trim() : '';
-            
-            let fileToUpload = selectedFile;
-            
-            // If no file selected but text is entered, create a file from text
-            if (!fileToUpload && textContent) {
-                const blob = new Blob([textContent], { type: 'text/plain' });
-                fileToUpload = new File([blob], 'pasted_text.txt', { type: 'text/plain' });
-            }
-            
-            if (!fileToUpload && !textContent) {
-                alert('Please select a file or enter text');
+            const filtered = query
+                ? allTranslations.filter(t => {
+                    const haystack = `${t.filename || ''} ${t.source_lang || ''} ${t.target_lang || ''} ${t.status || ''}`.toLowerCase();
+                    return haystack.includes(query);
+                })
+                : allTranslations;
+
+            if (allTranslations.length === 0) {
+                historyList.innerHTML = '<p style="text-align: center; color: #999;">No translations yet</p>';
                 return;
             }
 
+            if (filtered.length === 0) {
+                historyList.innerHTML = '<p style="text-align: center; color: #999;">No translations match your search</p>';
+                return;
+            }
+
+            historyList.innerHTML = filtered.slice(0, 10).map(t => `
+                <div class="history-item">
+                    <div class="history-item-info">
+                        <div class="history-item-title">
+                            <span class="status-badge status-${t.status}">${t.status}</span>
+                            ${t.filename || 'Unknown'}
+                        </div>
+                        <div class="history-item-meta">
+                            ${t.source_lang} → ${t.target_lang} | ${new Date(t.created_at).toLocaleString()}
+                            ${t.progress ? ` | ${t.progress.toFixed(0)}%` : ''}
+                            ${t.glossary_terms ? ` | ${t.glossary_terms} glossary terms` : ''}
+                        </div>
+                    </div>
+                    <div class="history-actions">
+                        <button class="btn btn-small" onclick="loadTranslationIntoWorkspace(${t.id})">📂 Open</button>
+                        ${t.status === 'completed' ?
+                            `<button class="btn btn-small" onclick="downloadTranslation(${t.id})">⬇ Download</button>` :
+                            t.status === 'stage1_completed' ?
+                            `<button class="btn btn-small" onclick="continueRefinementFromHistory(${t.id})">▶ Continue</button>` :
+                            t.status === 'error' ?
+                            `<button class="btn btn-small" onclick="retryTranslation(${t.id})">🔄 Retry</button>` :
+                            ''
+                        }
+                        <button class="btn btn-small btn-delete" onclick="deleteTranslation(${t.id}, this)" aria-label="Delete ${t.filename || 'translation'}">Delete</button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        async function handleSubmit(e) {
+            e.preventDefault();
+
+            const fileToUpload = selectedFile || fileFromPastedText();
+            if (!fileToUpload) {
+                alert('Please select a file or enter text');
+                return;
+            }
             const formData = new FormData();
             formData.append('file', fileToUpload);
             formData.append('sourceLanguage', document.getElementById('sourceLanguage').value);
             formData.append('targetLanguage', document.getElementById('targetLanguage').value);
             formData.append('model', document.getElementById('model').value);
             formData.append('genre', document.getElementById('genre').value);
+            const glossaryText = document.getElementById('glossary').value;
+            formData.append('glossary', glossaryText);
+            // Start is the approval boundary for the editable glossary.
+            // Persist that fact with the job rather than leaving every term
+            // marked "proposed" after the user has launched translation.
+            formData.append('glossaryApproved', 'true');
 
             const translateBtn = document.getElementById('translateBtn');
+            const refineHeaderBtn = document.getElementById('refineHeaderBtn');
             const progressSection = document.getElementById('progressSection');
-            
+
             translateBtn.disabled = true;
+            refineHeaderBtn.disabled = true;
+            setTestButtonsEnabled('1', false);
+            setTestButtonsEnabled('2', false);
+            forgetActiveTranslation();
+            applySavedEvaluationResults({});
             progressSection.style.display = 'block';
+            document.getElementById('progressBar').style.width = '1%';
+            document.getElementById('progressInfo').textContent = 'Uploading the book to the local server…';
+            updateTerminologyStatus({
+                total: validateGlossaryText(glossaryText).valid,
+                used: 0,
+                violations: 0,
+            });
+            translationPreviews = {
+                machineTranslation: '',
+                literaryRefinement: '',
+            };
+            revealedLiveTranslation = false;
+            document.getElementById('machineTranslation').textContent = 'Draft batches will appear here as they finish.';
+            document.getElementById('literaryRefinement').textContent = 'No content yet';
+            updatePanelMeta('machineTranslation');
+            updatePanelMeta('literaryRefinement');
+            document.getElementById('deckStatus').textContent = 'Translating…';
+            translationStartTime = Date.now();
+            updateEta(0);
 
             try {
                 const response = await fetch(`${API_URL}/translate`, {
@@ -817,7 +1951,8 @@
                 });
 
                 if (!response.ok) {
-                    throw new Error('Translation failed');
+                    const errorData = await response.json().catch(() => ({}));
+                    throw new Error(errorData.error || 'Translation failed');
                 }
 
                 // Parse stream to get translation ID and results
@@ -825,7 +1960,7 @@
                 const decoder = new TextDecoder();
                 let buffer = '';
                 let lastData = null;
-                
+
                 // Show indeterminate progress
                 document.getElementById('progressBar').style.width = '50%';
                 document.getElementById('progressInfo').textContent = 'Translating...';
@@ -833,7 +1968,7 @@
                 while (true) {
                     const { done, value } = await reader.read();
                     if (done) break;
-                    
+
                     buffer += decoder.decode(value, { stream: true });
                     const lines = buffer.split('\n');
                     buffer = lines.pop() || '';
@@ -843,22 +1978,25 @@
                             try {
                                 const data = JSON.parse(line.substring(6).trim());
                                 lastData = data;
-                                
-                                // Update UI with actual data
-                                if (data.progress) {
+                                if (data.translation_id) rememberActiveTranslation(data.translation_id);
+
+                                // Each event contains only the newly completed batch.
+                                if (typeof data.progress === 'number') {
                                     document.getElementById('progressBar').style.width = data.progress + '%';
-                                    document.getElementById('progressInfo').textContent = 
-                                        `${data.stage || 'Processing'} - ${Math.round(data.progress)}%`;
+                                    document.getElementById('progressInfo').textContent = data.warning
+                                        ? `⚠ batch ${data.batch_index || data.current_chunk || 0}/${data.total_chunks || 0}: ${data.warning}`
+                                        : (data.message ||
+                                            `${formatStage(data.stage)} · batch ${data.batch_index || data.current_chunk || 0}/${data.total_chunks || 0} · ${Math.round(data.progress)}%`);
+                                    updateEta(data.progress);
                                 }
-                                
-                                if (data.original_text) {
-                                    document.getElementById('originalText').textContent = data.original_text;
-                                }
-                                if (data.machine_translation) {
-                                    document.getElementById('machineTranslation').textContent = data.machine_translation;
-                                }
-                                if (data.translated_text) {
-                                    document.getElementById('literaryRefinement').textContent = data.translated_text;
+                                if (data.terminology) updateTerminologyStatus(data.terminology);
+
+                                if (data.machine_translation_chunk) appendPanelPreview('machineTranslation', withWarningMarker(data.machine_translation_chunk, data.warning));
+
+                                // Retain compatibility with servers that only return a final result.
+                                // Do not inject an entire book into the DOM: it makes the browser unresponsive.
+                                if (data.machine_translation && !translationPreviews.machineTranslation) {
+                                    appendPanelPreview('machineTranslation', data.machine_translation);
                                 }
                             } catch (e) {
                                 // Ignore JSON errors, continue
@@ -866,20 +2004,171 @@
                         }
                     }
                 }
-                
-                // Translation complete
-                document.getElementById('progressBar').style.width = '100%';
-                document.getElementById('progressInfo').textContent = 'Completed!';
 
-                alert('Translation completed successfully!');
-                document.getElementById('exportButtons').style.display = 'flex';
+                if (lastData && lastData.error) throw new Error(lastData.error);
+                if (!currentTranslationId) throw new Error('Server did not return a translation id');
+
+                // Stage 1 (draft translation) complete — refinement is a separate step.
+                document.getElementById('progressBar').style.width = '100%';
+                document.getElementById('progressInfo').textContent = 'Draft ready — Press CONTINUE to refine';
+                document.getElementById('deckStatus').textContent = 'Draft translation ready';
+                updateEta(100);
+
+                refineHeaderBtn.disabled = false;
+                setTestButtonsEnabled('1', true);
                 loadTranslations();
             } catch (error) {
                 console.error('Error:', error);
                 alert('Translation failed: ' + error.message);
+                translationStartTime = null;
+                updateEta(0);
             } finally {
                 translateBtn.disabled = false;
-                progressSection.style.display = 'none';
+            }
+        }
+
+        async function handleRefine(e) {
+            if (e && e.preventDefault) e.preventDefault();
+
+            if (!currentTranslationId) {
+                alert('Press START first to produce a draft translation, then CONTINUE to refine it.');
+                return;
+            }
+
+            const translateBtn = document.getElementById('translateBtn');
+            const refineHeaderBtn = document.getElementById('refineHeaderBtn');
+            const progressSection = document.getElementById('progressSection');
+
+            translateBtn.disabled = true;
+            refineHeaderBtn.disabled = true;
+            setTestButtonsEnabled('2', false);
+            progressSection.style.display = 'block';
+            document.getElementById('progressBar').style.width = '1%';
+            document.getElementById('progressInfo').textContent = 'Starting the refinement pass…';
+            translationPreviews.literaryRefinement = '';
+            document.getElementById('literaryRefinement').textContent = 'Refined batches will appear here during the second pass.';
+            updatePanelMeta('literaryRefinement');
+            document.getElementById('deckStatus').textContent = 'Refining…';
+            translationStartTime = Date.now();
+            updateEta(0);
+
+            try {
+                const selectedModel = document.getElementById('refinementModel').value;
+                const response = await fetch(`${API_URL}/refine/${currentTranslationId}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ model: selectedModel }),
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({}));
+                    throw new Error(errorData.error || 'Refinement failed');
+                }
+
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let buffer = '';
+                let lastData = null;
+
+                document.getElementById('progressBar').style.width = '50%';
+                document.getElementById('progressInfo').textContent = 'Refining...';
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+
+                    buffer += decoder.decode(value, { stream: true });
+                    const lines = buffer.split('\n');
+                    buffer = lines.pop() || '';
+
+                    for (const line of lines) {
+                        if (line.startsWith('data: ')) {
+                            try {
+                                const data = JSON.parse(line.substring(6).trim());
+                                lastData = data;
+
+                                if (typeof data.progress === 'number') {
+                                    document.getElementById('progressBar').style.width = data.progress + '%';
+                                    document.getElementById('progressInfo').textContent = data.warning
+                                        ? `⚠ batch ${data.batch_index || data.current_chunk || 0}/${data.total_chunks || 0}: ${data.warning}`
+                                        : (data.message ||
+                                            `${formatStage(data.stage)} · batch ${data.batch_index || data.current_chunk || 0}/${data.total_chunks || 0} · ${Math.round(data.progress)}%`);
+                                    updateEta(data.progress);
+                                }
+                                if (data.terminology) updateTerminologyStatus(data.terminology);
+                                if (data.refined_translation_chunk) appendPanelPreview('literaryRefinement', withWarningMarker(data.refined_translation_chunk, data.warning));
+                                if (data.translated_text && !translationPreviews.literaryRefinement) {
+                                    appendPanelPreview('literaryRefinement', data.translated_text);
+                                }
+                            } catch (e) {
+                                // Ignore JSON errors, continue
+                            }
+                        }
+                    }
+                }
+
+                if (lastData && lastData.error) throw new Error(lastData.error);
+
+                // Refinement complete — this is the final stage.
+                document.getElementById('progressBar').style.width = '100%';
+                document.getElementById('progressInfo').textContent = 'Completed';
+                document.getElementById('deckStatus').textContent = 'Translation completed';
+                updateEta(100);
+
+                alert('Refinement completed successfully!');
+                setExportButtonsEnabled(true);
+                setTestButtonsEnabled('2', true);
+                loadTranslations();
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Refinement failed: ' + error.message);
+                translationStartTime = null;
+                updateEta(0);
+            } finally {
+                translateBtn.disabled = false;
+                refineHeaderBtn.disabled = false;
+            }
+        }
+
+        function updateTerminologyStatus(terminology) {
+            const status = document.getElementById('terminologyStatus');
+            const total = Number(terminology?.total || 0);
+            const used = Number(terminology?.used || 0);
+            const violations = Number(terminology?.violations || 0);
+            status.textContent = total
+                ? `${total} terms · ${used} used · ${violations} violations`
+                : 'No verified terms';
+            status.classList.toggle('has-violations', violations > 0);
+        }
+
+        function formatStage(stage) {
+            if (stage === 'primary_translation') return 'Draft translation';
+            if (stage === 'reflection_improvement') return 'Refinement';
+            return 'Processing';
+        }
+
+        // The server falls back to unrefined/untranslated text when a chunk's
+        // model call times out or errors (often a slow Ollama model swap) —
+        // mark that inline instead of letting it silently look like a real result.
+        function withWarningMarker(text, warning) {
+            return warning ? `[⚠ ${warning}]\n${text}` : text;
+        }
+
+        function appendPanelPreview(panelId, text) {
+            if (!text) return;
+            const current = translationPreviews[panelId] || '';
+            const separator = current ? '\n\n' : '';
+            // Preview cap temporarily disabled — see PANEL_PREVIEW_LIMIT.
+            const preview = current + separator + text;
+            translationPreviews[panelId] = preview;
+            const panel = document.getElementById(panelId);
+            panel.textContent = preview;
+            panel.scrollTop = panel.scrollHeight;
+            updatePanelMeta(panelId);
+
+            if (!revealedLiveTranslation) {
+                revealedLiveTranslation = true;
+                panel.scrollIntoView({ behavior: 'smooth', block: 'center' });
             }
         }
 
@@ -905,12 +2194,121 @@
 
         function resetForm() {
             document.getElementById('translationForm').reset();
-            document.getElementById('selectedFile').classList.remove('show');
+            document.getElementById('fileInput').value = '';
             selectedFile = null;
+            forgetActiveTranslation();
+            document.getElementById('refineHeaderBtn').disabled = true;
+            setTestButtonsEnabled('1', false);
+            setTestButtonsEnabled('2', false);
+            translationPreviews = {};
+            revealedLiveTranslation = false;
+            setPrepareEnabled(false);
+            const prepareStatus = document.getElementById('prepareStatus');
+            prepareStatus.classList.remove('has-errors');
+            prepareStatus.textContent = prepareStatus.dataset.default;
+            updateGlossaryStatus();
+            applySavedEvaluationResults({});
+
+            document.getElementById('originalText').textContent = 'No content yet';
+            document.getElementById('machineTranslation').textContent = 'No content yet';
+            document.getElementById('literaryRefinement').textContent = 'No content yet';
+            updatePanelMeta('originalText');
+            updatePanelMeta('machineTranslation');
+            updatePanelMeta('literaryRefinement');
+
+            setExportButtonsEnabled(false);
+            document.getElementById('progressSection').style.display = 'none';
+            document.getElementById('progressBar').style.width = '0%';
+            document.getElementById('progressInfo').textContent = 'Waiting for a translation';
+            translationStartTime = null;
+            updateEta(0);
+            updateTerminologyStatus({ total: 0, used: 0, violations: 0 });
+            document.getElementById('deckStatus').textContent = 'No translation yet';
         }
 
         async function downloadTranslation(id) {
             window.location.href = `${API_URL}/download/${id}`;
+        }
+
+        // Resumes refinement for a draft from a past session, where
+        // currentTranslationId was lost on page reload.
+        async function continueRefinementFromHistory(id) {
+            // Loads the draft's own panels/model first, so the model selector
+            // matches what Stage 1 used — same default as clicking Continue
+            // right after Start, unless the user changes the selector afterwards.
+            await loadTranslationIntoWorkspace(id);
+            handleRefine();
+        }
+
+        // Pulls a past (or in-progress) translation back into the three
+        // work panels, so its text can be reviewed, downloaded, or continued
+        // without re-uploading the source file.
+        async function loadTranslationIntoWorkspace(id, { scroll = true, silent = false } = {}) {
+            try {
+                const response = await fetch(`${API_URL}/translations/${id}`);
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({}));
+                    throw new Error(errorData.error || 'Translation not found');
+                }
+                const t = await response.json();
+
+                // This translation is no longer tied to a freshly selected file.
+                selectedFile = null;
+                rememberActiveTranslation(t.id);
+                revealedLiveTranslation = true;
+                translationPreviews = {
+                    machineTranslation: t.machine_translation || '',
+                    literaryRefinement: t.translated_text || '',
+                };
+
+                if (t.source_lang) document.getElementById('sourceLanguage').value = t.source_lang;
+                if (t.target_lang) document.getElementById('targetLanguage').value = t.target_lang;
+                if (t.model) document.getElementById('model').value = t.model;
+                if (t.genre) document.getElementById('genre').value = t.genre;
+                setPrepareEnabled(false);
+                updateModelNote();
+
+                document.getElementById('originalText').textContent = t.original_text || 'No content yet';
+                document.getElementById('machineTranslation').textContent = t.machine_translation || 'No content yet';
+                document.getElementById('literaryRefinement').textContent = t.translated_text || 'No content yet';
+                updatePanelMeta('originalText');
+                updatePanelMeta('machineTranslation');
+                updatePanelMeta('literaryRefinement');
+
+                const listEntry = allTranslations.find(x => x.id === t.id);
+                updateTerminologyStatus({
+                    total: listEntry ? listEntry.glossary_terms : 0,
+                    used: 0,
+                    violations: 0,
+                });
+
+                document.getElementById('refineHeaderBtn').disabled = !t.draft_chunks;
+                setExportButtonsEnabled(t.status === 'completed');
+                setTestButtonsEnabled('1', !!t.draft_chunks);
+                setTestButtonsEnabled('2', t.status === 'completed');
+                applySavedEvaluationResults(t.evaluation_results);
+
+                document.getElementById('progressSection').style.display = 'block';
+                document.getElementById('progressBar').style.width = `${t.progress || 0}%`;
+                document.getElementById('progressInfo').textContent =
+                    t.status === 'completed' ? 'Completed' :
+                    t.status === 'stage1_completed' ? 'Draft ready — Press CONTINUE to refine' :
+                    t.status === 'error' ? `Error: ${t.error_message || 'unknown error'}` :
+                    `Status: ${t.status}`;
+                document.getElementById('deckStatus').textContent =
+                    t.status === 'completed' ? 'Translation completed' :
+                    t.status === 'stage1_completed' ? 'Draft translation ready' :
+                    t.status === 'error' ? 'Translation failed' :
+                    `Loaded from history (${t.status})`;
+                translationStartTime = null;
+                updateEta(t.status === 'completed' || t.status === 'stage1_completed' ? 100 : 0);
+
+                if (scroll) document.querySelector('.main-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            } catch (error) {
+                console.error('Error loading translation:', error);
+                if (silent) forgetActiveTranslation();
+                else alert('Could not open this translation: ' + error.message);
+            }
         }
 
         async function retryTranslation(id) {
@@ -930,6 +2328,33 @@
             } catch (error) {
                 console.error('Error:', error);
                 alert('Error retrying translation');
+            }
+        }
+
+        async function deleteTranslation(id, button) {
+            if (!confirm('Delete this translation task? Its saved text and progress cannot be restored.')) return;
+
+            const originalLabel = button.textContent;
+            button.disabled = true;
+            button.textContent = 'Deleting…';
+
+            try {
+                const response = await fetch(`${API_URL}/translations/${id}`, {
+                    method: 'DELETE'
+                });
+                const data = await response.json().catch(() => ({}));
+
+                if (!response.ok) {
+                    throw new Error(data.error || 'Failed to delete translation');
+                }
+
+                if (currentTranslationId === id) forgetActiveTranslation();
+                await loadTranslations();
+            } catch (error) {
+                console.error('Error deleting translation:', error);
+                alert(error.message || 'Failed to delete translation');
+                button.disabled = false;
+                button.textContent = originalLabel;
             }
         }
 
@@ -1083,4 +2508,4 @@
         }, 5000);
     </script>
 </body>
-</html> 
+</html>

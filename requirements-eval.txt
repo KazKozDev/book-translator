@@ -1,0 +1,8 @@
+# Optional: enables the COMET-Kiwi quality-estimation test on the
+# translation desk's Tests panel. Not installed by default because it
+# pulls in torch and downloads a multi-GB checkpoint on first use.
+#
+#   pip install -r requirements-eval.txt
+#
+unbabel-comet==2.2.2
+transformers<5.0

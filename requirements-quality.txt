@@ -1,0 +1,5 @@
+# Optional heavy document-quality models. They download their weights on the
+# first run of the corresponding Quality Check button; they are intentionally
+# separate from the translator's small core environment.
+sentence-transformers==3.4.1
+transformers==4.57.6

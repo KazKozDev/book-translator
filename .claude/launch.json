@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "book-translator",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["translator.py"],
+      "port": 5001
+    }
+  ]
+}

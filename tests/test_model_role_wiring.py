@@ -1,0 +1,186 @@
+"""The four model choices must stay independent from Settings to the API.
+
+This is deliberately a route-level test: it records the exact model name the
+server passes into ``BookTranslator`` after each real endpoint parses its
+request.  No Ollama inference is needed to prove the wiring.
+"""
+
+import io
+import json
+import sqlite3
+from pathlib import Path
+
+import translator as app_module
+
+
+class RecordingTranslator:
+    """Small stand-in that records model selection and completes each route."""
+
+    selected_models = []
+    glossary_builder_calls = 0
+
+    def __init__(self, model_name='default', *args, **kwargs):
+        self.model_name = model_name
+        self.selected_models.append(model_name)
+
+    @staticmethod
+    def harvest_proper_noun_candidates(text):
+        return []
+
+    @staticmethod
+    def build_glossary_candidates(text):
+        RecordingTranslator.glossary_builder_calls += 1
+        return [], []
+
+    @staticmethod
+    def collapse_honorific_aliases(*args):
+        return []
+
+    @staticmethod
+    def adjudicate_entity_clusters(text, source_lang, candidates, review_queue=None):
+        return candidates, []
+
+    @staticmethod
+    def propose_proper_noun_records(*args, **kwargs):
+        return []
+
+    @staticmethod
+    def find_rendering_conflicts(*args):
+        return []
+
+    def translate_stage1(self, text, source_lang, target_lang, translation_id, **kwargs):
+        with sqlite3.connect(app_module.DB_PATH) as conn:
+            conn.execute(
+                """UPDATE translations SET status = 'stage1_completed',
+                   original_chunks = ?, draft_chunks = ?, machine_translation = ?
+                   WHERE id = ?""",
+                (json.dumps([text]), json.dumps(['draft']), 'draft', translation_id),
+            )
+        yield {'progress': 100, 'status': 'stage1_completed'}
+
+    def translate_stage2(self, translation_id, *args, **kwargs):
+        with sqlite3.connect(app_module.DB_PATH) as conn:
+            conn.execute(
+                """UPDATE translations SET status = 'completed', translated_text = ?,
+                   final_chunks = ? WHERE id = ?""",
+                ('final', json.dumps(['final']), translation_id),
+            )
+        yield {'progress': 100, 'status': 'completed'}
+
+    @staticmethod
+    def _evaluation_result(name):
+        return {'test': name, 'value': 1, 'flagged': False, 'note': 'ok'}
+
+    def eval_llm_judge_stage1(self, *args):
+        return self._evaluation_result('llm_judge_stage1')
+
+    def eval_llm_judge_stage2(self, *args):
+        return self._evaluation_result('llm_judge_stage2')
+
+    def eval_llm_judge_final(self, *args):
+        return self._evaluation_result('llm_judge_final')
+
+    def eval_backtranslation_chrf(self, *args):
+        return self._evaluation_result('backtranslation_chrf')
+
+
+def test_constructing_a_model_helper_does_not_overwrite_the_active_run(monkeypatch):
+    """``/models`` creates a helper; it must not replace the live model label."""
+    monkeypatch.setattr(app_module.monitor, 'active_model', 'translation-model')
+
+    app_module.BookTranslator('qwen3:4b-instruct')
+
+    assert app_module.monitor.active_model == 'translation-model'
+
+
+def test_translation_default_matches_settings_when_no_preference_is_saved():
+    """The two pages must not default Translation to different models."""
+    project_root = Path(__file__).resolve().parents[1]
+    settings_page = (project_root / 'static' / 'settings.html').read_text(encoding='utf-8')
+    main_page = (project_root / 'static' / 'index.html').read_text(encoding='utf-8')
+
+    assert "const PREFERRED_MODEL = 'translategemma:12b';" in settings_page
+    assert "const PREFERRED_MODEL = 'translategemma:12b';" in main_page
+    assert 'const API_URL = window.location.origin;' in main_page
+    assert "window.addEventListener('pageshow', syncModelsFromSettings);" in main_page
+    assert "window.addEventListener('storage'," in main_page
+
+
+def test_each_pipeline_role_uses_its_own_requested_model(tmp_path, monkeypatch):
+    database_path = tmp_path / 'translations.db'
+    monkeypatch.setattr(app_module, 'DB_PATH', str(database_path))
+    app_module.init_db()
+    RecordingTranslator.selected_models = []
+    RecordingTranslator.glossary_builder_calls = 0
+    monkeypatch.setattr(app_module, 'BookTranslator', RecordingTranslator)
+
+    # The middleware only checks Ollama availability; keep this wiring test
+    # offline while retaining the real Flask request lifecycle.
+    class AvailableOllama:
+        def raise_for_status(self):
+            pass
+
+    monkeypatch.setattr(app_module.requests, 'get', lambda *args, **kwargs: AvailableOllama())
+    app_module.app.config.update(TESTING=True)
+    client = app_module.app.test_client()
+
+    def upload(model):
+        return {
+            'file': (io.BytesIO(b'Hello world.'), 'sample.txt'),
+            'sourceLanguage': 'english',
+            'targetLanguage': 'russian',
+            'model': model,
+            'genre': 'fiction',
+        }
+
+    prepare_response = client.post('/prepare', data=upload('general-model'), content_type='multipart/form-data')
+    assert prepare_response.status_code == 200
+    assert prepare_response.get_json()['entity_resolution'] == {
+        'clustered_candidates': 0,
+        'extracted_candidates': 0,
+        'review_pairs': 0,
+        'cluster_decisions': [],
+        'clusters_confirmed': 0,
+        'clusters_split': 0,
+        'added_by_model': [],
+    }
+    assert RecordingTranslator.glossary_builder_calls == 1
+    start_response = client.post('/translate', data=upload('translation-model'), content_type='multipart/form-data')
+    assert start_response.status_code == 200
+    start_response.get_data()  # Consume the SSE generator so it persists the draft.
+
+    with sqlite3.connect(database_path) as conn:
+        translation_id = conn.execute('SELECT id FROM translations').fetchone()[0]
+
+    # Reaching Start is the user's approval of the editable glossary.  The
+    # persisted row must not remain in the old "proposed" limbo state.
+    approved_start = client.post('/translate', data={
+        **upload('translation-model'),
+        'glossary': 'Dursley => Дурсль | exact',
+    }, content_type='multipart/form-data')
+    assert approved_start.status_code == 200
+    approved_start.get_data()
+    with sqlite3.connect(database_path) as conn:
+        assert conn.execute(
+            'SELECT status FROM translation_terms ORDER BY translation_id DESC LIMIT 1'
+        ).fetchone()[0] == 'verified'
+
+    refinement_response = client.post(f'/refine/{translation_id}', json={'model': 'refinement-model'})
+    assert refinement_response.status_code == 200
+    refinement_response.get_data()  # Consume the SSE generator so it persists the final text.
+    for test_name in ('llm_judge_stage1', 'llm_judge_stage2', 'llm_judge_final', 'backtranslation_chrf'):
+        assert client.post(
+            f'/evaluate/{translation_id}/{test_name}',
+            json={'judge_model': 'judge-model'},
+        ).status_code == 200
+
+    assert RecordingTranslator.selected_models == [
+        'general-model',
+        'translation-model',
+        'translation-model',
+        'refinement-model',
+        'judge-model',
+        'judge-model',
+        'judge-model',
+        'judge-model',
+    ]
