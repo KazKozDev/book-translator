@@ -31,19 +31,25 @@
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
             -webkit-font-smoothing: antialiased;
         }
-        header {
+        /* Two rows, so the first one is the same header every other page has:
+           wordmark left, nav right. The log's own controls get the row below
+           rather than competing with the site nav for the same line. */
+        header { border-bottom: 1px solid var(--line); background: var(--paper); }
+        .topbar {
+            display: flex; align-items: center; justify-content: space-between; gap: 24px;
+            padding: 11px 16px; border-bottom: 1px solid var(--line);
+        }
+        .toolbar {
             display: flex; align-items: center; flex-wrap: wrap; gap: 14px;
-            padding: 11px 16px; border-bottom: 1px solid var(--line); background: var(--paper);
+            padding: 9px 16px;
         }
         .brand { display: flex; align-items: baseline; gap: 10px; font-size: .74rem; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; }
         /* The wordmark doubles as the way back to the workspace. */
         .brand-name { color: var(--ink); text-decoration: none; }
         a.brand-name:hover { color: var(--accent); }
         .brand .sub { color: var(--faint); font-weight: 500; }
-        /* Same nav as every other page — margin-left:auto on top of the spacer,
-           because when the header wraps on a narrow window the spacer stays on
-           the previous line and only the auto margin still pushes it right. */
-        .local-status { display: flex; align-items: center; gap: 10px; margin-left: auto; color: var(--muted); font-size: .72rem; font-weight: 500; letter-spacing: .09em; text-transform: uppercase; }
+        /* Same nav as every other page. */
+        .local-status { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: .72rem; font-weight: 500; letter-spacing: .09em; text-transform: uppercase; }
         .local-status .sep { color: #d1d5db; }
         :root.theme-dark .local-status .sep { color: var(--line); }
         .repo-link { color: var(--muted); text-decoration: none; }
@@ -56,7 +62,6 @@
         .dot.live { background: var(--mark); }
         .dot.down { background: var(--error); }
         .dot.paused { background: var(--warn); }
-        .spacer { flex: 1 1 auto; }
         .controls { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
         .chip {
             border: 1px solid var(--line); border-radius: 999px; padding: 4px 11px;
@@ -140,27 +145,30 @@
 </head>
 <body>
     <header>
-        <div class="brand"><a class="brand-name" href="/">Tolmach</a><span class="sub">Log</span></div>
-        <div class="status"><span class="dot" id="statusDot"></span><span id="statusText">Connecting…</span></div>
-        <div class="controls">
-            <button type="button" class="chip on" data-source="translations">Pipeline</button>
-            <button type="button" class="chip on" data-source="api">Model</button>
-            <button type="button" class="chip on" data-source="app">App</button>
-            <button type="button" class="chip" id="errorsOnly" title="Warnings and errors only">Problems</button>
-            <input type="search" class="search" id="search" placeholder="Filter text…" autocomplete="off">
-            <button type="button" class="chip" id="pause">Pause</button>
-            <button type="button" class="chip" id="wrap">Wrap</button>
-            <button type="button" class="chip" id="clear" title="Clear this view only — the files are untouched">Clear</button>
-            <button type="button" class="chip danger" id="reset" title="Empty the log files on disk — cannot be undone">Erase files</button>
+        <div class="topbar">
+            <div class="brand"><a class="brand-name" href="/">Tolmach</a><span class="sub">Log</span></div>
+            <nav class="local-status" aria-label="Primary navigation">
+                <a class="repo-link" href="/">Home</a>
+                <span class="sep">•</span><a class="repo-link" href="/guide.html">Guide</a>
+                <span class="sep">•</span><a class="repo-link" href="/settings.html">Settings</a>
+                <span class="sep">•</span><span class="current-nav" aria-current="page">Log</span>
+                <span class="sep">•</span><button type="button" class="theme-toggle" id="themeToggle" title="Switch theme">🌙</button>
+            </nav>
         </div>
-        <div class="spacer"></div>
-        <nav class="local-status" aria-label="Primary navigation">
-            <a class="repo-link" href="/">Home</a>
-            <span class="sep">•</span><a class="repo-link" href="/guide.html">Guide</a>
-            <span class="sep">•</span><a class="repo-link" href="/settings.html">Settings</a>
-            <span class="sep">•</span><span class="current-nav" aria-current="page">Log</span>
-            <span class="sep">•</span><button type="button" class="theme-toggle" id="themeToggle" title="Switch theme">🌙</button>
-        </nav>
+        <div class="toolbar">
+            <div class="status"><span class="dot" id="statusDot"></span><span id="statusText">Connecting…</span></div>
+            <div class="controls">
+                <button type="button" class="chip on" data-source="translations">Pipeline</button>
+                <button type="button" class="chip on" data-source="api">Model</button>
+                <button type="button" class="chip on" data-source="app">App</button>
+                <button type="button" class="chip" id="errorsOnly" title="Warnings and errors only">Problems</button>
+                <input type="search" class="search" id="search" placeholder="Filter text…" autocomplete="off">
+                <button type="button" class="chip" id="pause">Pause</button>
+                <button type="button" class="chip" id="wrap">Wrap</button>
+                <button type="button" class="chip" id="clear" title="Clear this view only — the files are untouched">Clear</button>
+                <button type="button" class="chip danger" id="reset" title="Empty the log files on disk — cannot be undone">Erase files</button>
+            </div>
+        </div>
     </header>
     <div class="console" id="console"><p class="empty" id="empty">Waiting for log lines…</p></div>
     <footer><span id="counts">0 lines</span> · following logs/translations.log, logs/api.log, logs/app.log · set <code>LOG_LEVEL=DEBUG</code> before starting the app to include the full prompts</footer>
