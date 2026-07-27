@@ -887,6 +887,11 @@ class BookTranslator:
     # An adjudication pass costs one call, so it is worth running only while
     # there is a bounded number of genuinely ambiguous groups to rule on.
     CLUSTER_REVIEW_MAX_GROUPS = 24
+    # Prepare is one deliberate action per document, and the roles that reason
+    # deserve a large model, so its calls get a longer read timeout than the
+    # per-chunk work. A 27B model answering in 200s is not a failure; running
+    # out of patience at 180s and reporting "no proper nouns found" was.
+    PREPARE_READ_TIMEOUT = 600
     # Optional document diagnostics. They stay lazy because loading either
     # model is a deliberate quality-check action, never a prerequisite for
     # translating a book.
@@ -1241,7 +1246,9 @@ Rules:
 - Rule on every group. Do not add groups."""
 
         decisions, ruled = [], set()
-        for item in self._parse_json_array(self._call_model(prompt, temperature=0.0)):
+        for item in self._parse_json_array(self._call_model(
+                prompt, temperature=0.0, read_timeout=self.PREPARE_READ_TIMEOUT,
+            )):
             try:
                 index = int(item.get('group'))
             except (TypeError, ValueError):
@@ -1408,7 +1415,10 @@ Rules:
         ] or [[]]
         for batch in batches:
             prompt = self._rendering_prompt(text, batch, source_lang, target_lang, genre)
-            for item in self._parse_json_array(self._call_model(prompt, temperature=0.2)):
+            raw = self._call_model(
+                prompt, temperature=0.2, read_timeout=self.PREPARE_READ_TIMEOUT,
+            )
+            for item in self._parse_json_array(raw):
                 record = self._rendering_record(text, item, counts)
                 if record is None or record['source'].casefold() in seen:
                     continue
@@ -2632,7 +2642,9 @@ Respond with EXACTLY one word: A, B, or TIE."""
         scored.sort(key=lambda pair: (-pair[0], pair[1]))
         return sorted(index for _, index in scored[:sample_size])
 
-    def _call_model(self, prompt: str, temperature: float = 0.2) -> Optional[str]:
+    def _call_model(
+        self, prompt: str, temperature: float = 0.2, read_timeout: int = 180,
+    ) -> Optional[str]:
         try:
             # This path covers Prepare, refinement, and model-based quality
             # checks.  Mark only a model that is about to reach Ollama active.
@@ -2640,7 +2652,7 @@ Respond with EXACTLY one word: A, B, or TIE."""
             response = self.session.post(
                 self.api_url,
                 json=self._ollama_payload(prompt, temperature=temperature),
-                timeout=(30, 180),
+                timeout=(30, read_timeout),
             )
             response.raise_for_status()
             result = json.loads(response.text)
@@ -3636,14 +3648,23 @@ FLUENCY: <1-5>"""
                 'note': f'COMET-Kiwi failed: {e}',
             }
 
-    def get_available_models(self) -> List[str]:
+    def get_installed_models(self) -> List[Dict]:
+        """Everything Ollama has pulled, with the details the UI needs.
+
+        The parameter count is carried through because the roles that reason
+        rather than translate — Prepare, refinement, the judge — are the ones
+        where model size shows, and without it the interface can only default
+        to whatever Ollama happens to list first.
+        """
         response = self.session.get(
             "http://localhost:11434/api/tags",
             timeout=(5, 5)
         )
         response.raise_for_status()
-        models = response.json()
-        return [model['name'] for model in models['models']]
+        return response.json().get('models') or []
+
+    def get_available_models(self) -> List[str]:
+        return [model['name'] for model in self.get_installed_models()]
     
 # Translation Recovery
 class TranslationRecovery:
@@ -3716,13 +3737,14 @@ def serve_static(path):
 @with_error_handling
 def get_models():
     translator = BookTranslator()
-    available_models = translator.get_available_models()
     models = []
-    for model_name in available_models:
+    for model in translator.get_installed_models():
+        details = model.get('details') or {}
         models.append({
-            'name': model_name,
-            'size': 'Unknown',
-            'modified': 'Unknown'
+            'name': model['name'],
+            'size': model.get('size') or 0,
+            'parameter_size': details.get('parameter_size') or '',
+            'modified': model.get('modified_at') or 'Unknown',
         })
     return jsonify({'models': models})
 
@@ -3853,15 +3875,22 @@ def prepare():
         target_lang = request.form.get('targetLanguage')
         model_name = request.form.get('model')
         genre = request.form.get('genre', 'unknown')
+        # Stage 0 makes two different demands. Ruling on whether two source
+        # forms name one entity is reasoning about the document; rendering a
+        # name into the target language is translation knowledge. They get
+        # their own model choices, and the entity role falls back to the
+        # rendering one when the browser has no separate preference.
+        entity_model_name = request.form.get('entityModel') or model_name
 
         if not all([source_lang, target_lang, model_name]):
             return jsonify({'error': 'Missing required parameters'}), 400
-        if is_translategemma(model_name):
-            return jsonify({'error': (
-                'TranslateGemma is translation-only and cannot extract names or '
-                'write a brief. Pick a general instruct model to prepare, then '
-                'switch back to TranslateGemma for Start if you like.'
-            )}), 400
+        for name in (model_name, entity_model_name):
+            if is_translategemma(name):
+                return jsonify({'error': (
+                    'TranslateGemma is translation-only and cannot extract names or '
+                    'write a brief. Pick a general instruct model to prepare, then '
+                    'switch back to TranslateGemma for Start if you like.'
+                )}), 400
 
         try:
             text, _, _, _, _, filepath = read_uploaded_book(request.files['file'])
@@ -3878,7 +3907,11 @@ def prepare():
         # the model rule on those guesses before anything is rendered, because
         # a wrong merge silently agrees one rendering for two entities and no
         # later stage can tell that happened.
-        candidates, cluster_decisions = translator.adjudicate_entity_clusters(
+        resolver = (
+            translator if entity_model_name == model_name
+            else BookTranslator(model_name=entity_model_name)
+        )
+        candidates, cluster_decisions = resolver.adjudicate_entity_clusters(
             text, source_lang, candidates, review_queue,
         )
         records = translator.propose_proper_noun_records(

@@ -617,6 +617,7 @@
                      active choices available to their respective workflows. -->
                 <select id="model" required hidden aria-hidden="true"><option value="">Loading models…</option></select>
                 <select id="refinementModel" required hidden aria-hidden="true"><option value="">Loading models…</option></select>
+                <select id="entityModel" required hidden aria-hidden="true"><option value="">Loading models…</option></select>
                 <select id="generalInstructModel" required hidden aria-hidden="true"><option value="">Loading models…</option></select>
                 <select id="judgeModel" required hidden aria-hidden="true"><option value="">Loading models…</option></select>
 
@@ -710,7 +711,7 @@
         <aside class="job-card">
             <div class="eyebrow">Current job</div>
             <h2>Your translation desk</h2>
-            <p>Press <span style="letter-spacing: .08em;">UPLOAD</span> to add a file.<br>Choose a language pair and genre. Set translation, refinement, general-instruct, and judge models in <span style="letter-spacing: .08em;">SETTINGS</span>.<br>Open <span style="letter-spacing: .08em;">GLOSSARY</span> and prepare it from the source. Press <span style="letter-spacing: .08em;">PREPARE</span> to generate and review the proposed terms.<br>Press <span style="letter-spacing: .08em;">START</span> to translate.<br>Once the draft is ready, press <span style="letter-spacing: .08em;">CONTINUE</span> to refine.</p>
+            <p>Press <span style="letter-spacing: .08em;">UPLOAD</span> to add a file.<br>Choose a language pair and genre. Set translation, refinement, entity-resolution, glossary-rendering, and judge models in <span style="letter-spacing: .08em;">SETTINGS</span>.<br>Open <span style="letter-spacing: .08em;">GLOSSARY</span> and prepare it from the source. Press <span style="letter-spacing: .08em;">PREPARE</span> to generate and review the proposed terms.<br>Press <span style="letter-spacing: .08em;">START</span> to translate.<br>Once the draft is ready, press <span style="letter-spacing: .08em;">CONTINUE</span> to refine.</p>
 
             <div class="rail-section">
                 <div class="section-title">Progress</div>
@@ -952,6 +953,12 @@
         // role, so an unset browser preference must not silently become the
         // general-instruct fallback used by earlier versions of this screen.
         const PREFERRED_MODEL = 'translategemma:12b';
+
+        // Ollama reports a parameter count per model ("27.4B"). Shown beside
+        // the name because the instruct roles are where size shows, and the
+        // choice is the user's to make from the list.
+        const modelLabel = model => model.parameter_size ? `${model.name} — ${model.parameter_size}` : model.name;
+
         const SOURCE_PREVIEW_LIMIT = 100000;
         const PANEL_PREVIEW_LIMIT = 12000;
         let selectedFile = null;
@@ -1339,6 +1346,7 @@
             formData.append('sourceLanguage', document.getElementById('sourceLanguage').value);
             formData.append('targetLanguage', document.getElementById('targetLanguage').value);
             formData.append('model', document.getElementById('generalInstructModel').value);
+            formData.append('entityModel', document.getElementById('entityModel').value);
             formData.append('genre', document.getElementById('genre').value);
 
             button.disabled = true;
@@ -1380,7 +1388,7 @@
                         + (kept.length ? ` Your existing ${kept.join(' and ')} was left alone — clear it and press again to replace.` : '');
                 } else if (candidateCount) {
                     status.classList.add('has-errors');
-                    status.textContent = `Found ${candidateCount} source candidate(s), but the general-instruct model returned no usable renderings — it most likely timed out or answered in prose instead of JSON. Pick a smaller or faster instruct model in SETTINGS and press PREPARE again.`;
+                    status.textContent = `Found ${candidateCount} source candidate(s), but the glossary-rendering model returned no usable renderings — it most likely timed out or answered in prose instead of JSON. Pick a smaller or faster instruct model in SETTINGS and press PREPARE again.`;
                 } else {
                     status.textContent = 'No recurring proper nouns found. Check the language pair, or add terms by hand.';
                 }
@@ -1689,6 +1697,7 @@
         const MODEL_PREFERENCE_KEYS = {
             model: 'translationModel',
             refinementModel: 'refinementModel',
+            entityModel: 'entityModel',
             generalInstructModel: 'generalInstructModel',
             judgeModel: 'judgeModel',
         };
@@ -1706,6 +1715,7 @@
         async function loadModels() {
             const modelSelect = document.getElementById('model');
             const refinementSelect = document.getElementById('refinementModel');
+            const entitySelect = document.getElementById('entityModel');
             const generalInstructSelect = document.getElementById('generalInstructModel');
             const judgeSelect = document.getElementById('judgeModel');
             try {
@@ -1737,7 +1747,7 @@
                     return 0;
                 });
                 const optionsFor = list => list.map(model =>
-                    `<option value="${model.name}">${model.name}</option>`
+                    `<option value="${model.name}">${modelLabel(model)}</option>`
                 ).join('');
                 modelSelect.innerHTML = optionsFor(models);
                 const savedTranslationModel = localStorage.getItem('translationModel');
@@ -1750,7 +1760,7 @@
                 // TranslateGemma is translation-only. The remaining three roles
                 // need a general-instruct model selected independently.
                 const instructModels = models.filter(model => !isTranslateGemma(model.name));
-                [refinementSelect, generalInstructSelect, judgeSelect].forEach(select => {
+                [refinementSelect, entitySelect, generalInstructSelect, judgeSelect].forEach(select => {
                     select.innerHTML = instructModels.length
                         ? optionsFor(instructModels)
                         : '<option value="">No suitable instruct model installed</option>';
@@ -1767,6 +1777,12 @@
                             : instructModels[0].name;
                     };
                     refinementSelect.value = valueFor('refinementModel');
+                    // No separate preference means Stage 0 runs both of its
+                    // passes on one model, exactly as it did before the split.
+                    entitySelect.value = localStorage.getItem('entityModel')
+                        && instructModels.some(model => model.name === localStorage.getItem('entityModel'))
+                        ? localStorage.getItem('entityModel')
+                        : valueFor('generalInstructModel');
                     generalInstructSelect.value = valueFor('generalInstructModel');
                     judgeSelect.value = valueFor('judgeModel');
                 }
@@ -1784,7 +1800,7 @@
                 if (modelSelect) {
                     modelSelect.innerHTML = `<option value="">❌ ${error.message}</option>`;
                 }
-                [refinementSelect, generalInstructSelect, judgeSelect].forEach(select => {
+                [refinementSelect, entitySelect, generalInstructSelect, judgeSelect].forEach(select => {
                     if (select) select.innerHTML = `<option value="">❌ ${error.message}</option>`;
                 });
                 const statValue = document.getElementById('availableModels');

@@ -17,6 +17,7 @@ class RecordingTranslator:
     """Small stand-in that records model selection and completes each route."""
 
     selected_models = []
+    entity_resolver_models = []
     glossary_builder_calls = 0
 
     def __init__(self, model_name='default', *args, **kwargs):
@@ -36,8 +37,8 @@ class RecordingTranslator:
     def collapse_honorific_aliases(*args):
         return []
 
-    @staticmethod
-    def adjudicate_entity_clusters(text, source_lang, candidates, review_queue=None):
+    def adjudicate_entity_clusters(self, text, source_lang, candidates, review_queue=None):
+        RecordingTranslator.entity_resolver_models.append(self.model_name)
         return candidates, []
 
     @staticmethod
@@ -111,6 +112,7 @@ def test_each_pipeline_role_uses_its_own_requested_model(tmp_path, monkeypatch):
     monkeypatch.setattr(app_module, 'DB_PATH', str(database_path))
     app_module.init_db()
     RecordingTranslator.selected_models = []
+    RecordingTranslator.entity_resolver_models = []
     RecordingTranslator.glossary_builder_calls = 0
     monkeypatch.setattr(app_module, 'BookTranslator', RecordingTranslator)
 
@@ -133,8 +135,14 @@ def test_each_pipeline_role_uses_its_own_requested_model(tmp_path, monkeypatch):
             'genre': 'fiction',
         }
 
-    prepare_response = client.post('/prepare', data=upload('general-model'), content_type='multipart/form-data')
+    # Stage 0 runs two model calls with two independent role choices: one
+    # rules on entity identity, the other renders the glossary.
+    prepare_response = client.post('/prepare', data={
+        **upload('rendering-model'), 'entityModel': 'entity-model',
+    }, content_type='multipart/form-data')
     assert prepare_response.status_code == 200
+    assert RecordingTranslator.entity_resolver_models == ['entity-model']
+    assert 'rendering-model' in RecordingTranslator.selected_models
     assert prepare_response.get_json()['entity_resolution'] == {
         'clustered_candidates': 0,
         'extracted_candidates': 0,
@@ -175,7 +183,9 @@ def test_each_pipeline_role_uses_its_own_requested_model(tmp_path, monkeypatch):
         ).status_code == 200
 
     assert RecordingTranslator.selected_models == [
-        'general-model',
+        # Prepare constructs two translators, one per Stage 0 role.
+        'rendering-model',
+        'entity-model',
         'translation-model',
         'translation-model',
         'refinement-model',

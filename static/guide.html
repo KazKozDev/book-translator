@@ -140,11 +140,11 @@
                 <li>
                     <div class="step-title">Set language pair and genre</div>
                     <p>Choose source, target and genre. Genre guides the translation prompt; it is not a claim that the app can identify genre automatically. In <a href="/settings.html">Settings</a>, assign separate local Ollama models to Translation, Refinement, Prepare and Judge. Keeping the judge separate avoids a model grading its own output.</p>
-                    <p><strong>TranslateGemma</strong> (<code>translategemma:4b</code>, <code>12b</code> or <code>27b</code>) is supported for Start and receives its native translation prompt with the glossary and nearby context included. It is translation-only: use a general instruct model for Prepare, Continue and LLM judge tests. Backtranslation is allowed because it is another translation pass.</p>
+                    <p><strong>TranslateGemma</strong> (<code>translategemma:4b</code>, <code>12b</code> or <code>27b</code>) is supported for Start and receives its native translation prompt with the glossary and nearby context included. It is translation-only: use general instruct models for Prepare, Continue and LLM judge tests. Backtranslation is allowed because it is another translation pass.</p>
                 </li>
                 <li>
                     <div class="step-title">Prepare and review the glossary — optional</div>
-                    <p>Open <strong>Glossary</strong> and press <strong>→ PREPARE</strong> after uploading the source. This is a document-wide analysis, not translation: GLiNER finds entity candidates, recurring source forms are clustered, and the selected general instruct model proposes target renderings.</p>
+                    <p>Open <strong>Glossary</strong> and press <strong>→ PREPARE</strong> after uploading the source. This is a document-wide analysis, not translation: GLiNER finds entity candidates, recurring source forms are clustered, the entity-resolution model rules on that clustering — confirming what belongs together and splitting what does not — and the glossary-rendering model then proposes a target rendering and enforcement mode for each name, working from that name's own quoted context. Both roles are chosen in Settings; identity is the one that repays a larger model.</p>
                     <p>The result is a proposal, not verified terminology. Review every line, remove noise, correct bad renderings and add anything it missed. If you already wrote a glossary, Prepare deliberately leaves it untouched rather than silently replacing your work. When two distinct source entities receive the same target rendering, the panel warns you to resolve that conflict before Start.</p>
                 </li>
                 <li>
