@@ -155,8 +155,10 @@ work that came before it is not gone, and some of it is in here:
   Korean are both in this version's language list.
 - **Derek W.** — README and startup instructions.
 
-The v2 line is tagged **`v2.0`**: `git checkout v2.0` gets the modular package,
-the Windows tray app and the Docker build exactly as they were.
+That line is tagged **`v2.1.0`** — `git checkout v2.1.0` gets the modular
+package, the Windows tray app and the Docker build exactly as they stood on
+2026-01-21. (`v2.0.0`, from October 2025, is an earlier rewrite of this
+repository and predates all of it.)
 
 ## License
 
