@@ -1,0 +1,48 @@
+name: Bug report
+description: Report a reproducible bug
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: What happened?
+      description: Describe the bug clearly.
+      placeholder: The app fails when...
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Start the app
+        2. Upload file
+        3. Choose model
+        4. Observe error
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      placeholder: macOS / Windows / Linux
+  - type: input
+    id: python
+    attributes:
+      label: Python version
+      placeholder: "3.11"
+  - type: input
+    id: model
+    attributes:
+      label: Ollama model
+      placeholder: translategemma:12b / qwen3 / etc.
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or screenshots
+      description: >-
+        Open the Log window from the app header and copy what the run printed,
+        or attach logs/translations.log. It records what each pass found,
+        patched and decided, and by which model.
