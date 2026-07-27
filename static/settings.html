@@ -11,17 +11,18 @@
         :root.theme-dark { --canvas:#17181c; --paper:#1f2126; --ink:#e8e9ec; --muted:#9195a1; --faint:#6b6f7b; --line:#2c2e35; --soft:#26282e; --accent:#86a4bd; --accent-dark:#a2bdd1; --warning:#facc15; }
         body { min-height:100vh; background:var(--canvas); color:var(--ink); font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif; -webkit-font-smoothing:antialiased; }
         .container { max-width:1920px; margin:0 auto; padding:0 26px 44px; }
-        .app-topbar { display:flex; align-items:center; justify-content:space-between; gap:24px; padding:16px 0; margin-bottom:30px; border-bottom:1px solid var(--line); }
+        .app-topbar { display:flex; align-items:center; justify-content:space-between; gap:24px; padding:16px 0; margin-bottom:18px; border-bottom:1px solid var(--line); }
         .brand { display:flex; align-items:baseline; gap:15px; letter-spacing:.09em; text-transform:uppercase; }
         .brand-name { font-size:.95rem; font-weight:700; }.brand-descriptor { font-size:.8rem; font-weight:500; opacity:.65; }.brand-version { font-size:.72rem; color:var(--faint); }
-        .local-status { display:flex; align-items:center; gap:10px; color:var(--muted); font-size:.72rem; font-weight:500; letter-spacing:.09em; text-transform:uppercase; }.sep { color:var(--faint); }
+        .local-status { display:flex; align-items:center; gap:10px; color:var(--muted); font-size:.72rem; font-weight:500; letter-spacing:.09em; text-transform:uppercase; }.local-status .sep { color:#d1d5db; }
         .repo-link { color:var(--muted); text-decoration:none; }.repo-link:hover { color:var(--accent); text-decoration:underline; }.current-nav { color:var(--ink); }
-        .theme-toggle { border:0; background:none; color:var(--muted); font-size:.9rem; cursor:pointer; }
-        .eyebrow { color:var(--faint); font-size:.74rem; font-weight:700; letter-spacing:.08em; text-transform:uppercase; }.page-head h1 { margin-top:10px; font-size:1.2rem; font-weight:700; letter-spacing:-.01em; }.page-head p { margin-top:10px; max-width:620px; color:var(--muted); font-size:.92rem; line-height:1.6; }
+        .theme-toggle { border:0; background:none; padding:0; color:var(--muted); font-size:.9rem; line-height:1; cursor:pointer; text-transform:none; letter-spacing:0; }.theme-toggle:hover { color:var(--accent); }
+        .page-head { padding:18px 0 8px; }.eyebrow { color:var(--faint); font-size:.74rem; font-weight:700; letter-spacing:.08em; text-transform:uppercase; }.page-head h1 { margin:10px 0 0; font-size:1.7rem; font-weight:700; letter-spacing:-.01em; }.page-head p { margin-top:10px; color:var(--muted); font-size:.92rem; line-height:1.65; max-width:640px; }
         .card { margin-top:26px; padding:26px 28px; border:1px solid var(--line); border-radius:12px; background:var(--paper); }.card h2 { font-size:1.05rem; }.card > p { margin-top:7px; color:var(--muted); font-size:.86rem; line-height:1.55; }
         .section-kicker, .role-heading { color:var(--faint); font-size:.72rem; font-weight:700; letter-spacing:.08em; text-transform:uppercase; }
         .form-group { margin-top:22px; }.role-heading { display:block; }.form-group select { width:100%; margin-top:8px; padding:11px 12px; border:1px solid var(--line); border-radius:6px; background:var(--paper); color:var(--ink); font:inherit; appearance:none; -webkit-appearance:none; background-image:none; cursor:pointer; }.form-group select:focus { outline:2px solid color-mix(in srgb, var(--accent) 40%, transparent); border-color:var(--accent); }
         .hint { margin-top:7px; color:var(--muted); font-size:.8rem; line-height:1.5; }.warning { color:var(--warning); font-weight:600; }.actions { display:flex; align-items:center; gap:14px; margin-top:28px; }.save-action { border:0; padding:0; background:transparent; color:var(--accent); font:inherit; font-size:.8rem; font-weight:700; letter-spacing:.08em; text-transform:uppercase; cursor:pointer; }.save-action:hover { color:var(--accent-dark); text-decoration:underline; }.save-action:disabled { color:var(--faint); cursor:not-allowed; text-decoration:none; }.saved { color:var(--muted); font-size:.82rem; }
+        .footer-note { margin-top:52px; padding-top:22px; border-top:1px solid var(--line); color:var(--faint); font-size:.78rem; line-height:1.6; }.footer-note strong { display:block; margin-bottom:10px; color:var(--muted); }.footer-note p + p { margin-top:0; }
         .neural-list { margin-top:18px; border-top:1px solid var(--line); }.neural-row { display:flex; flex-direction:column; gap:5px; padding:15px 0; border-bottom:1px solid var(--line); }.neural-name { font-size:.88rem; font-weight:700; }.neural-role { margin-top:4px; color:var(--muted); font-size:.8rem; line-height:1.45; }.neural-kind { order:-1; color:var(--faint); font-size:.72rem; font-weight:700; letter-spacing:.06em; text-transform:uppercase; }
         .settings-columns { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:22px; align-items:start; }.settings-columns .card { min-width:0; }
         @media (max-width:980px) { .settings-columns { grid-template-columns:1fr; } }
@@ -37,17 +38,23 @@
         <header class="app-topbar">
             <div class="brand"><span class="brand-name">Tolmach</span><span class="brand-descriptor">Book Translator</span><span class="brand-version">v3.0</span></div>
             <nav class="local-status" aria-label="Primary navigation">
-                <a class="repo-link" href="/">Home</a><span class="sep">•</span><a class="repo-link" href="/guide.html">Guide</a><span class="sep">•</span><span class="current-nav" aria-current="page">Settings</span><span class="sep">•</span><a class="repo-link" href="https://github.com/KazKozDev/book-translator" target="_blank" rel="noopener">GitHub</a><span class="sep">•</span><button type="button" class="theme-toggle" id="themeToggle" title="Switch theme">🌙</button>
+                <a class="repo-link" href="/">Home</a><span class="sep">•</span><a class="repo-link" href="/guide.html">Guide</a><span class="sep">•</span><span class="current-nav" aria-current="page">Settings</span><span class="sep">•</span><a class="repo-link" href="/logs.html" target="tolmach-log" title="Live log in a separate window">Log</a>
+                <span class="sep">•</span><a class="repo-link" href="https://github.com/KazKozDev/book-translator" target="_blank" rel="noopener">GitHub</a><span class="sep">•</span><button type="button" class="theme-toggle" id="themeToggle" title="Switch theme">🌙</button>
             </nav>
         </header>
         <main>
-            <div class="page-head"><div class="eyebrow">Settings</div></div>
+            <div class="page-head">
+                <div class="eyebrow">Settings</div>
+                <h1>Choose a model for each role</h1>
+                <p>Tolmach keeps translation, refinement, glossary preparation and quality checks separate, so every stage can use the local model best suited to it.</p>
+            </div>
             <div class="settings-columns">
             <section class="card">
                 <div class="section-kicker">LLMs</div>
                 <p>Keep every role independent: the judge does not grade its own output, and a translation-only model is never used for instruction or editing.</p>
                 <div class="form-group"><label class="role-heading" for="translationModel">Translation</label><select id="translationModel" disabled><option>Loading models…</option></select><p class="hint" id="translationHint">Used only for Start.</p></div>
                 <div class="form-group"><label class="role-heading" for="refinementModel">Refinement</label><select id="refinementModel" disabled><option>Loading models…</option></select><p class="hint">Used only for Continue, the editing pass after the draft is ready.</p></div>
+                <div class="form-group"><label class="role-heading" for="verifierModel">Verifier</label><select id="verifierModel" disabled><option>Loading models…</option></select><p class="hint" id="verifierHint">Rules on every edit Refinement proposes: it sees the source and both versions, twice with the order swapped, and the edit is kept only if it wins both times. <strong>Pick a model clearly larger than Refinement.</strong> A model grading its own edits answers by which version came first rather than by what it says, the two orderings then disagree, and every fix is thrown away — the pass looks like it ran and changes nothing.</p></div>
                 <div class="form-group"><label class="role-heading" for="entityModel">Entity resolution</label><select id="entityModel" disabled><option>Loading models…</option></select><p class="hint">Used only for Prepare, and only to rule on identity: whether two source forms name one entity, which spelling variants belong together, and which the clustering got wrong. This is reasoning about the document rather than translation, so it is the role that repays a larger model — a small one gives two different characters the same rendering.</p></div>
                 <div class="form-group"><label class="role-heading" for="generalInstructModel">Glossary rendering</label><select id="generalInstructModel" disabled><option>Loading models…</option></select><p class="hint">Used only for Prepare: proposes the target-language rendering and the enforcement mode for each name the entity pass agreed on.</p></div>
                 <div class="form-group"><label class="role-heading" for="judgeModel">Judge</label><select id="judgeModel" disabled><option>Loading models…</option></select><p class="hint">Used for LLM judge and the backtranslation diagnostic. Translation-only TranslateGemma models are excluded.</p></div>
@@ -64,12 +71,23 @@
             </section>
             </div>
         </main>
+        <footer class="footer-note">
+            <strong>Disclaimer</strong>
+            <p>Tolmach is open-source software released under the MIT License. Tolmach does not claim ownership of your source texts or of any outputs generated by the software.</p>
+            <p>You are solely responsible for ensuring that you have the legal right to use, translate, edit, publish, or otherwise process the source text, and for complying with all applicable local laws and regulations, including copyright and intellectual-property laws.</p>
+            <div class="footer-note-compact">
+                <p>Proofreading and editorial review are strongly recommended before any publication or commercial use.</p>
+                <p>For commercial use, you are additionally responsible for reviewing and complying with the licenses of all models, neural components, and third-party dependencies used together with Tolmach.</p>
+                <p>Tolmach is provided "as is", without warranties of any kind. The authors and contributors accept no liability for any use of the software or its output.</p>
+            </div>
+        </footer>
     </div>
     <script>
         const PREFERRED_MODEL = 'translategemma:12b';
         const isTranslateGemma = name => (name || '').toLowerCase().includes('translategemma');
         const translationModel = document.getElementById('translationModel');
         const refinementModel = document.getElementById('refinementModel');
+        const verifierModel = document.getElementById('verifierModel');
         const entityModel = document.getElementById('entityModel');
         const generalInstructModel = document.getElementById('generalInstructModel');
         const judgeModel = document.getElementById('judgeModel');
@@ -82,6 +100,17 @@
         const modelLabel = model => model.parameter_size ? `${model.name} — ${model.parameter_size}` : model.name;
         const optionsFor = models => models.map(model => `<option value="${model.name}">${modelLabel(model)}</option>`).join('');
         function updateTranslationHint() { hint.innerHTML = isTranslateGemma(translationModel.value) ? '<span class="warning">TranslateGemma is supported here:</span> it is used only for the first translation pass.' : 'Used only for Start.'; }
+        // Refinement and Verifier landing on the same model is the exact
+        // configuration that made the pass a no-op, and it is also the default
+        // one, so it is called out on the page rather than left in a log.
+        const verifierHint = document.getElementById('verifierHint');
+        const verifierHintText = verifierHint.innerHTML;
+        function updateVerifierHint() {
+            const clash = verifierModel.value && verifierModel.value === refinementModel.value;
+            verifierHint.innerHTML = clash
+                ? '<span class="warning">Same model as Refinement:</span> it will be grading its own edits, and almost every fix will be rejected. ' + verifierHintText
+                : verifierHintText;
+        }
         async function loadModels() {
             try {
                 const response = await fetch(`/models?t=${Date.now()}`, { cache: 'no-cache' });
@@ -91,7 +120,7 @@
                 const models = [...data.models].sort((a, b) => a.name === PREFERRED_MODEL ? -1 : b.name === PREFERRED_MODEL ? 1 : 0);
                 const instructModels = models.filter(model => !isTranslateGemma(model.name));
                 translationModel.innerHTML = optionsFor(models);
-                [refinementModel, entityModel, generalInstructModel, judgeModel].forEach(select => {
+                [refinementModel, verifierModel, entityModel, generalInstructModel, judgeModel].forEach(select => {
                     select.innerHTML = instructModels.length ? optionsFor(instructModels) : '<option value="">No suitable instruct model installed</option>';
                 });
                 const savedTranslation = localStorage.getItem('translationModel');
@@ -101,15 +130,22 @@
                 entityModel.value = valueFor('entityModel') || valueFor('generalInstructModel');
                 generalInstructModel.value = valueFor('generalInstructModel');
                 judgeModel.value = valueFor('judgeModel');
+                // No saved preference falls back to the Judge choice — already
+                // the role meant to grade something it did not write — rather
+                // than to the refinement model, which is the broken case.
+                const savedVerifier = localStorage.getItem('verifierModel');
+                verifierModel.value = instructModels.some(m => m.name === savedVerifier) ? savedVerifier : judgeModel.value;
                 translationModel.disabled = false;
-                [refinementModel, entityModel, generalInstructModel, judgeModel].forEach(select => select.disabled = !instructModels.length);
-                save.disabled = !instructModels.length; updateTranslationHint();
+                [refinementModel, verifierModel, entityModel, generalInstructModel, judgeModel].forEach(select => select.disabled = !instructModels.length);
+                save.disabled = !instructModels.length; updateTranslationHint(); updateVerifierHint();
             } catch (error) {
-                [translationModel, refinementModel, entityModel, generalInstructModel, judgeModel].forEach(select => select.innerHTML = `<option>Could not load models: ${error.message}</option>`); status.textContent = 'Start Ollama, then reload this page.';
+                [translationModel, refinementModel, verifierModel, entityModel, generalInstructModel, judgeModel].forEach(select => select.innerHTML = `<option>Could not load models: ${error.message}</option>`); status.textContent = 'Start Ollama, then reload this page.';
             }
         }
-        save.addEventListener('click', () => { localStorage.setItem('translationModel', translationModel.value); localStorage.setItem('refinementModel', refinementModel.value); localStorage.setItem('entityModel', entityModel.value); localStorage.setItem('generalInstructModel', generalInstructModel.value); localStorage.setItem('judgeModel', judgeModel.value); status.textContent = 'Saved. Return to the app when ready.'; });
+        save.addEventListener('click', () => { localStorage.setItem('translationModel', translationModel.value); localStorage.setItem('refinementModel', refinementModel.value); localStorage.setItem('verifierModel', verifierModel.value); localStorage.setItem('entityModel', entityModel.value); localStorage.setItem('generalInstructModel', generalInstructModel.value); localStorage.setItem('judgeModel', judgeModel.value); status.textContent = 'Saved. Return to the app when ready.'; });
         translationModel.addEventListener('change', updateTranslationHint);
+        verifierModel.addEventListener('change', updateVerifierHint);
+        refinementModel.addEventListener('change', updateVerifierHint);
         document.getElementById('themeToggle').addEventListener('click', () => { const dark = !document.documentElement.classList.contains('theme-dark'); document.documentElement.classList.toggle('theme-dark', dark); localStorage.setItem('theme', dark ? 'dark' : 'light'); });
         loadModels();
     </script>

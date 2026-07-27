@@ -145,3 +145,159 @@ def test_spans_too_short_to_locate_are_rejected(span):
         [{'span': span, 'type': 'style', 'severity': 'minor', 'replacement': 'что-то'}],
         DRAFT,
     ) == []
+
+
+# -- The verify half. Still no Ollama: the model answers are scripted, which
+# is the only way to pin down who was asked and what was done with the reply.
+
+SOURCE = 'Mr Dursley was the director of a firm called Grunnings, which made drills.'
+
+
+def _script_model_calls(monkeypatch, answers):
+    """Replace every model call with a scripted answer, recording the model."""
+    calls = []
+
+    def fake_call(self, prompt, temperature=0.2, read_timeout=180):
+        calls.append({'model': self.model_name, 'prompt': prompt})
+        return answers.pop(0) if answers else None
+
+    monkeypatch.setattr(BookTranslator, '_call_model', fake_call)
+    return calls
+
+
+def _refine(translator, monkeypatch, answers):
+    calls = _script_model_calls(monkeypatch, answers)
+    text, warning, details = translator.stage2_reflection_improvement(
+        original_text=SOURCE,
+        draft_translation=DRAFT,
+        source_lang='english',
+        target_lang='russian',
+    )
+    return text, warning, details, calls
+
+
+def _reported(error_type, span='свёрла', replacement='дрели', severity='major'):
+    return (
+        '[{"span": "%s", "type": "%s", "severity": "%s", "replacement": "%s"}]'
+        % (span, error_type, severity, replacement)
+    )
+
+
+def test_the_verdict_is_asked_of_the_verifier_model_not_the_reviewer(monkeypatch):
+    """The reviewer grading its own edit is the arrangement that made this
+    pass a no-op, so the two calls must reach the other model."""
+    translator = BookTranslator(model_name='reviewer:12b', verifier_model='verifier:27b')
+
+    # 'A' then 'B' is the patched version winning both orderings.
+    text, warning, details, calls = _refine(
+        translator, monkeypatch, [_reported('mistranslation'), 'A', 'B'],
+    )
+
+    assert [call['model'] for call in calls] == ['reviewer:12b', 'verifier:27b', 'verifier:27b']
+    assert text == 'Мистер Дурсли был директором фирмы Grunnings, которая делала дрели.'
+    assert warning is None
+    assert details['verified'] == {
+        'verdicts': ['patched', 'patched'],
+        'accepted': True,
+        'model': 'verifier:27b',
+    }
+
+
+def test_a_verdict_that_flips_with_the_order_rejects_the_patch(monkeypatch):
+    """Answering 'A' both times is position bias, not agreement — and it is
+    what a model asked to grade its own edit does. The draft is kept, and the
+    details say who said so."""
+    translator = BookTranslator(model_name='reviewer:12b')
+
+    text, _, details, calls = _refine(
+        translator, monkeypatch, [_reported('mistranslation'), 'A', 'A'],
+    )
+
+    assert text == DRAFT
+    assert details['verified']['verdicts'] == ['patched', 'draft']
+    assert details['verified']['accepted'] is False
+    # No separate verifier chosen: every call went to the reviewing model.
+    assert {call['model'] for call in calls} == {'reviewer:12b'}
+
+
+def test_a_verifier_that_never_answers_is_recorded_as_unavailable(monkeypatch):
+    translator = BookTranslator(model_name='reviewer:12b', verifier_model='verifier:27b')
+
+    text, _, details, _ = _refine(
+        translator, monkeypatch, [_reported('mistranslation')],  # verifier: no answer
+    )
+
+    assert text == DRAFT
+    assert details['verified']['verdicts'] == ['unavailable', 'unavailable']
+
+
+@pytest.mark.parametrize('error_type', ['omission', 'addition', 'terminology', 'consistency'])
+def test_fixes_checkable_against_the_source_skip_the_verifier(monkeypatch, error_type):
+    """Whether a clause is missing, invented, or rendered against the
+    glossary is settled by reading the two texts. The A/B vote adds nothing
+    there and can only veto a real fix."""
+    translator = BookTranslator(model_name='reviewer:12b', verifier_model='verifier:27b')
+
+    text, _, details, calls = _refine(
+        translator, monkeypatch, [_reported(error_type)],
+    )
+
+    assert text != DRAFT
+    assert details['verified'] == 'skipped_objective'
+    assert len(calls) == 1  # estimate only — the verifier was never asked
+
+
+def test_a_mixed_patch_still_faces_the_verifier(monkeypatch):
+    """One mistranslation among the objective fixes puts the whole patch back
+    under the vote — the spans are applied together and cannot be split."""
+    translator = BookTranslator(model_name='reviewer:12b', verifier_model='verifier:27b')
+
+    reported = (
+        '[{"span": "свёрла", "type": "omission", "severity": "major", "replacement": "дрели"},'
+        ' {"span": "Grunnings", "type": "mistranslation", "severity": "major",'
+        ' "replacement": "Граннингс"}]'
+    )
+    _, _, details, calls = _refine(translator, monkeypatch, [reported, 'A', 'B'])
+
+    assert details['verified']['accepted'] is True
+    assert [call['model'] for call in calls] == ['reviewer:12b', 'verifier:27b', 'verifier:27b']
+
+
+def test_no_separate_verifier_builds_no_second_translator():
+    translator = BookTranslator(model_name='reviewer:12b')
+
+    assert translator.verifier is translator
+    assert translator.verifier_model == 'reviewer:12b'
+
+
+def test_details_name_both_models_so_a_run_can_be_read_back(monkeypatch):
+    translator = BookTranslator(model_name='reviewer:12b', verifier_model='verifier:27b')
+
+    _, _, details, _ = _refine(translator, monkeypatch, ['[]'])
+
+    assert details['review_model'] == 'reviewer:12b'
+    assert details['verifier_model'] == 'verifier:27b'
+
+
+def test_the_chunk_log_line_distinguishes_the_three_ways_nothing_changes():
+    clean = BookTranslator._describe_stage2_chunk(
+        {'errors_found': 0, 'errors_actionable': 0, 'errors_applied': 0, 'verified': None},
+        warning=None, changed=False,
+    )
+    vetoed = BookTranslator._describe_stage2_chunk(
+        {
+            'errors_found': 2, 'errors_actionable': 2, 'errors_applied': 2,
+            'verified': {'verdicts': ['patched', 'draft'], 'accepted': False, 'model': 'verifier:27b'},
+        },
+        warning=None, changed=False,
+    )
+    timed_out = BookTranslator._describe_stage2_chunk(
+        {'errors_found': 0, 'errors_actionable': 0, 'errors_applied': 0, 'verified': None},
+        warning='The review pass returned no output — kept the draft for this chunk.',
+        changed=False,
+    )
+
+    assert 'verifier not needed' in clean
+    assert 'verifier verifier:27b voted patched/draft → rejected' in vetoed
+    assert 'review pass gave no answer' in timed_out
+    assert clean != timed_out

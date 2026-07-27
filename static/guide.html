@@ -81,7 +81,9 @@
         .good { color: var(--good); font-weight: 600; }
         .bad { color: var(--bad); font-weight: 600; }
 
-        .footer-note { margin-top: 30px; color: var(--faint); font-size: .78rem; line-height: 1.6; }
+        .footer-note { margin-top: 52px; padding-top: 22px; border-top: 1px solid var(--line); color: var(--faint); font-size: .78rem; line-height: 1.6; }
+        .footer-note strong { display: block; margin-bottom: 10px; color: var(--muted); }
+        .footer-note p + p { margin-top: 0; }
 
         .guide-columns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px; align-items: start; }
         .guide-columns .card { min-width: 0; }
@@ -117,6 +119,7 @@
                 <a class="repo-link" href="/">Home</a>
                 <span class="sep">•</span><span class="current-nav" aria-current="page">Guide</span>
                 <span class="sep">•</span><a class="repo-link" href="/settings.html">Settings</a>
+                <span class="sep">•</span><a class="repo-link" href="/logs.html" target="tolmach-log" title="Live log in a separate window">Log</a>
                 <span class="sep">•</span><a class="repo-link" href="https://github.com/KazKozDev/book-translator" target="_blank" rel="noopener">GitHub</a>
                 <span class="sep">•</span><button type="button" class="theme-toggle" id="themeToggle" title="Switch to dark mode">🌙</button>
             </div>
@@ -139,7 +142,7 @@
                 </li>
                 <li>
                     <div class="step-title">Set language pair and genre</div>
-                    <p>Choose source, target and genre. Genre guides the translation prompt; it is not a claim that the app can identify genre automatically. In <a href="/settings.html">Settings</a>, assign separate local Ollama models to Translation, Refinement, Prepare and Judge. Keeping the judge separate avoids a model grading its own output.</p>
+                    <p>Choose source, target and genre. Genre guides the translation prompt; it is not a claim that the app can identify genre automatically. In <a href="/settings.html">Settings</a>, assign separate local Ollama models to Translation, Refinement, Verifier, Prepare and Judge. Keeping the graders separate is not tidiness: a model asked to rule on its own edit or its own translation answers by position rather than by content.</p>
                     <p><strong>TranslateGemma</strong> (<code>translategemma:4b</code>, <code>12b</code> or <code>27b</code>) is supported for Start and receives its native translation prompt with the glossary and nearby context included. It is translation-only: use general instruct models for Prepare, Continue and LLM judge tests. Backtranslation is allowed because it is another translation pass.</p>
                 </li>
                 <li>
@@ -159,7 +162,8 @@
                 <li>
                     <div class="step-title">Press CONTINUE — <code>→ 3 CONTINUE</code></div>
                     <p>Refinement is a guarded patch pass, not a free rewrite. It first identifies quoted draft spans and labels the issue (for example mistranslation, omission, terminology or grammar). Python applies only those located replacements; text outside a valid span is copied unchanged.</p>
-                    <p>The proposed patch is compared with the draft against the source twice, with the order swapped. It is kept only when the verifier accepts it both times. Objective terminology and consistency fixes can be applied directly. Style-only and minor subjective suggestions are reported but not applied. A small diff — or no change in a chunk — is normal and preferable to a fluent rewrite that loses meaning.</p>
+                    <p>The proposed patch is compared with the draft against the source twice, with the order swapped. It is kept only when the verifier accepts it both times. <strong>Set the Verifier role in <a href="/settings.html">Settings</a> to a model clearly larger than Refinement:</strong> a model ruling on its own edits answers by which version it was shown first, the two orderings then contradict each other, and every patch is rejected — the pass runs and changes nothing. Fixes that can be checked against the source rather than judged — terminology, consistency, omission and addition — are applied without the vote. Style-only and minor subjective suggestions are reported but not applied. A small diff — or no change in a chunk — is normal and preferable to a fluent rewrite that loses meaning.</p>
+                    <p>The <strong>Refinement</strong> line in Current job says which of the three happened: how many errors were found and patched, how many chunks changed, how many patches the verifier vetoed, and how many review calls returned nothing at all. <a href="/logs.html" target="tolmach-log">Log</a> opens a separate window with the same thing per chunk, live, as the run produces it. Loading a document starts a new log, so the window holds one book at a time; the previous one stays on disk as <code>logs/*.log.1</code>.</p>
                 </li>
                 <li>
                     <div class="step-title">Run Quality Check tests — optional</div>
@@ -314,7 +318,16 @@
         </section>
         </div>
 
-        <p class="footer-note">Ollama calls stay local. Optional GLiNER, LaBSE, Language ID and COMET model weights may be downloaded from Hugging Face on first use; after they are present, checks run against local text and local models.</p>
+        <footer class="footer-note">
+            <strong>Disclaimer</strong>
+            <p>Tolmach is open-source software released under the MIT License. Tolmach does not claim ownership of your source texts or of any outputs generated by the software.</p>
+            <p>You are solely responsible for ensuring that you have the legal right to use, translate, edit, publish, or otherwise process the source text, and for complying with all applicable local laws and regulations, including copyright and intellectual-property laws.</p>
+            <div class="footer-note-compact">
+                <p>Proofreading and editorial review are strongly recommended before any publication or commercial use.</p>
+                <p>For commercial use, you are additionally responsible for reviewing and complying with the licenses of all models, neural components, and third-party dependencies used together with Tolmach.</p>
+                <p>Tolmach is provided "as is", without warranties of any kind. The authors and contributors accept no liability for any use of the software or its output.</p>
+            </div>
+        </footer>
     </div>
 
     <script>

@@ -11,7 +11,6 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
 lib64/
 parts/
 sdist/
@@ -20,9 +19,11 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+.pytest_cache/
 
 # Virtual Environment
 venv/
+.venv/
 ENV/
 .env
 
@@ -31,20 +32,21 @@ uploads/*
 !uploads/.gitkeep
 translations/*
 !translations/.gitkeep
-translations.db
-cache.db
 *.db
 *.sqlite3
 
-# IDE
+# IDE and tooling
 .idea/
 .vscode/
 .qodo/
 *.swp
 *.swo
 .DS_Store
+# The preview config is shared; the local settings file is per-machine.
+.claude/settings.local.json
 
-# Logs
+# Logs. The rotated backups (*.log.1 … *.log.5) go too — logs/* already covers
+# them, and *.log alone would not.
 *.log
 logs/*
 !logs/.gitkeep

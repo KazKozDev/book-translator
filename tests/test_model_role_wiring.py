@@ -18,10 +18,12 @@ class RecordingTranslator:
 
     selected_models = []
     entity_resolver_models = []
+    verifier_models = []
     glossary_builder_calls = 0
 
     def __init__(self, model_name='default', *args, **kwargs):
         self.model_name = model_name
+        self.verifier_model = kwargs.get('verifier_model') or model_name
         self.selected_models.append(model_name)
 
     @staticmethod
@@ -60,6 +62,7 @@ class RecordingTranslator:
         yield {'progress': 100, 'status': 'stage1_completed'}
 
     def translate_stage2(self, translation_id, *args, **kwargs):
+        RecordingTranslator.verifier_models.append(self.verifier_model)
         with sqlite3.connect(app_module.DB_PATH) as conn:
             conn.execute(
                 """UPDATE translations SET status = 'completed', translated_text = ?,
@@ -113,6 +116,7 @@ def test_each_pipeline_role_uses_its_own_requested_model(tmp_path, monkeypatch):
     app_module.init_db()
     RecordingTranslator.selected_models = []
     RecordingTranslator.entity_resolver_models = []
+    RecordingTranslator.verifier_models = []
     RecordingTranslator.glossary_builder_calls = 0
     monkeypatch.setattr(app_module, 'BookTranslator', RecordingTranslator)
 
@@ -173,9 +177,15 @@ def test_each_pipeline_role_uses_its_own_requested_model(tmp_path, monkeypatch):
             'SELECT status FROM translation_terms ORDER BY translation_id DESC LIMIT 1'
         ).fetchone()[0] == 'verified'
 
-    refinement_response = client.post(f'/refine/{translation_id}', json={'model': 'refinement-model'})
+    # Stage 2 has two roles as well: one reviews and patches, another rules on
+    # the patch. They must not collapse into one model — that is the
+    # configuration in which the reviewer grades its own edits.
+    refinement_response = client.post(f'/refine/{translation_id}', json={
+        'model': 'refinement-model', 'verifier_model': 'verifier-model',
+    })
     assert refinement_response.status_code == 200
     refinement_response.get_data()  # Consume the SSE generator so it persists the final text.
+    assert RecordingTranslator.verifier_models == ['verifier-model']
     for test_name in ('llm_judge_stage1', 'llm_judge_stage2', 'llm_judge_final', 'backtranslation_chrf'):
         assert client.post(
             f'/evaluate/{translation_id}/{test_name}',

@@ -1,0 +1,9 @@
+# Test and lint tooling. Not needed to run the app, and deliberately not in
+# requirements.txt, which the launcher installs into every user's environment.
+#
+#   pip install -r requirements-dev.txt
+#
+-r requirements.txt
+pytest==7.4.3
+black==23.12.1
+flake8==6.1.0

@@ -10,8 +10,6 @@ ollama pull gpt-oss:20b
 python translator.py
 ```
 
-![Book Translator screenshot](demo.jpg)
-
 Runs offline · No API keys · Open source
 
 ---
@@ -33,7 +31,7 @@ Runs offline · No API keys · Open source
 
 3. Open [http://localhost:5001](http://localhost:5001), pick source/target language and a model, upload a `.txt` or `.epub` file, open **Names & brief** and press *Propose from the source*, then press Start. Download the result once refinement finishes.
 
-On macOS you can also run `./Launch\ Book-Translator.command`, which frees port `5001`, clears the translation cache, starts the server, and opens the browser for you.
+Or let the launcher do the setup: `python launch.py` creates the virtual environment, installs dependencies, checks that Ollama is running and has the two models the pipeline needs, frees port `5001`, starts the server and opens the browser. Double-clicking `Launch Book-Translator.command` (macOS), `Launch Book-Translator.sh` (Linux) or `Launch Book-Translator.bat` (Windows) runs exactly the same script.
 
 ## Translate books offline, with no API keys
 
@@ -80,7 +78,7 @@ The model-based tests sample five chunks, chosen by risk (names, dialogue, numbe
 
 There is no single score. Adequacy and fluency move in opposite directions when a refinement pass trades meaning for polish, and an average is precisely what hides that. The **Verdict** block shows each axis as draft → final and states the gates in words: an adequacy regression, a judge that prefers the draft on accuracy while preferring the final on readability, a missing name rendering, an unsatisfied glossary constraint.
 
-LaBSE and Language ID are optional document-quality dependencies in `requirements-quality.txt`. The launcher offers to install them; their model weights download once on first use. XCOMET/MQM is intentionally not part of this first layer: run deterministic gates, LaBSE, and Language ID before adding a heavy quality evaluator.
+LaBSE and Language ID are optional document-quality dependencies: `pip install -r requirements-quality.txt`. The launcher does not install them — their model weights download once on first use, and the pin there has to match `requirements-eval.txt`, since both land in one environment. XCOMET/MQM is intentionally not part of this first layer: run deterministic gates, LaBSE, and Language ID before adding a heavy quality evaluator.
 
 ## Configuration
 
@@ -102,14 +100,15 @@ so the shape the model was trained on stays intact. Its own sampling settings
 (`top_k 64`, `top_p 0.95`, stop `<end_of_turn>`) are sent explicitly, at a lower
 temperature than general models get.
 
-It is translation-only, so three things need a different model: Prepare, the
-refinement pass (Continue), and the LLM-judge tests. All three are rejected with
-an explanatory message if TranslateGemma is still selected. Backtranslation is
+It is translation-only, so four things need a different model: Prepare, the
+refinement pass (Continue), the verifier that rules on its patches, and the
+LLM-judge tests. All of them are rejected with an explanatory message if
+TranslateGemma is still selected. Backtranslation is
 allowed — it is just the first pass run in reverse.
 
 ## Requirements
 
-- Python 3.8+
+- Python 3.9+ (the launcher refuses to run on anything older)
 - [Ollama](https://ollama.com/) installed and running locally
 - At least one Ollama model pulled
 
@@ -119,17 +118,21 @@ allowed — it is just the first pass run in reverse.
 - Translation speed is bounded by your local model and hardware — a full book can take hours, not minutes.
 - Refinement now costs three model calls per changed chunk (estimate, then two verification comparisons) instead of one rewrite, so it is slower than the old pass — and often correctly decides to change nothing.
 - The refinement verifier is a local quantised model asked to compare two translations. It is a real gate, not a reliable one: on a measured run it accepted an edit that replaced a correct reading with a wrong one, and on the same text at a different temperature it rejected it. Treat a kept patch as "not obviously worse", not as "verified".
+- The verifier is its own role in Settings and wants a model clearly larger than the one doing the refining. Point both at the same model and it grades its own edits: it answers from the order the two versions appear in, the two orderings disagree, and the pass rejects nearly every patch while looking like it ran. Measured on one chapter with `gemma4:12b` reviewing — same model verifying: two major mistranslations found, both patched, verdict `patched/draft`, output byte-identical to the draft; `qwen3.6:27b-mlx` verifying: same two fixes, verdict `patched/patched`, kept.
 - Named-entity consistency matches on the stem so inflected forms count, which means it cannot tell two renderings apart when they differ only in the ending (Дурсль vs Дурсли). Such pairs are listed as needing a human eye rather than reported as clean.
 - Translation quality hasn't been measured against a benchmark.
-- The backend is a single Flask module (`translator.py`). `pytest tests/` covers the parts that need no model: proper-noun harvesting, span validation and patching, and the document-level checks.
+- The backend is a single Flask module (`translator.py`). `pytest tests/` (from `requirements-dev.txt`) covers the parts that need no model: proper-noun harvesting, span validation and patching, and the document-level checks.
 
 <details>
 <summary>Project layout</summary>
 
 - `translator.py` — Flask app, translation pipeline, quality tests, SQLite persistence, caching, EPUB export, health/metrics endpoints
+- `launch.py` — the cross-platform bootstrap behind all three launcher files; standard library only, so it runs before the virtual environment exists
+- `banner.py` — the startup logo, shared by the launcher and the server so both print the same one
 - `static/index.html` — browser UI for uploads, model/genre selection, the names editor, progress tracking, the Quality Check panel, and downloads
-- `tests/` — the model-free half of the pipeline: `python -m pytest tests/`
-- `uploads/`, `translations/`, `logs/` — runtime directories for uploaded files, exported output, and rotating logs
+- `static/logs.html` — the live log console, opened in its own window from the Log link
+- `tests/` — the model-free half of the pipeline: `pip install -r requirements-dev.txt && python -m pytest tests/`
+- `uploads/`, `translations/`, `logs/` — runtime directories for uploaded files, exported output, and rotating logs. Loading a document rolls the logs over, so `logs/*.log` is the current book and `logs/*.log.1` the one before it; the Log window streams them live
 - `cache.db` — cached chunk translations; `translations.db` — job history and status
 
 </details>

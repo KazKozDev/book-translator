@@ -1,5 +1,12 @@
-# Optional heavy document-quality models. They download their weights on the
-# first run of the corresponding Quality Check button; they are intentionally
-# separate from the translator's small core environment.
-sentence-transformers==3.4.1
+# Optional heavy document-quality models (LaBSE alignment, language ID). They
+# download their weights on the first run of the corresponding Quality Check
+# button; they are intentionally separate from the translator's small core
+# environment.
+#
+# sentence-transformers is not repeated here — it is a core dependency, because
+# Prepare uses it to cluster source variants.
+#
+# This pin and the one in requirements-eval.txt must stay identical: the two
+# files are installed into the same environment, and pip silently keeps
+# whichever was installed last.
 transformers==4.57.6

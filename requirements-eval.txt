@@ -5,4 +5,13 @@
 #   pip install -r requirements-eval.txt
 #
 unbabel-comet==2.2.2
-transformers<5.0
+# Exactly the pin in requirements-quality.txt, not a range: both files end up in
+# one environment, and `transformers<5.0` resolving to something newer than the
+# quality pin means whichever was installed last wins.
+#
+# Known problem with this pin: COMET-Kiwi has been observed failing here with
+# "XLMRobertaTokenizer has no attribute build_inputs_with_special_tokens",
+# which is unbabel-comet 2.2.2 calling a tokenizer method this transformers
+# release no longer exposes. Unverified, but an older transformers is the first
+# thing to try if that test fails.
+transformers==4.57.6

@@ -1,7 +1,7 @@
 import json
 import requests
 import time
-from typing import List, Dict, Optional, Callable, Tuple
+from typing import List, Dict, Optional, Callable, Set, Tuple
 import os
 # COMET pins SentencePiece below 0.2. Its generated protobuf bindings require
 # Python parsing mode; set this before any library can import SentencePiece.
@@ -59,32 +59,10 @@ LANG_NAMES = {
 # and the LLM-judge tests have to run on a general instruct model instead.
 TRANSLATEGEMMA_TEMPERATURE = 0.3  # A dedicated MT model wants near-greedy decoding.
 
-TERMINAL_LOGO = """████████╗ ██████╗ ██╗     ███╗   ███╗ █████╗  ██████╗██╗  ██╗
-╚══██╔══╝██╔═══██╗██║     ████╗ ████║██╔══██╗██╔════╝██║  ██║
-   ██║   ██║   ██║██║     ██╔████╔██║███████║██║     ███████║
-   ██║   ██║   ██║██║     ██║╚██╔╝██║██╔══██║██║     ██╔══██║
-   ██║   ╚██████╔╝███████╗██║ ╚═╝ ██║██║  ██║╚██████╗██║  ██║
-   ╚═╝    ╚═════╝╚══════╝╚═╝     ╚═╝╚═╝  ╚═╝ ╚═════╝╚══════╝"""
-
-
-def print_terminal_banner() -> None:
-    """Print the same airy Tolmach banner as the macOS launcher.
-
-    Direct Python launches need an identifiable startup surface too.  The
-    launcher sets ``TOLMACH_BANNER_PRINTED`` after it prints its own banner,
-    so a normal ``Launch Book-Translator.command`` run remains uncluttered.
-    """
-    if os.environ.get('TOLMACH_BANNER_PRINTED'):
-        return
-
-    use_color = sys.stdout.isatty() and not os.environ.get('NO_COLOR')
-    accent = '\033[1m\033[38;2;91;124;153m' if use_color else ''
-    cream = '\033[1m\033[38;2;240;214;170m' if use_color else ''
-    reset = '\033[0m' if use_color else ''
-    subtitle = 'B O O K   T R A N S L A T O R  v3.0'
-    padding = ' ' * max(0, (61 - len(subtitle)) // 2)
-    print(f'\n\n\n{accent}{TERMINAL_LOGO}{reset}')
-    print(f'\n{cream}{padding}{subtitle}{reset}\n\n')
+# The banner lives in its own stdlib-only module so the launcher — which runs
+# before the virtual environment exists and cannot import this file — shows the
+# same logo from the same source.
+from banner import TERMINAL_LOGO, print_terminal_banner  # noqa: E402
 
 
 def is_translategemma(model_name: Optional[str]) -> bool:
@@ -94,7 +72,10 @@ def is_translategemma(model_name: Optional[str]) -> bool:
 UPLOAD_FOLDER = 'uploads'
 TRANSLATIONS_FOLDER = 'translations'
 STATIC_FOLDER = 'static'
-LOG_FOLDER = 'logs'
+# Overridable so that a test run does not write into the log a person is
+# watching: three warnings about "translation 1" from a fixture, landing in the
+# live console between two real chunks, is worse than no log at all.
+LOG_FOLDER = os.environ.get('TOLMACH_LOG_DIR', 'logs')
 DB_PATH = 'translations.db'
 CACHE_DB_PATH = 'cache.db'
 
@@ -143,12 +124,35 @@ class AppLogger:
             '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
         )
         handler.setFormatter(formatter)
-        
+
         logger.addHandler(handler)
         return logger
 
+    @property
+    def loggers(self) -> List[logging.Logger]:
+        return [self.app_logger, self.translation_logger, self.api_logger]
+
+    def rotate(self) -> List[str]:
+        """Start fresh log files, keeping the old ones as ``*.log.1``.
+
+        Used when a new document is loaded: one book per log file makes the
+        console readable, and rolling over rather than truncating means the
+        previous run is still on disk to look at afterwards. The handlers keep
+        their existing backupCount, so this cannot grow without bound.
+        """
+        rotated = []
+        for log in self.loggers:
+            for handler in log.handlers:
+                if isinstance(handler, RotatingFileHandler):
+                    try:
+                        handler.doRollover()
+                        rotated.append(os.path.basename(handler.baseFilename))
+                    except OSError as e:
+                        self.app_logger.error(f"Could not roll over {handler.baseFilename}: {e}")
+        return rotated
+
 # Initialize logger
-logger = AppLogger()
+logger = AppLogger(log_dir=LOG_FOLDER)
 
 class PlainAccessFormatter(logging.Formatter):
     """Strip the ANSI coloring werkzeug puts on its own per-request access log
@@ -491,6 +495,38 @@ class TerminologyManager:
         payload = json.dumps(canonical, ensure_ascii=False, separators=(",", ":"))
         return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
 
+# Which translations this process is streaming right now.
+#
+# The DB status alone cannot answer "is this running?". A client that closes
+# the stream — a shut tab, a dropped network, a killed curl — leaves the row
+# saying 'in_progress' with nobody writing to it, and a server that was
+# restarted mid-run leaves the same thing behind with no chance to clean up.
+# Both used to make Continue answer "this translation is already running"
+# forever, with the database needing an edit by hand to recover.
+ACTIVE_RUNS: Set[int] = set()
+ACTIVE_RUNS_LOCK = threading.Lock()
+
+
+def claim_run(translation_id: int):
+    with ACTIVE_RUNS_LOCK:
+        ACTIVE_RUNS.add(translation_id)
+
+
+def release_run(translation_id: int):
+    with ACTIVE_RUNS_LOCK:
+        ACTIVE_RUNS.discard(translation_id)
+
+
+def is_run_active(translation_id: int) -> bool:
+    """Whether this process is actually streaming that translation.
+
+    Restart-safe by construction: a fresh process holds no claims, so every
+    'in_progress' row it inherits is correctly seen as abandoned.
+    """
+    with ACTIVE_RUNS_LOCK:
+        return translation_id in ACTIVE_RUNS
+
+
 # Part of the Stage 2 cache key, so that changing what the refinement pass
 # DOES invalidates results produced by the old behaviour. The inputs alone are
 # not enough: same chunk, same glossary, same brief, same model — and a
@@ -498,7 +534,9 @@ class TerminologyManager:
 # estimate/patch/verify behaviour changes in a way that would alter output.
 #   v2: single "review and improve" rewrite replaced by estimate/patch/verify
 #   v3: style-only and minor subjective errors reported but no longer applied
-STAGE2_PIPELINE_VERSION = 'v3'
+#   v4: omission/addition patches skip the verifier, which now runs on its own
+#       model rather than on the one that wrote the draft
+STAGE2_PIPELINE_VERSION = 'v4'
 
 
 def context_fingerprint(text: str) -> str:
@@ -770,8 +808,21 @@ def build_epub_from_chapters(chapters: List[str], title: str, author: str) -> by
 
 
 class BookTranslator:
-    def __init__(self, model_name: str = "llama3.3:70b-instruct-q2_K", chunk_size: int = 1200):
+    def __init__(
+        self,
+        model_name: str = "llama3.3:70b-instruct-q2_K",
+        chunk_size: int = 1200,
+        verifier_model: Optional[str] = None,
+    ):
         self.model_name = model_name
+        # Who rules on whether a Stage 2 patch is an improvement. Defaults to
+        # this same model, which is the arrangement that made the refinement
+        # pass a no-op: a model grading its own edit is not a check, and the
+        # A/B verdict it gives flips with the order the two versions are shown
+        # in, so "must win both orderings" was effectively a coin toss the
+        # patch had to win twice. Set this to a model clearly larger than the
+        # reviewer and the double-blind vote starts measuring accuracy again.
+        self.verifier_model = verifier_model or model_name
         self.api_url = "http://localhost:11434/api/generate"
         self.chunk_size = chunk_size
         self.session = requests.Session()
@@ -781,9 +832,25 @@ class BookTranslator:
             pool_maxsize=10
         ))
         self.terminology = TerminologyManager()
+        self._verifier: Optional['BookTranslator'] = None
 
         # Note: Ollama should be running separately
         # Don't try to start it automatically
+
+    @property
+    def verifier(self) -> 'BookTranslator':
+        """The translator that runs the Stage 2 verdict, built on first use.
+
+        Returns ``self`` when no separate verifier was chosen, so nothing is
+        constructed for a run that does not need it.
+        """
+        if self.verifier_model == self.model_name:
+            return self
+        if self._verifier is None:
+            self._verifier = BookTranslator(
+                model_name=self.verifier_model, chunk_size=self.chunk_size,
+            )
+        return self._verifier
 
     def split_into_chunks(self, text: str) -> list:
         """Split text into smaller chunks for translation.
@@ -1663,6 +1730,7 @@ Rules:
                     SET total_chunks = ?, status = 'in_progress', genre = ?
                     WHERE id = ?
                 ''', (total_chunks, genre, translation_id))
+            claim_run(translation_id)
 
             # STAGE 1: Primary translation with context
             logger.translation_logger.info("Stage 1: Primary LLM translation")
@@ -1810,6 +1878,15 @@ Rules:
                 },
             }
 
+        except GeneratorExit:
+            # The client stopped reading the stream — a closed tab, a dropped
+            # connection. The draft is incomplete and no longer being written,
+            # so the row must not stay 'in_progress' claiming otherwise.
+            self._abandon_run(
+                translation_id, 'error',
+                'Interrupted before the draft was finished — press Start again.',
+            )
+            raise
         except Exception as e:
             error_msg = f"Translation failed: {str(e)}"
             logger.translation_logger.error(error_msg)
@@ -1825,8 +1902,34 @@ Rules:
                 ''', (str(e), translation_id))
             raise
         finally:
+            release_run(translation_id)
             translation_time = time.time() - start_time
             monitor.record_translation_attempt(success, translation_time)
+
+    @staticmethod
+    def _abandon_run(translation_id: int, status: str, message: Optional[str] = None):
+        """Take a row out of 'in_progress' after the stream was cut.
+
+        Only ever touches a row that still says 'in_progress': if the stage had
+        already written its own final status, that status is the truth.
+        """
+        try:
+            with sqlite3.connect(DB_PATH) as conn:
+                conn.execute(
+                    '''UPDATE translations
+                       SET status = ?, error_message = ?, updated_at = CURRENT_TIMESTAMP
+                       WHERE id = ? AND status = 'in_progress' ''',
+                    (status, message, translation_id),
+                )
+        except Exception as e:  # A failure here must not mask the interruption.
+            logger.translation_logger.error(
+                "Could not reset the status of interrupted translation %s: %s",
+                translation_id, e,
+            )
+        logger.translation_logger.warning(
+            "Translation %s was interrupted by the client — status reset to '%s' "
+            "so it can be run again", translation_id, status,
+        )
 
     def translate_stage2(
         self,
@@ -1866,8 +1969,28 @@ Rules:
             used_terms = set()
             final_violation_count = 0
             errors_found = errors_applied = patches_rejected = 0
+            # "Nothing changed" has three different causes — a clean draft, a
+            # vetoed patch, a review call that never answered — and they used
+            # to look identical from outside. Counted separately, and reported
+            # per chunk in the log and per stream update to the UI, because
+            # every future decision about this pass depends on knowing which
+            # of the three is happening.
+            chunks_reviewed = chunks_changed = review_failures = 0
 
-            logger.translation_logger.info(f"Starting stage 2 for translation {translation_id} with {total_chunks} chunks (genre: {genre})")
+            logger.translation_logger.info(
+                "Starting stage 2 for translation %s with %s chunks (genre: %s, "
+                "reviewer: %s, verifier: %s)",
+                translation_id, total_chunks, genre, self.model_name, self.verifier_model,
+            )
+            if self.verifier_model == self.model_name:
+                logger.translation_logger.warning(
+                    "Stage 2 verifier is the reviewing model (%s) — it will be "
+                    "grading its own edits, and its A/B verdict tends to follow "
+                    "the order the versions are shown in rather than their "
+                    "content, which rejects most patches. Pick a larger Verifier "
+                    "model in Settings.",
+                    self.model_name,
+                )
 
             with sqlite3.connect(DB_PATH) as conn:
                 conn.execute('''
@@ -1875,6 +1998,7 @@ Rules:
                     SET status = 'in_progress', genre = ?, updated_at = CURRENT_TIMESTAMP
                     WHERE id = ?
                 ''', (genre, translation_id))
+            claim_run(translation_id)
 
             # STAGE 2: Reflection and improvement
             logger.translation_logger.info("Stage 2: Reflection and improvement")
@@ -1938,6 +2062,18 @@ Rules:
                         verified = stage2_details.get('verified')
                         if isinstance(verified, dict) and not verified.get('accepted'):
                             patches_rejected += 1
+                        chunks_reviewed += 1
+                        if stage2_warning:
+                            review_failures += 1
+                        if final_translation != draft_chunk:
+                            chunks_changed += 1
+                        logger.translation_logger.info(
+                            "Stage 2 chunk %s/%s: %s",
+                            i, total_chunks, self._describe_stage2_chunk(
+                                stage2_details, stage2_warning,
+                                changed=final_translation != draft_chunk,
+                            ),
+                        )
 
                         # Don't cache a fallback result — a draft cached as if
                         # it were a real refinement would keep being reused on
@@ -2002,6 +2138,11 @@ Rules:
                             'errors_found': errors_found,
                             'errors_applied': errors_applied,
                             'patches_rejected': patches_rejected,
+                            'chunks_reviewed': chunks_reviewed,
+                            'chunks_changed': chunks_changed,
+                            'review_failures': review_failures,
+                            'verifier_model': self.verifier_model,
+                            'review_model': self.model_name,
                         },
                     }
 
@@ -2059,9 +2200,27 @@ Rules:
                     'errors_found': errors_found,
                     'errors_applied': errors_applied,
                     'patches_rejected': patches_rejected,
+                    'chunks_reviewed': chunks_reviewed,
+                    'chunks_changed': chunks_changed,
+                    'review_failures': review_failures,
+                    'verifier_model': self.verifier_model,
+                    'review_model': self.model_name,
                 },
             }
+            logger.translation_logger.info(
+                "Stage 2 finished for translation %s: %s of %s reviewed chunk(s) "
+                "changed, %s error(s) found, %s patched, %s patch(es) vetoed by "
+                "verifier %s, %s review call(s) gave no answer",
+                translation_id, chunks_changed, chunks_reviewed, errors_found,
+                errors_applied, patches_rejected, self.verifier_model, review_failures,
+            )
 
+        except GeneratorExit:
+            # Unlike Stage 1, an interrupted refinement leaves a perfectly good
+            # draft behind: back to 'stage1_completed', which is Continue
+            # enabled and the chunks already refined kept in the cache.
+            self._abandon_run(translation_id, 'stage1_completed')
+            raise
         except Exception as e:
             error_msg = f"Refinement failed: {str(e)}"
             logger.translation_logger.error(error_msg)
@@ -2077,6 +2236,7 @@ Rules:
                 ''', (str(e), translation_id))
             raise
         finally:
+            release_run(translation_id)
             translation_time = time.time() - start_time
             monitor.record_translation_attempt(success, translation_time)
 
@@ -2355,9 +2515,17 @@ Return ONLY the translation without comments."""
     }
     SEVERITIES = ('critical', 'major', 'minor')
     # Categories a glossary or a proper-noun record settles on its own: if
-    # the required rendering is absent, that is a fact, not an opinion, so a
-    # patch containing only these does not need the judge's approval.
+    # the required rendering is absent, that is a fact, not an opinion. These
+    # are also the categories whose severity does not matter — a missing
+    # required rendering is worth fixing at any label the reviewer put on it.
     OBJECTIVE_ERROR_TYPES = {'terminology', 'consistency'}
+    # What the verifier is not asked about. Whether a sentence of the source
+    # is missing from the translation, or a clause appears that the source
+    # never said, is settled by reading the two texts — the A/B "which reads
+    # more faithfully" vote adds nothing but a chance to veto a real fix. The
+    # judge is kept for mistranslation and grammar, where the reported error
+    # is a claim about meaning and an opinion is what is actually needed.
+    JUDGE_EXEMPT_ERROR_TYPES = OBJECTIVE_ERROR_TYPES | {'omission', 'addition'}
     # Categories worth editing the text for. 'style' is not among them: this
     # pass exists because rewriting for style is what cost the pipeline its
     # accuracy in the first place, and an edit made on taste has no way to be
@@ -2372,6 +2540,12 @@ Return ONLY the translation without comments."""
     # is mostly the judge preferring a synonym.
     ACTIONABLE_SEVERITIES = {'critical', 'major'}
     MAX_ESTIMATE_SPANS = 12
+    # The verifier is meant to be a larger model than the reviewer, and it is
+    # shown the source plus two full versions of the chunk. The shared 180s is
+    # a timeout for per-chunk translation, not for that; a verifier that runs
+    # out of patience silently keeps the draft, which is exactly the failure
+    # this pass is hardest to notice.
+    VERIFY_READ_TIMEOUT = 600
 
     @classmethod
     def is_actionable_error(cls, error: Dict) -> bool:
@@ -2559,9 +2733,19 @@ Rules:
         twice with the two versions swapped, because a single ordering
         measures position bias as much as quality; the patch is kept only if
         it wins both times.
+
+        Runs on ``self.verifier``, which is a separate model whenever one was
+        chosen. Both halves of the vote on the model that produced the edit is
+        self-assessment, and on a quantised 12B it answers by position rather
+        than by content, so the two orderings disagree and every patch is
+        vetoed. The strict rule stays: it is the only thing standing between
+        this pass and its old habit of trading meaning for polish. What
+        changes is that a model big enough to be consistent is the one
+        applying it.
         """
         source_name = LANG_NAMES.get(source_lang, source_lang)
         target_name = LANG_NAMES.get(target_lang, target_lang)
+        verifier = self.verifier
         verdicts = []
 
         for patched_is_a in (True, False):
@@ -2580,8 +2764,17 @@ VERSION B:
 Which version conveys the source more faithfully — no meaning changed, nothing left out, nothing invented? Ignore which one sounds more elegant; accuracy is the only question.
 
 Respond with EXACTLY one word: A, B, or TIE."""
-            raw = self._call_model(prompt, temperature=0.0)
-            verdict = (raw or '').strip().upper()
+            raw = verifier._call_model(
+                prompt, temperature=0.0, read_timeout=self.VERIFY_READ_TIMEOUT,
+            )
+            if raw is None:
+                # Distinct from a tie: the model never answered. Recorded
+                # under its own name so a run of these reads as "the verifier
+                # is too slow for this chunk size" rather than as the verifier
+                # disagreeing with the reviewer.
+                verdicts.append('unavailable')
+                continue
+            verdict = raw.strip().upper()
             if verdict.startswith('A'):
                 verdicts.append('patched' if patched_is_a else 'draft')
             elif verdict.startswith('B'):
@@ -2590,7 +2783,44 @@ Respond with EXACTLY one word: A, B, or TIE."""
                 verdicts.append('tie')
 
         accepted = verdicts == ['patched', 'patched']
-        return accepted, {'verdicts': verdicts, 'accepted': accepted}
+        return accepted, {
+            'verdicts': verdicts,
+            'accepted': accepted,
+            'model': verifier.model_name,
+        }
+
+    @staticmethod
+    def _describe_stage2_chunk(
+        details: Dict, warning: Optional[str], changed: bool,
+    ) -> str:
+        """One line saying what this pass did to one chunk, for the log.
+
+        Written out in full — how many errors, how many were actionable, how
+        many were patched, what the verifier said and which model said it —
+        because "0 applied" on its own cannot distinguish a clean draft from a
+        vetoed fix from a review call that timed out, and those three want
+        three different responses from whoever is reading the log.
+        """
+        parts = [
+            f"{details.get('errors_found', 0)} found",
+            f"{details.get('errors_actionable', 0)} actionable",
+            f"{details.get('errors_applied', 0)} patched",
+        ]
+        verified = details.get('verified')
+        if warning:
+            parts.append(f'review pass gave no answer ({warning})')
+        elif verified == 'skipped_objective':
+            parts.append('verifier skipped — every fix checkable against the source')
+        elif isinstance(verified, dict):
+            parts.append('verifier {} voted {} → {}'.format(
+                verified.get('model') or 'unknown',
+                '/'.join(verified.get('verdicts') or ['no verdict']),
+                'accepted' if verified.get('accepted') else 'rejected',
+            ))
+        else:
+            parts.append('verifier not needed')
+        parts.append('text changed' if changed else 'draft kept')
+        return ' · '.join(parts)
 
     def stage2_reflection_improvement(
         self,
@@ -2627,6 +2857,8 @@ Respond with EXACTLY one word: A, B, or TIE."""
             'verified': None,
             'by_severity': dict(Counter(error['severity'] for error in errors)),
             'by_type': dict(Counter(error['type'] for error in errors)),
+            'review_model': self.model_name,
+            'verifier_model': self.verifier_model,
         }
         if warning or not actionable:
             return draft_translation, warning, details
@@ -2636,11 +2868,12 @@ Respond with EXACTLY one word: A, B, or TIE."""
         if not applied or patched == draft_translation:
             return draft_translation, None, details
 
-        # A patch made only of glossary and consistency fixes is checkable
-        # without an opinion, so it skips the judge — which also keeps the
-        # one class of fix the pipeline is most confident about from being
-        # vetoed by a noisy verdict.
-        if all(error['type'] in self.OBJECTIVE_ERROR_TYPES for error in applied):
+        # A patch made only of fixes that can be checked against the source
+        # skips the judge: a required rendering is either present or not, and
+        # a sentence of the source is either translated or missing. Asking a
+        # "which reads more faithfully" vote about those buys nothing and can
+        # only veto a fix the pipeline is already confident about.
+        if all(error['type'] in self.JUDGE_EXEMPT_ERROR_TYPES for error in applied):
             details['verified'] = 'skipped_objective'
             return patched, None, details
 
@@ -3775,7 +4008,10 @@ def check_ollama():
     # Managing locally saved tasks must remain possible even when Ollama is
     # stopped, so a user can clear old or failed translations.
     exempt_endpoints = {
-        'health_check', 'serve_frontend', 'serve_static', 'delete_translation'
+        'health_check', 'serve_frontend', 'serve_static', 'delete_translation',
+        # The log console is most wanted precisely when the pipeline is
+        # failing, and "Ollama is down" is one of the things it exists to show.
+        'stream_logs', 'reset_logs', 'rotate_logs',
     }
     if request.endpoint not in exempt_endpoints:
         try:
@@ -4011,10 +4247,13 @@ def prepare():
             'source_chars': len(text),
         })
     finally:
+        # Prepare and Start are given the same upload under the same name, so
+        # the second one to finish finds the temp file already gone. That is
+        # the normal path, not an error worth a line in the log.
         try:
-            if filepath:
+            if filepath and os.path.exists(filepath):
                 os.remove(filepath)
-        except Exception as e:
+        except OSError as e:
             logger.app_logger.error(f"Failed to cleanup uploaded file: {str(e)}")
 
 
@@ -4125,10 +4364,13 @@ def translate():
         logger.app_logger.error(traceback.format_exc())
         return jsonify({'error': str(e)}), 500
     finally:
+        # Prepare and Start are given the same upload under the same name, so
+        # the second one to finish finds the temp file already gone. That is
+        # the normal path, not an error worth a line in the log.
         try:
-            if filepath:
+            if filepath and os.path.exists(filepath):
                 os.remove(filepath)
-        except Exception as e:
+        except OSError as e:
             logger.app_logger.error(f"Failed to cleanup uploaded file: {str(e)}")
 
 
@@ -4142,9 +4384,15 @@ def refine(translation_id):
     caller may instead pass {"model": "..."} to refine with a different
     model than the draft was produced with — e.g. the user changed the
     model selector after Start but before Continue.
+
+    {"verifier_model": "..."} chooses who rules on the patches. It is a
+    separate role because the reviewing model grading its own edits is not a
+    check: its A/B verdict follows the order the versions are shown in, the
+    two orderings disagree, and every patch is then vetoed.
     """
     payload = request.get_json(silent=True) or {}
     override_model = (payload.get('model') or '').strip()
+    verifier_model = (payload.get('verifier_model') or '').strip()
 
     with sqlite3.connect(DB_PATH) as conn:
         conn.row_factory = sqlite3.Row
@@ -4157,7 +4405,16 @@ def refine(translation_id):
         if not row['draft_chunks']:
             return jsonify({'error': 'No draft translation to refine yet — run Start first'}), 400
         if row['status'] == 'in_progress':
-            return jsonify({'error': 'This translation is already running'}), 409
+            # Only this process's own live streams count as running. A row left
+            # 'in_progress' by a closed tab or by a server restart is a leftover,
+            # and refusing to run it again locked the draft out permanently.
+            if is_run_active(translation_id):
+                return jsonify({'error': 'This translation is already running'}), 409
+            logger.translation_logger.warning(
+                "Translation %s was left 'in_progress' by an earlier run that is "
+                "no longer streaming — starting refinement over the saved draft",
+                translation_id,
+            )
 
         term_rows = conn.execute(
             '''SELECT source_term, target_term, enforcement_mode
@@ -4171,14 +4428,17 @@ def refine(translation_id):
     ])
 
     refine_model = override_model or row['model']
-    if is_translategemma(refine_model):
-        return jsonify({'error': (
-            'TranslateGemma is translation-only and cannot run the refinement '
-            'pass. Pick a general instruct model in the Model selector, then '
-            'press Continue.'
-        )}), 400
+    for name in (refine_model, verifier_model):
+        if name and is_translategemma(name):
+            return jsonify({'error': (
+                'TranslateGemma is translation-only and cannot run the refinement '
+                'pass or rule on its patches. Pick a general instruct model in the '
+                'Model selector, then press Continue.'
+            )}), 400
 
-    translator = BookTranslator(model_name=refine_model)
+    translator = BookTranslator(
+        model_name=refine_model, verifier_model=verifier_model or None,
+    )
 
     def generate():
         try:
@@ -4191,6 +4451,10 @@ def refine(translation_id):
                     'total': len(terminology.terms),
                     'used': 0,
                     'violations': 0,
+                },
+                'refinement': {
+                    'review_model': translator.model_name,
+                    'verifier_model': translator.verifier_model,
                 },
             }
             yield f"data: {json.dumps(starting, ensure_ascii=False)}\n\n"
@@ -4215,6 +4479,250 @@ def refine(translation_id):
         headers={
             'Cache-Control': 'no-cache',
             'X-Accel-Buffering': 'no',
+        },
+    )
+
+
+# ------------------------------------------------------------------
+# Live log console.
+#
+# Everything this pipeline decides is already written to logs/, but a file you
+# have to remember to tail is a file nobody reads while a book is running. The
+# three logs are followed and merged into one stream so the console can show
+# what the run is doing as it happens.
+# ------------------------------------------------------------------
+
+LOG_STREAM_SOURCES = {
+    'translations': 'translations.log',
+    'api': 'api.log',
+    'app': 'app.log',
+}
+# How often a followed file is checked for new lines. Log lines arrive seconds
+# apart at best — a model call is the fast case at ~2s — so polling faster than
+# this only burns CPU on an already busy machine.
+LOG_STREAM_POLL_SECONDS = 0.5
+# How much history a newly opened console shows before it starts following.
+LOG_STREAM_BACKLOG_LINES = 300
+LOG_STREAM_BACKLOG_BYTES = 256 * 1024
+# A comment frame often enough that an idle stream is not mistaken for a dead
+# one, by the browser or by the person watching it.
+LOG_STREAM_KEEPALIVE_SECONDS = 15
+# "2026-07-27 07:42:27,388 - translation_logger - INFO - Stage 2 …". Lines that
+# do not match are continuations — a logged prompt is many lines long — and are
+# passed through attached to whatever came before them.
+LOG_LINE_RE = re.compile(
+    r'^(?P<time>\d{4}-\d\d-\d\d \d\d:\d\d:\d\d[,.]\d+) - (?P<logger>\S+) - '
+    r'(?P<level>[A-Z]+) - (?P<message>.*)$'
+)
+
+
+class LogTail:
+    """One log file, followed like ``tail -f``.
+
+    Opened in binary and decoded per read, because the files are being written
+    to while they are read and a multi-byte character can be split across two
+    reads. Reopens itself when the file is rotated or truncated — these logs
+    are on a RotatingFileHandler, so that happens on its own schedule.
+    """
+
+    def __init__(self, source: str, path: str):
+        self.source = source
+        self.path = path
+        self.handle = None
+        self.inode = None
+        self.pending = b''
+
+    def _open(self, at_end: bool = True) -> bool:
+        try:
+            self.handle = open(self.path, 'rb')
+        except OSError:
+            self.handle = None
+            return False
+        self.inode = os.fstat(self.handle.fileno()).st_ino
+        self.pending = b''
+        if at_end:
+            self.handle.seek(0, os.SEEK_END)
+        return True
+
+    def backlog(self, lines: int) -> List[Dict]:
+        """The tail of the file as it stands, then leave the handle at its end."""
+        if not self._open(at_end=False):
+            return []
+        size = os.fstat(self.handle.fileno()).st_size
+        window = min(size, LOG_STREAM_BACKLOG_BYTES)
+        self.handle.seek(size - window)
+        chunk = self.handle.read().decode('utf-8', errors='replace').splitlines()
+        # A window that starts mid-file almost certainly starts mid-line.
+        if window < size and chunk:
+            chunk = chunk[1:]
+        return [self._entry(line) for line in chunk[-lines:] if line.strip()]
+
+    def read_new(self) -> List[Dict]:
+        if self.handle is None and not self._open():
+            return []
+        try:
+            stat = os.stat(self.path)
+        except OSError:
+            return []
+        if stat.st_ino != self.inode or stat.st_size < self.handle.tell():
+            # Rotated or truncated: the lines we have not read are gone with
+            # the old file, so pick the new one up from its beginning.
+            self.handle.close()
+            if not self._open(at_end=False):
+                return []
+        data = self.pending + self.handle.read()
+        if not data:
+            return []
+        *complete, self.pending = data.split(b'\n')
+        return [
+            self._entry(line.decode('utf-8', errors='replace').rstrip('\r'))
+            for line in complete if line.strip()
+        ]
+
+    def _entry(self, line: str) -> Dict:
+        match = LOG_LINE_RE.match(line)
+        if not match:
+            return {'source': self.source, 'level': 'CONT', 'time': '', 'message': line}
+        return {
+            'source': self.source,
+            'level': match.group('level'),
+            'time': match.group('time'),
+            'message': match.group('message'),
+        }
+
+    def close(self):
+        if self.handle is not None:
+            self.handle.close()
+            self.handle = None
+
+
+@app.route('/logs/rotate', methods=['POST'])
+def rotate_logs():
+    """Begin new log files, keeping the previous ones as ``*.log.1``.
+
+    Called when a new document is loaded, so the console shows one book at a
+    time. Refused while a run is streaming: cutting a book's log in half
+    midway is exactly what makes a log useless afterwards.
+    """
+    if ACTIVE_RUNS:
+        return jsonify({
+            'error': 'A translation is running — its log is still being written.',
+            'rotated': [],
+        }), 409
+
+    payload = request.get_json(silent=True) or {}
+    # The document name comes from the browser and is about to become a log
+    # line, so it is flattened first: a name containing a newline could
+    # otherwise forge an entry that looks like the pipeline's own.
+    document = re.sub(r'\s+', ' ', str(payload.get('document') or '')).strip()[:120]
+
+    rotated = logger.rotate()
+    logger.app_logger.info(
+        "New document loaded%s — previous log kept as *.log.1",
+        f": {document}" if document else '',
+    )
+    return jsonify({'rotated': rotated, 'document': document})
+
+
+@app.route('/logs/reset', methods=['POST'])
+def reset_logs():
+    """Empty the three log files, so the next run starts on a clean console.
+
+    Truncates in place rather than deleting: the handlers hold these files
+    open, and a deleted file would leave them writing to nothing until the
+    server was restarted. Only the three known names under logs/ are touched —
+    nothing about the target comes from the request.
+
+    Truncating a file another handle has open is only safe because logging
+    opens its files in append mode: every write goes to the current end of the
+    file rather than to a remembered offset. Measured — 244 KB of log, then a
+    truncate, then one line: 27 bytes and no padding. A handle opened without
+    O_APPEND (a shell's ``> file``) behaves the opposite way and leaves the gap
+    filled with NUL bytes.
+    """
+    emptied, failed = [], {}
+    for filename in LOG_STREAM_SOURCES.values():
+        path = os.path.join(LOG_FOLDER, filename)
+        try:
+            with open(path, 'w', encoding='utf-8'):
+                pass
+            emptied.append(filename)
+        except OSError as e:
+            failed[filename] = str(e)
+
+    # First line of the new file, so the console is never blank and the reset
+    # itself is on the record.
+    logger.app_logger.info("Log files emptied from the log console: %s", ', '.join(emptied) or 'none')
+    if failed:
+        logger.app_logger.error(f"Could not empty log file(s): {failed}")
+        return jsonify({'emptied': emptied, 'failed': failed}), 500
+    return jsonify({'emptied': emptied})
+
+
+@app.route('/logs/stream')
+def stream_logs():
+    """Server-sent events: the three log files, merged, as they are written.
+
+    ``?tail=N`` sets how many past lines to send first (0 for none).
+    ``?since=<timestamp>`` sends only lines newer than one already seen, which
+    is what a reconnecting console passes. Without it, an EventSource that
+    reconnects — and it reconnects on its own, after any hiccup — is served the
+    whole backlog again, and the console jumps back in time as if it had been
+    reset.
+    """
+    try:
+        backlog_lines = max(0, min(2000, int(request.args.get('tail', LOG_STREAM_BACKLOG_LINES))))
+    except (TypeError, ValueError):
+        backlog_lines = LOG_STREAM_BACKLOG_LINES
+    since = (request.args.get('since') or '').strip()
+
+    def generate():
+        tails = [
+            LogTail(source, os.path.join(LOG_FOLDER, filename))
+            for source, filename in LOG_STREAM_SOURCES.items()
+        ]
+        try:
+            history = [entry for tail in tails for entry in tail.backlog(backlog_lines)]
+            # The timestamp format sorts chronologically as text, which is what
+            # lets three separately written files be interleaved correctly.
+            history.sort(key=lambda entry: entry['time'] or '')
+            if since:
+                # Strictly newer, so the line the console already ends with is
+                # not sent twice. Continuations carry no timestamp of their own
+                # and ride along with whatever preceded them.
+                history = [entry for entry in history if (entry['time'] or since) > since]
+            for entry in history[-backlog_lines:] if backlog_lines else []:
+                yield f"data: {json.dumps(entry, ensure_ascii=False)}\n\n"
+            if not since:
+                yield f"data: {json.dumps({'source': 'console', 'level': 'MARK', 'time': '', 'message': f'— following {len(tails)} log file(s) —'})}\n\n"
+
+            last_keepalive = time.time()
+            while True:
+                new_entries = [entry for tail in tails for entry in tail.read_new()]
+                if new_entries:
+                    new_entries.sort(key=lambda entry: entry['time'] or '')
+                    for entry in new_entries:
+                        yield f"data: {json.dumps(entry, ensure_ascii=False)}\n\n"
+                    last_keepalive = time.time()
+                elif time.time() - last_keepalive > LOG_STREAM_KEEPALIVE_SECONDS:
+                    yield ': keepalive\n\n'
+                    last_keepalive = time.time()
+                time.sleep(LOG_STREAM_POLL_SECONDS)
+        except GeneratorExit:
+            raise
+        finally:
+            # The console is opened and closed freely; a followed handle per
+            # visit that is never released is a file descriptor leak.
+            for tail in tails:
+                tail.close()
+
+    return Response(
+        generate(),
+        mimetype='text/event-stream',
+        headers={
+            'Cache-Control': 'no-cache',
+            'X-Accel-Buffering': 'no',
+            'Connection': 'keep-alive',
         },
     )
 
@@ -4583,29 +5091,34 @@ def health_check():
 def cleanup_old_data():
     while True:
         try:
-            logger.app_logger.info("Running cleanup task")
+            # Housekeeping, at DEBUG: it runs once a day and says the same
+            # three things every time, which is half of app.log and reads as
+            # the only thing happening when the log is watched live.
+            logger.app_logger.debug("Running cleanup task")
             try:
                 cache.cleanup_old_entries()
-                logger.app_logger.info("Cache cleanup completed")
+                logger.app_logger.debug("Cache cleanup completed")
             except Exception as e:
                 logger.app_logger.error(f"Cache cleanup error: {str(e)}")
-                
+
             try:
                 recovery.cleanup_failed_translations()
-                logger.app_logger.info("Failed translations cleanup completed")
+                logger.app_logger.debug("Failed translations cleanup completed")
             except Exception as e:
                 logger.app_logger.error(f"Failed translations cleanup error: {str(e)}")
-                
+
             time.sleep(24 * 60 * 60)  # Run daily
         except Exception as e:
             logger.app_logger.error(f"Cleanup task error: {str(e)}")
             time.sleep(60 * 60)  # Retry in an hour
-            
-# Start cleanup thread
-cleanup_thread = threading.Thread(target=cleanup_old_data, daemon=True)
-cleanup_thread.start()
+
 
 if __name__ == "__main__":
+    # The cleanup thread belongs to a running server, not to an import: every
+    # test that imports this module was starting a daily-cleanup thread and
+    # writing its three lines into the real app log.
+    threading.Thread(target=cleanup_old_data, daemon=True).start()
+
     # Set up signal handlers for graceful shutdown
     def signal_handler(signum, frame):
         print("Shutting down gracefully...")

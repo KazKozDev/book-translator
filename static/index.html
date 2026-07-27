@@ -331,7 +331,7 @@
         /* The source image has generous transparent-looking headroom above the
            wordmark, so lift the image itself to place the visible mark beside
            the top of the expanded glossary. */
-        .glossary-mark { display: block; flex: 0 0 500px; width: 500px; max-width: none; align-self: flex-start; margin: -55px 0 0 -20px; mix-blend-mode: multiply; opacity: .28; transform: translate(-20px, 120px) scale(2); transform-origin: left center; }
+        .glossary-mark { position: relative; top: 20px; display: block; flex: 0 0 500px; width: 500px; max-width: none; align-self: flex-start; margin: -55px 0 0 -20px; mix-blend-mode: multiply; opacity: .28; transform: translate(-20px, 166px) scale(2); transform-origin: left center; }
         .glossary-editor, .glossary-guide { min-width: 0; padding: 24px 26px; border: none; border-radius: 0; background: #eceef0; }
         .glossary-editor { background: #f1f2f4; }
         .glossary-editor-header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin: -24px -26px 8px; padding: 14px 18px; border-bottom: 1px solid var(--line); background: #f1f2f4; color: var(--ink); font-size: .74rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
@@ -340,7 +340,9 @@
         .glossary-group label { display: block; margin-bottom: 10px; }
         /* The empty glossary reads like an empty source panel, rather than a
            second nested card. Its example is only a placeholder. */
-        .glossary-group textarea { box-sizing: border-box; width: 100%; min-height: 160px; padding: 18px 18px 18px 0; border: none; border-radius: 0; background: transparent; color: var(--ink); font-family: inherit; font-size: .87rem; line-height: 1.7; overflow-y: auto; resize: vertical; }
+        .glossary-group textarea { box-sizing: border-box; width: 100%; min-height: 160px; padding: 18px 18px 18px 0; border: none; border-radius: 0; background: transparent; color: var(--ink); font-family: inherit; font-size: .87rem; line-height: 1.7; overflow-y: auto; resize: none; scrollbar-color: #dfe1e5 transparent; scrollbar-width: thin; }
+        .glossary-group textarea::-webkit-scrollbar { width: 5px; }
+        .glossary-group textarea::-webkit-scrollbar-thumb { background: #dfe1e5; border-radius: 3px; }
         .glossary-group textarea::placeholder { color: var(--faint); opacity: .55; }
         .form-hint { margin-top: 12px; color: var(--faint); font-size: .74rem; line-height: 1.6; }
         .form-hint code { padding: 1px 5px; border-radius: 4px; background: #f3f4f6; color: var(--muted); font-size: .95em; }
@@ -399,6 +401,9 @@
         .text-panel-content.is-placeholder { color: var(--faint); opacity: .55; }
 
         .deck-bar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; padding: 12px 2px 0; }
+        .footer-note { margin-top: 52px; padding-top: 22px; border-top: 1px solid var(--line); color: var(--faint); font-size: .78rem; line-height: 1.6; }
+        .footer-note strong { display: block; margin-bottom: 10px; color: var(--muted); }
+        .footer-note p + p { margin-top: 0; }
         .deck-status-group { display: flex; align-items: center; gap: 12px; }
         .deck-status { color: var(--muted); font-size: .78rem; }
         .deck-status-group .header-action { font-size: .78rem; font-weight: 600; }
@@ -526,7 +531,8 @@
             --line: #2c2e35; --line-soft: #26282e; --accent: #86a4bd; --accent-dark: #a2bdd1;
         }
         .theme-dark .job-card { background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='f'><feTurbulence type='fractalNoise' baseFrequency='0.012 0.9' numOctaves='2' seed='7' stitchTiles='stitch'/><feColorMatrix type='matrix' values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 0.035 0'/></filter><rect width='100%25' height='100%25' filter='url(%23f)'/></svg>"); }
-        .theme-dark .job-card::-webkit-scrollbar-thumb, .theme-dark .text-panel-content::-webkit-scrollbar-thumb { background: #383b44; }
+        .theme-dark .job-card::-webkit-scrollbar-thumb, .theme-dark .text-panel-content::-webkit-scrollbar-thumb, .theme-dark .glossary-group textarea::-webkit-scrollbar-thumb { background: #383b44; }
+        .theme-dark .glossary-group textarea { scrollbar-color: #383b44 transparent; }
         .theme-dark .panel-source { background: #1a1b1f; }
         .theme-dark .panel-source h3 { background: #1a1b1f; }
         .theme-dark .panel-source .text-panel-content { color: #9195a1; }
@@ -567,6 +573,9 @@
                 <span class="current-nav" aria-current="page">Home</span>
                 <span class="sep">•</span><a class="repo-link" href="/guide.html">Guide</a>
                 <span class="sep">•</span><a class="repo-link" href="/settings.html">Settings</a>
+                <!-- Opened as its own window: the point is to watch it beside
+                     the app while a run is going, not to navigate away. -->
+                <span class="sep">•</span><a class="repo-link" href="/logs.html" id="logWindowLink" title="Live log in a separate window">Log</a>
                 <span class="sep">•</span><a class="repo-link" href="https://github.com/KazKozDev/book-translator" target="_blank" rel="noopener">GitHub</a>
                 <span class="sep">•</span><button type="button" class="theme-toggle" id="themeToggle" title="Switch to dark mode">🌙</button>
             </div>
@@ -617,6 +626,7 @@
                      active choices available to their respective workflows. -->
                 <select id="model" required hidden aria-hidden="true"><option value="">Loading models…</option></select>
                 <select id="refinementModel" required hidden aria-hidden="true"><option value="">Loading models…</option></select>
+                <select id="verifierModel" required hidden aria-hidden="true"><option value="">Loading models…</option></select>
                 <select id="entityModel" required hidden aria-hidden="true"><option value="">Loading models…</option></select>
                 <select id="generalInstructModel" required hidden aria-hidden="true"><option value="">Loading models…</option></select>
                 <select id="judgeModel" required hidden aria-hidden="true"><option value="">Loading models…</option></select>
@@ -711,7 +721,7 @@
         <aside class="job-card">
             <div class="eyebrow">Current job</div>
             <h2>Your translation desk</h2>
-            <p>Press <span style="letter-spacing: .08em;">UPLOAD</span> to add a file.<br>Choose a language pair and genre. Set translation, refinement, entity-resolution, glossary-rendering, and judge models in <span style="letter-spacing: .08em;">SETTINGS</span>.<br>Open <span style="letter-spacing: .08em;">GLOSSARY</span> and prepare it from the source. Press <span style="letter-spacing: .08em;">PREPARE</span> to generate and review the proposed terms.<br>Press <span style="letter-spacing: .08em;">START</span> to translate.<br>Once the draft is ready, press <span style="letter-spacing: .08em;">CONTINUE</span> to refine.</p>
+            <p>Press <span style="letter-spacing: .08em;">UPLOAD</span> to add a file.<br>Choose a language pair and genre. Set translation, refinement, verifier, entity-resolution, glossary-rendering, and judge models in <span style="letter-spacing: .08em;">SETTINGS</span>.<br>Open <span style="letter-spacing: .08em;">GLOSSARY</span> and prepare it from the source. Press <span style="letter-spacing: .08em;">PREPARE</span> to generate and review the proposed terms.<br>Press <span style="letter-spacing: .08em;">START</span> to translate.<br>Once the draft is ready, press <span style="letter-spacing: .08em;">CONTINUE</span> to refine.</p>
 
             <div class="rail-section">
                 <div class="section-title">Progress</div>
@@ -726,6 +736,14 @@
                         <span class="rail-label">Glossary</span>
                         <span class="rail-value" id="terminologyStatus">No verified terms</span>
                     </div>
+                    <!-- What the refinement pass is actually doing. Without it,
+                         a pass that finds real errors and has every fix vetoed
+                         is indistinguishable from a clean draft. -->
+                    <div class="rail-row">
+                        <span class="rail-label">Refinement</span>
+                        <span class="rail-value" id="refinementStatus">Not started</span>
+                    </div>
+                    <p class="rail-note" id="refinementDetail" hidden></p>
                 </div>
             </div>
 
@@ -943,6 +961,16 @@
                 <p style="text-align: center; color: #9ca3af; padding: 32px;">No translations yet</p>
             </div>
         </section>
+        <footer class="footer-note">
+            <strong>Disclaimer</strong>
+            <p>Tolmach is open-source software released under the MIT License. Tolmach does not claim ownership of your source texts or of any outputs generated by the software.</p>
+            <p>You are solely responsible for ensuring that you have the legal right to use, translate, edit, publish, or otherwise process the source text, and for complying with all applicable local laws and regulations, including copyright and intellectual-property laws.</p>
+            <div class="footer-note-compact">
+                <p>Proofreading and editorial review are strongly recommended before any publication or commercial use.</p>
+                <p>For commercial use, you are additionally responsible for reviewing and complying with the licenses of all models, neural components, and third-party dependencies used together with Tolmach.</p>
+                <p>Tolmach is provided "as is", without warranties of any kind. The authors and contributors accept no liability for any use of the software or its output.</p>
+            </div>
+        </footer>
     </div>
 
     <script>
@@ -1518,6 +1546,16 @@
 
             document.getElementById('themeToggle').addEventListener('click', toggleTheme);
 
+            // A named window, so pressing Log again focuses the console that is
+            // already open instead of stacking another copy of the stream.
+            document.getElementById('logWindowLink').addEventListener('click', event => {
+                const opened = window.open('/logs.html', 'tolmach-log', 'width=1180,height=760');
+                if (opened) {
+                    event.preventDefault();
+                    opened.focus();
+                }
+            });
+
             document.querySelectorAll('.test-run-btn').forEach(btn => {
                 btn.addEventListener('click', () => runEvaluationTest(btn.dataset.test));
             });
@@ -1612,9 +1650,33 @@
             meta.textContent = `${text.length.toLocaleString()} chr · ${words.toLocaleString()} w`;
         }
 
+        // One book per log file. Loading a document rolls the log over, so the
+        // console starts empty for the run about to happen and the previous
+        // book stays on disk as *.log.1. The server refuses while a
+        // translation is streaming, and picking the same file twice is a no-op
+        // rather than a rollover that would split one run's log in two.
+        let loggedDocument = null;
+        async function startNewLogForDocument(file) {
+            if (!file) return;
+            const identity = `${file.name}|${file.size}|${file.lastModified}`;
+            if (identity === loggedDocument) return;
+            loggedDocument = identity;
+            try {
+                await fetch(`${API_URL}/logs/rotate`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ document: file.name }),
+                });
+            } catch (error) {
+                // A log that did not roll over is not a reason to refuse a book.
+                console.warn('Could not start a new log for this document:', error);
+            }
+        }
+
         function handleFileSelect(file) {
             selectedFile = file;
             forgetActiveTranslation();
+            startNewLogForDocument(file);
             document.getElementById('refineHeaderBtn').disabled = true;
             setPrepareEnabled(true);
 
@@ -1697,6 +1759,7 @@
         const MODEL_PREFERENCE_KEYS = {
             model: 'translationModel',
             refinementModel: 'refinementModel',
+            verifierModel: 'verifierModel',
             entityModel: 'entityModel',
             generalInstructModel: 'generalInstructModel',
             judgeModel: 'judgeModel',
@@ -1715,6 +1778,7 @@
         async function loadModels() {
             const modelSelect = document.getElementById('model');
             const refinementSelect = document.getElementById('refinementModel');
+            const verifierSelect = document.getElementById('verifierModel');
             const entitySelect = document.getElementById('entityModel');
             const generalInstructSelect = document.getElementById('generalInstructModel');
             const judgeSelect = document.getElementById('judgeModel');
@@ -1760,7 +1824,7 @@
                 // TranslateGemma is translation-only. The remaining three roles
                 // need a general-instruct model selected independently.
                 const instructModels = models.filter(model => !isTranslateGemma(model.name));
-                [refinementSelect, entitySelect, generalInstructSelect, judgeSelect].forEach(select => {
+                [refinementSelect, verifierSelect, entitySelect, generalInstructSelect, judgeSelect].forEach(select => {
                     select.innerHTML = instructModels.length
                         ? optionsFor(instructModels)
                         : '<option value="">No suitable instruct model installed</option>';
@@ -1785,6 +1849,13 @@
                         : valueFor('generalInstructModel');
                     generalInstructSelect.value = valueFor('generalInstructModel');
                     judgeSelect.value = valueFor('judgeModel');
+                    // The Stage 2 verifier must not be the model that wrote the
+                    // edit, so an unset preference falls back to the judge
+                    // rather than to the refinement model.
+                    const savedVerifier = localStorage.getItem('verifierModel');
+                    verifierSelect.value = instructModels.some(model => model.name === savedVerifier)
+                        ? savedVerifier
+                        : judgeSelect.value;
                 }
                 syncModelsFromSettings();
                 updateModelNote();
@@ -1800,7 +1871,7 @@
                 if (modelSelect) {
                     modelSelect.innerHTML = `<option value="">❌ ${error.message}</option>`;
                 }
-                [refinementSelect, entitySelect, generalInstructSelect, judgeSelect].forEach(select => {
+                [refinementSelect, verifierSelect, entitySelect, generalInstructSelect, judgeSelect].forEach(select => {
                     if (select) select.innerHTML = `<option value="">❌ ${error.message}</option>`;
                 });
                 const statValue = document.getElementById('availableModels');
@@ -2064,16 +2135,20 @@
             translationPreviews.literaryRefinement = '';
             document.getElementById('literaryRefinement').textContent = 'Refined batches will appear here during the second pass.';
             updatePanelMeta('literaryRefinement');
+            document.getElementById('refinementStatus').textContent = 'Reviewing…';
+            document.getElementById('refinementStatus').classList.remove('has-violations');
+            document.getElementById('refinementDetail').hidden = true;
             document.getElementById('deckStatus').textContent = 'Refining…';
             translationStartTime = Date.now();
             updateEta(0);
 
             try {
                 const selectedModel = document.getElementById('refinementModel').value;
+                const verifierModel = document.getElementById('verifierModel').value;
                 const response = await fetch(`${API_URL}/refine/${currentTranslationId}`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ model: selectedModel }),
+                    body: JSON.stringify({ model: selectedModel, verifier_model: verifierModel }),
                 });
 
                 if (!response.ok) {
@@ -2112,6 +2187,7 @@
                                     updateEta(data.progress);
                                 }
                                 if (data.terminology) updateTerminologyStatus(data.terminology);
+                                if (data.refinement) updateRefinementStatus(data.refinement);
                                 if (data.refined_translation_chunk) appendPanelPreview('literaryRefinement', withWarningMarker(data.refined_translation_chunk, data.warning));
                                 if (data.translated_text && !translationPreviews.literaryRefinement) {
                                     appendPanelPreview('literaryRefinement', data.translated_text);
@@ -2144,6 +2220,39 @@
                 translateBtn.disabled = false;
                 refineHeaderBtn.disabled = false;
             }
+        }
+
+        // "0 applied" has three causes that used to look identical from here: a
+        // clean draft, a verifier that vetoed the fixes, and a review call that
+        // never answered. All three are named, because the fix for each is
+        // different — nothing, a bigger Verifier model, a shorter chunk.
+        function updateRefinementStatus(refinement) {
+            const status = document.getElementById('refinementStatus');
+            const detail = document.getElementById('refinementDetail');
+            if (!refinement) return;
+            const found = Number(refinement.errors_found || 0);
+            const applied = Number(refinement.errors_applied || 0);
+            const rejected = Number(refinement.patches_rejected || 0);
+            const failures = Number(refinement.review_failures || 0);
+            const reviewed = Number(refinement.chunks_reviewed || 0);
+            const changed = Number(refinement.chunks_changed || 0);
+            if (!reviewed && !found) {
+                status.textContent = refinement.verifier_model ? 'Ready' : 'Not started';
+            } else {
+                status.textContent = `${found} found · ${applied} patched · ${changed}/${reviewed} chunks changed`;
+            }
+            status.classList.toggle('has-violations', rejected > 0 || failures > 0);
+
+            const notes = [];
+            if (rejected) notes.push(`${rejected} patch(es) vetoed by the verifier`);
+            if (failures) notes.push(`${failures} review call(s) returned nothing (timeout or non-JSON answer)`);
+            if (refinement.verifier_model && refinement.review_model === refinement.verifier_model) {
+                notes.push(`Verifier is the refinement model (${refinement.verifier_model}) — it is grading its own edits. Pick a larger Verifier in Settings.`);
+            } else if (refinement.verifier_model) {
+                notes.push(`Verifier: ${refinement.verifier_model}`);
+            }
+            detail.textContent = notes.join(' · ');
+            detail.hidden = !notes.length;
         }
 
         function updateTerminologyStatus(terminology) {

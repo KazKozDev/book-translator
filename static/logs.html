@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Log — Tolmach</title>
+    <link rel="icon" href="/static/assets/tolmach-favicon.svg" type="image/svg+xml">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        :root {
+            --canvas:#f7f8f9; --paper:#fff; --ink:#111827; --muted:#6b7280; --faint:#9ca3af;
+            --line:#e5e7eb; --soft:#f0f1f3; --accent:#5b7c99; --accent-dark:#46647c;
+            --error:#b91c1c; --warn:#a16207; --debug:#9ca3af; --mark:#4a7c5d;
+            /* One hue per meaning, so the eye can sort a run without reading
+               it: green happened, amber was refused, red broke, blue is a
+               model or a name, violet is the pipeline talking about itself.
+               Desaturated on purpose — this is read for minutes at a time. */
+            --ok:#4a7c5d; --ok-bg:#4a7c5d14; --stage:#3f5f7d; --stage-bg:#5b7c990f;
+            --model:#6d28d9; --count:#2b6b6b; --quote:#9a3412;
+        }
+        :root.theme-dark {
+            --canvas:#15161a; --paper:#1b1d21; --ink:#e8e9ec; --muted:#9195a1; --faint:#6b6f7b;
+            --line:#2c2e35; --soft:#23252b; --accent:#86a4bd; --accent-dark:#a2bdd1;
+            --error:#f87171; --warn:#e0b34a; --debug:#6b6f7b; --mark:#7fae8b;
+            --ok:#7fae8b; --ok-bg:#7fae8b12; --stage:#a2bdd1; --stage-bg:#86a4bd14;
+            --model:#b3a6e0; --count:#7fb8b0; --quote:#d9a273;
+        }
+        body {
+            display: flex; flex-direction: column; height: 100vh; overflow: hidden;
+            background: var(--canvas); color: var(--ink);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+            -webkit-font-smoothing: antialiased;
+        }
+        header {
+            display: flex; align-items: center; flex-wrap: wrap; gap: 14px;
+            padding: 11px 16px; border-bottom: 1px solid var(--line); background: var(--paper);
+        }
+        .brand { display: flex; align-items: baseline; gap: 10px; font-size: .74rem; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; }
+        .brand .sub { color: var(--faint); font-weight: 500; }
+        .status { display: flex; align-items: center; gap: 7px; color: var(--muted); font-size: .72rem; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; }
+        .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--faint); }
+        .dot.live { background: var(--mark); }
+        .dot.down { background: var(--error); }
+        .dot.paused { background: var(--warn); }
+        .spacer { flex: 1 1 auto; }
+        .controls { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+        .chip {
+            border: 1px solid var(--line); border-radius: 999px; padding: 4px 11px;
+            background: transparent; color: var(--muted);
+            font: inherit; font-size: .72rem; font-weight: 600; letter-spacing: .05em; text-transform: uppercase;
+            cursor: pointer;
+        }
+        .chip:hover { border-color: var(--accent); color: var(--accent); }
+        .chip.on { border-color: var(--accent); background: var(--accent); color: #fff; }
+        .chip.danger:hover { border-color: var(--error); color: var(--error); }
+        :root.theme-dark .chip.on { color: #15161a; }
+        .search {
+            border: 1px solid var(--line); border-radius: 6px; padding: 5px 10px; min-width: 180px;
+            background: var(--paper); color: var(--ink); font: inherit; font-size: .78rem;
+        }
+        .search:focus { outline: 2px solid color-mix(in srgb, var(--accent) 40%, transparent); border-color: var(--accent); }
+        .console {
+            flex: 1 1 auto; overflow: auto; padding: 10px 0 18px;
+            background: var(--canvas);
+            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+            font-size: .78rem; line-height: 1.55;
+        }
+        /* A 3px bar in the gutter carries the outcome, so scrolling fast still
+           shows where a run went wrong without reading a single word. */
+        .row { display: flex; gap: 10px; padding: 1px 16px 1px 13px; border-left: 3px solid transparent; white-space: pre; }
+        .console.wrap .row { white-space: pre-wrap; }
+        .console.wrap .msg { word-break: break-word; }
+        .row:hover { background: var(--soft); }
+        .time { flex: none; width: 62px; color: var(--faint); }
+        .tag {
+            flex: none; width: 46px; padding: 0 5px; border-radius: 3px;
+            color: var(--muted); background: var(--soft);
+            font-size: .88em; letter-spacing: .04em; text-transform: uppercase; text-align: center;
+        }
+        .row.src-translations .tag { color: var(--stage); background: var(--stage-bg); }
+        .row.src-api .tag { color: var(--model); background: color-mix(in srgb, var(--model) 12%, transparent); }
+        .msg { flex: 1 1 auto; min-width: 0; }
+
+        /* Level first: a broken run must be findable with the eye alone. */
+        .row.level-ERROR, .row.level-CRITICAL { border-left-color: var(--error); background: color-mix(in srgb, var(--error) 7%, transparent); }
+        .row.level-ERROR .msg, .row.level-CRITICAL .msg { color: var(--error); }
+        .row.level-WARNING { border-left-color: var(--warn); background: color-mix(in srgb, var(--warn) 8%, transparent); }
+        .row.level-WARNING .msg { color: var(--warn); }
+        .row.level-DEBUG .msg { color: var(--debug); }
+        .row.level-CONT .msg { color: var(--muted); }
+        .row.level-CONT .time, .row.level-CONT .tag { visibility: hidden; }
+        .row.level-MARK { padding-top: 8px; padding-bottom: 8px; }
+        .row.level-MARK .msg { color: var(--mark); }
+
+        /* Then meaning. A translation run is stages, chunks and verdicts; the
+           rest is bookkeeping and should stay quiet. */
+        .row.kind-stage { margin-top: 7px; border-top: 1px solid var(--line); border-left-color: var(--stage); background: var(--stage-bg); padding-top: 4px; padding-bottom: 3px; }
+        .row.kind-stage .msg { color: var(--stage); font-weight: 700; }
+        .row.kind-chunk .msg { color: var(--ink); }
+        .row.kind-cache .msg { color: var(--faint); }
+        .row.kind-verdict-changed { border-left-color: var(--ok); background: var(--ok-bg); }
+        .row.kind-verdict-changed .msg { color: var(--ink); }
+        .row.kind-verdict-kept .msg { color: var(--muted); }
+        .row.kind-verdict-refused { border-left-color: var(--warn); }
+        .row.kind-summary { margin-top: 5px; border-left-color: var(--stage); background: var(--stage-bg); padding-top: 4px; padding-bottom: 5px; }
+        .row.kind-summary .msg { font-weight: 700; }
+
+        /* Inside a line: the parts a person actually looks for. */
+        /* Counts stand out by weight, not by hue: the row's colour already means
+           something, and a fourth colour competing with it made the numbers the
+           loudest thing on a line that is mostly words. */
+        .msg .n { color: var(--ink); font-weight: 700; }
+        .msg .model { color: var(--model); }
+        .msg .q { color: var(--quote); }
+        .msg .yes { color: var(--ok); font-weight: 700; }
+        .msg .no { color: var(--warn); font-weight: 700; }
+        .msg .bad { color: var(--error); font-weight: 700; }
+        .msg .sep { color: var(--faint); }
+        .row.hit .msg mark { background: color-mix(in srgb, var(--accent) 30%, transparent); color: inherit; border-radius: 2px; }
+        footer { padding: 7px 16px; border-top: 1px solid var(--line); background: var(--paper); color: var(--faint); font-size: .72rem; }
+        .empty { padding: 24px 16px; color: var(--faint); font-size: .8rem; }
+    </style>
+    <script>
+        (function () { try { const saved = localStorage.getItem('theme'); document.documentElement.classList.toggle('theme-dark', saved ? saved === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches); } catch (e) {} })();
+    </script>
+</head>
+<body>
+    <header>
+        <div class="brand"><span>Tolmach</span><span class="sub">Log</span></div>
+        <div class="status"><span class="dot" id="statusDot"></span><span id="statusText">Connecting…</span></div>
+        <div class="spacer"></div>
+        <div class="controls">
+            <button type="button" class="chip on" data-source="translations">Pipeline</button>
+            <button type="button" class="chip on" data-source="api">Model</button>
+            <button type="button" class="chip on" data-source="app">App</button>
+            <button type="button" class="chip" id="errorsOnly" title="Warnings and errors only">Problems</button>
+            <input type="search" class="search" id="search" placeholder="Filter text…" autocomplete="off">
+            <button type="button" class="chip" id="pause">Pause</button>
+            <button type="button" class="chip" id="wrap">Wrap</button>
+            <button type="button" class="chip" id="clear" title="Clear this view only — the files are untouched">Clear</button>
+            <button type="button" class="chip danger" id="reset" title="Empty the log files on disk — cannot be undone">Erase files</button>
+            <button type="button" class="chip" id="themeToggle" title="Switch theme">Theme</button>
+        </div>
+    </header>
+    <div class="console" id="console"><p class="empty" id="empty">Waiting for log lines…</p></div>
+    <footer><span id="counts">0 lines</span> · following logs/translations.log, logs/api.log, logs/app.log · set <code>LOG_LEVEL=DEBUG</code> before starting the app to include the full prompts</footer>
+
+    <script>
+        // The console keeps every line it has received and re-renders on a
+        // filter change, rather than filtering the DOM: a paused or filtered
+        // view must not lose lines that arrived while it was hidden.
+        const MAX_LINES = 8000;
+        const entries = [];
+        let paused = false;
+        let buffered = [];
+        // The newest timestamp on screen, and the identity of everything on it:
+        // together they make a reconnect resume instead of replay.
+        let lastSeenTime = '';
+        let seenKeys = new Set();
+        let everOpened = false;
+        const keyOf = entry => `${entry.time}|${entry.source}|${entry.message}`;
+
+        const consoleEl = document.getElementById('console');
+        const emptyEl = document.getElementById('empty');
+        const searchEl = document.getElementById('search');
+        const countsEl = document.getElementById('counts');
+        const statusDot = document.getElementById('statusDot');
+        const statusText = document.getElementById('statusText');
+        const errorsOnlyBtn = document.getElementById('errorsOnly');
+        const activeSources = new Set(['translations', 'api', 'app']);
+        const SOURCE_TAGS = { translations: 'pipe', api: 'model', app: 'app', console: '——' };
+
+        function atBottom() {
+            return consoleEl.scrollHeight - consoleEl.scrollTop - consoleEl.clientHeight < 40;
+        }
+
+        function matches(entry) {
+            if (entry.source !== 'console' && !activeSources.has(entry.source)) return false;
+            if (errorsOnlyBtn.classList.contains('on')
+                && !['ERROR', 'CRITICAL', 'WARNING'].includes(entry.level)) return false;
+            const needle = searchEl.value.trim().toLowerCase();
+            return !needle || entry.message.toLowerCase().includes(needle);
+        }
+
+        // What a line is about, which is not the same as its log level: a run
+        // is stages, chunks and verdicts, and an INFO line saying a patch was
+        // thrown away matters more than most warnings.
+        function kindOf(message) {
+            if (/^Starting stage \d|^Stage \d+: /.test(message)) return 'kind-stage';
+            if (/^Stage \d+ finished/.test(message)) return 'kind-summary';
+            if (/^Stage \d+ chunk \d+\/\d+:/.test(message)) {
+                if (/gave no answer|no output|timed out/.test(message)) return 'kind-verdict-refused';
+                if (/rejected/.test(message)) return 'kind-verdict-refused';
+                if (/text changed/.test(message)) return 'kind-verdict-changed';
+                return 'kind-verdict-kept';
+            }
+            if (/Cache hit/.test(message)) return 'kind-cache';
+            if (/(translating|reviewing) chunk/.test(message)) return 'kind-chunk';
+            return '';
+        }
+
+        // Colour whole outcomes, never single verbs, and only on the pipeline's
+        // own lines. "patched" coloured green turns "0 patched" into good news,
+        // and the word "Failed" in "Failed translations cleanup completed" is a
+        // noun phrase, not a failure — both were exactly wrong.
+        const OUTCOME_TOKENS = [
+            ['yes', 'text changed|accepted|verifier skipped[^·]*|fixed \\d+ [^.]*'],
+            ['no', 'draft kept|rejected|vetoed|not needed|unavailable|left \\d+ [^.]*'],
+            ['bad', 'gave no answer|no output|timed out|no verdict|introduced \\d+ [^.]*'],
+        ];
+        // These read the same in any line: a model tag, a quoted term, a count,
+        // and the separators the messages are built from.
+        const PLAIN_TOKENS = [
+            ['model', '[A-Za-z][A-Za-z0-9._]*:[A-Za-z0-9][A-Za-z0-9._-]*'],
+            ['q', '"[^"]*"|«[^»]*»|“[^”]*”'],
+            ['n', '\\b\\d+(?:[/.]\\d+)?\\b'],
+            ['sep', '[·→]'],
+        ];
+        const compile = tokens => new RegExp(tokens.map(([, pattern]) => `(${pattern})`).join('|'), 'gi');
+        const PLAIN_RE = compile(PLAIN_TOKENS);
+        const SEMANTIC_TOKENS = [...OUTCOME_TOKENS, ...PLAIN_TOKENS];
+        const SEMANTIC_RE = compile(SEMANTIC_TOKENS);
+
+        function decorate(text, semantic) {
+            const tokens = semantic ? SEMANTIC_TOKENS : PLAIN_TOKENS;
+            const pattern = semantic ? SEMANTIC_RE : PLAIN_RE;
+            const fragment = document.createDocumentFragment();
+            let cursor = 0;
+            pattern.lastIndex = 0;
+            let match;
+            while ((match = pattern.exec(text)) !== null) {
+                if (match.index > cursor) fragment.appendChild(document.createTextNode(text.slice(cursor, match.index)));
+                const group = match.slice(1).findIndex(value => value !== undefined);
+                const span = document.createElement('span');
+                span.className = tokens[group][0];
+                span.textContent = match[0];
+                fragment.appendChild(span);
+                cursor = match.index + match[0].length;
+            }
+            if (cursor < text.length) fragment.appendChild(document.createTextNode(text.slice(cursor)));
+            return fragment;
+        }
+
+        // The filter term is highlighted after colouring, by splitting the text
+        // nodes — so a hit inside a coloured token keeps its colour.
+        function markMatches(container, needle) {
+            const lowered = needle.toLowerCase();
+            const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
+            const nodes = [];
+            while (walker.nextNode()) nodes.push(walker.currentNode);
+            for (const node of nodes) {
+                const text = node.textContent;
+                let index = text.toLowerCase().indexOf(lowered);
+                if (index === -1) continue;
+                const pieces = document.createDocumentFragment();
+                let cursor = 0;
+                while (index !== -1) {
+                    if (index > cursor) pieces.appendChild(document.createTextNode(text.slice(cursor, index)));
+                    const hit = document.createElement('mark');
+                    hit.textContent = text.slice(index, index + needle.length);
+                    pieces.appendChild(hit);
+                    cursor = index + needle.length;
+                    index = text.toLowerCase().indexOf(lowered, cursor);
+                }
+                if (cursor < text.length) pieces.appendChild(document.createTextNode(text.slice(cursor)));
+                node.replaceWith(pieces);
+            }
+        }
+
+        function rowFor(entry) {
+            const row = document.createElement('div');
+            const kind = kindOf(entry.message);
+            row.className = `row level-${entry.level} src-${entry.source}${kind ? ' ' + kind : ''}`;
+            const time = document.createElement('span');
+            time.className = 'time';
+            // Only the clock: the date is the same all run and costs half the width.
+            time.textContent = (entry.time || '').slice(11, 19);
+            const tag = document.createElement('span');
+            tag.className = 'tag';
+            tag.textContent = SOURCE_TAGS[entry.source] || entry.source;
+            const message = document.createElement('span');
+            message.className = 'msg';
+            // Continuations are raw text — they are prompt bodies, and
+            // colouring words inside a prompt only makes it harder to read.
+            if (entry.level === 'CONT') {
+                message.textContent = entry.message;
+            } else {
+                message.appendChild(decorate(entry.message, entry.source === 'translations'));
+            }
+            const needle = searchEl.value.trim();
+            if (needle) {
+                row.classList.add('hit');
+                markMatches(message, needle);
+            }
+            row.append(time, tag, message);
+            return row;
+        }
+
+        function append(entry) {
+            entries.push(entry);
+            if (entries.length > MAX_LINES) entries.splice(0, entries.length - MAX_LINES);
+            if (!matches(entry)) { updateCounts(); return; }
+            const stick = atBottom();
+            consoleEl.appendChild(rowFor(entry));
+            while (consoleEl.childElementCount > MAX_LINES) consoleEl.removeChild(consoleEl.firstElementChild);
+            if (emptyEl.isConnected) emptyEl.remove();
+            if (stick) consoleEl.scrollTop = consoleEl.scrollHeight;
+            updateCounts();
+        }
+
+        function render() {
+            consoleEl.textContent = '';
+            const shown = entries.filter(matches);
+            const fragment = document.createDocumentFragment();
+            for (const entry of shown.slice(-MAX_LINES)) fragment.appendChild(rowFor(entry));
+            consoleEl.appendChild(fragment);
+            if (!shown.length) consoleEl.appendChild(emptyEl);
+            consoleEl.scrollTop = consoleEl.scrollHeight;
+            updateCounts();
+        }
+
+        function updateCounts() {
+            const shown = entries.filter(matches).length;
+            const problems = entries.filter(e => ['ERROR', 'CRITICAL', 'WARNING'].includes(e.level)).length;
+            countsEl.textContent = `${shown} of ${entries.length} lines`
+                + (problems ? ` · ${problems} warning(s)/error(s)` : '')
+                + (paused && buffered.length ? ` · ${buffered.length} held while paused` : '');
+        }
+
+        function setStatus(state, text) {
+            statusDot.className = `dot ${state}`;
+            statusText.textContent = text;
+        }
+
+        function connect() {
+            // A reconnect asks only for what it missed. EventSource reconnects
+            // by itself after any hiccup, and being served the backlog again is
+            // what made the console jump back in time and look reset.
+            const query = lastSeenTime
+                ? `?tail=2000&since=${encodeURIComponent(lastSeenTime)}`
+                : '?tail=300';
+            const stream = new EventSource('/logs/stream' + query);
+            stream.onopen = () => {
+                setStatus('live', 'Live');
+                // Mark the seam, so a reconnect is visible as one line rather
+                // than as an unexplained jump in the timestamps.
+                if (everOpened) append({ source: 'console', level: 'MARK', time: '', message: '— reconnected —' });
+                everOpened = true;
+            };
+            stream.onmessage = event => {
+                let entry;
+                try { entry = JSON.parse(event.data); } catch (e) { return; }
+                if (entry.time && entry.time > lastSeenTime) lastSeenTime = entry.time;
+                // Belt and braces: a line already on screen is never added
+                // twice, whatever a boundary or a replay does.
+                if (entry.time && seenKeys.has(keyOf(entry))) return;
+                if (entry.time) {
+                    seenKeys.add(keyOf(entry));
+                    if (seenKeys.size > MAX_LINES * 2) {
+                        // Bounded: drop the oldest half rather than grow forever.
+                        seenKeys = new Set([...seenKeys].slice(-MAX_LINES));
+                    }
+                }
+                if (paused) {
+                    buffered.push(entry);
+                    if (buffered.length > MAX_LINES) buffered.splice(0, buffered.length - MAX_LINES);
+                    updateCounts();
+                    return;
+                }
+                append(entry);
+            };
+            // EventSource reconnects on its own; the dot says which state we are
+            // in so a stopped server does not look like an idle pipeline.
+            stream.onerror = () => setStatus('down', 'Reconnecting…');
+        }
+
+        document.querySelectorAll('.chip[data-source]').forEach(button => {
+            button.addEventListener('click', () => {
+                const source = button.dataset.source;
+                button.classList.toggle('on');
+                if (button.classList.contains('on')) activeSources.add(source); else activeSources.delete(source);
+                render();
+            });
+        });
+        errorsOnlyBtn.addEventListener('click', () => { errorsOnlyBtn.classList.toggle('on'); render(); });
+        searchEl.addEventListener('input', render);
+        document.getElementById('pause').addEventListener('click', event => {
+            paused = !paused;
+            event.target.classList.toggle('on', paused);
+            event.target.textContent = paused ? 'Resume' : 'Pause';
+            if (!paused) {
+                const held = buffered;
+                buffered = [];
+                held.forEach(append);
+                setStatus('live', 'Live');
+            } else {
+                setStatus('paused', 'Paused');
+            }
+            updateCounts();
+        });
+        document.getElementById('wrap').addEventListener('click', event => {
+            event.target.classList.toggle('on');
+            consoleEl.classList.toggle('wrap');
+        });
+        document.getElementById('clear').addEventListener('click', () => {
+            entries.length = 0; buffered = [];
+            render();
+        });
+        // Clear empties the view; this empties the files. Different enough to be
+        // worth confirming, because a log is evidence about a run that already
+        // happened and there is no second copy of it.
+        document.getElementById('reset').addEventListener('click', async event => {
+            if (!confirm('Empty logs/translations.log, logs/api.log and logs/app.log on disk?\n\nThis cannot be undone. Use Clear if you only want to tidy this view.')) return;
+            const button = event.target;
+            button.disabled = true;
+            try {
+                const response = await fetch('/logs/reset', { method: 'POST' });
+                const result = await response.json().catch(() => ({}));
+                if (!response.ok) throw new Error(Object.values(result.failed || {}).join('; ') || `HTTP ${response.status}`);
+                entries.length = 0; buffered = [];
+                // The files are empty now, so nothing that was seen can come
+                // back; forget it rather than carry it for the rest of the day.
+                seenKeys = new Set();
+                render();
+            } catch (error) {
+                alert('Could not empty the log files: ' + error.message);
+            } finally {
+                button.disabled = false;
+            }
+        });
+        document.getElementById('themeToggle').addEventListener('click', () => {
+            const dark = !document.documentElement.classList.contains('theme-dark');
+            document.documentElement.classList.toggle('theme-dark', dark);
+            localStorage.setItem('theme', dark ? 'dark' : 'light');
+        });
+        connect();
+    </script>
+</body>
+</html>
