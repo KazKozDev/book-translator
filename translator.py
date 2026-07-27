@@ -3418,7 +3418,8 @@ Respond with EXACTLY one word: A, B, or TIE."""
             from sentence_transformers import SentenceTransformer
         except ImportError as exc:
             raise RuntimeError(
-                'LaBSE is not installed. Run: ./venv/bin/python -m pip install -r requirements-quality.txt'
+                'sentence-transformers is missing from the environment — the venv is '
+                'incomplete. Run: ./venv/bin/python -m pip install -r requirements.txt'
             ) from exc
         if cls._labse_model is None:
             with cls._labse_lock:
@@ -3486,7 +3487,8 @@ Respond with EXACTLY one word: A, B, or TIE."""
             from transformers import pipeline
         except ImportError as exc:
             raise RuntimeError(
-                'Language ID dependencies are not installed. Run: ./venv/bin/python -m pip install -r requirements-quality.txt'
+                'transformers is missing from the environment — the venv is incomplete. '
+                'Run: ./venv/bin/python -m pip install -r requirements.txt'
             ) from exc
         if cls._language_id_pipeline is None:
             with cls._language_id_lock:
@@ -3863,9 +3865,9 @@ FLUENCY: <1-5>"""
         scored is reported, because a QE number with no stated subject is how
         a panel ends up showing the draft's score next to a shipped final.
 
-        Optional — depends on unbabel-comet (pulls in torch and a multi-GB
-        checkpoint download), which is kept out of the base requirements.txt
-        on purpose.
+        unbabel-comet is a base requirement, so the import below is a guard
+        against a half-built venv rather than the normal path. The multi-GB
+        checkpoint is still fetched here, on the first run of this test.
 
         Downloads the checkpoint via huggingface_hub directly (rather than
         through comet.models.download_model) because that helper swallows
@@ -3885,7 +3887,10 @@ FLUENCY: <1-5>"""
                 'label': 'COMET-Kiwi (reference-free QE)',
                 'value': None,
                 'flagged': True,
-                'note': 'Optional dependency not installed — run: pip install -r requirements-eval.txt',
+                'note': (
+                    'unbabel-comet is missing from the environment — the venv is '
+                    'incomplete. Run: ./venv/bin/python -m pip install -r requirements.txt'
+                ),
             }
 
         try:

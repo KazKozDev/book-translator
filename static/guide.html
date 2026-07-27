@@ -29,7 +29,8 @@
 
         .app-topbar { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 16px 0; margin-bottom: 18px; border-bottom: 1px solid var(--line); }
         .brand { display: flex; align-items: baseline; gap: 15px; letter-spacing: .09em; text-transform: uppercase; }
-        .brand-name { font-size: .95rem; font-weight: 700; color: var(--ink); }
+        .brand-name { font-size: .95rem; font-weight: 700; color: var(--ink); text-decoration: none; }
+        a.brand-name:hover { color: var(--accent); }
         .brand-descriptor { font-size: .8rem; font-weight: 500; color: var(--ink); opacity: .65; }
         .brand-version { font-size: .72rem; font-weight: 500; color: var(--faint); }
         .local-status { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: .72rem; font-weight: 500; letter-spacing: .09em; text-transform: uppercase; }
@@ -114,15 +115,14 @@
 <body>
     <div class="container">
         <header class="app-topbar">
-            <div class="brand"><span class="brand-name">Tolmach</span><span class="brand-descriptor">Book Translator</span><span class="brand-version">v3.0</span></div>
-            <div class="local-status">
+            <div class="brand"><a class="brand-name" href="/">Tolmach</a><span class="brand-descriptor">Book Translator</span><span class="brand-version">v3.0</span></div>
+            <nav class="local-status" aria-label="Primary navigation">
                 <a class="repo-link" href="/">Home</a>
                 <span class="sep">•</span><span class="current-nav" aria-current="page">Guide</span>
                 <span class="sep">•</span><a class="repo-link" href="/settings.html">Settings</a>
-                <span class="sep">•</span><a class="repo-link" href="/logs.html" target="tolmach-log" title="Live log in a separate window">Log</a>
-                <span class="sep">•</span><a class="repo-link" href="https://github.com/KazKozDev/book-translator" target="_blank" rel="noopener">GitHub</a>
+                <span class="sep">•</span><a class="repo-link" href="/logs.html" title="Live log">Log</a>
                 <span class="sep">•</span><button type="button" class="theme-toggle" id="themeToggle" title="Switch to dark mode">🌙</button>
-            </div>
+            </nav>
         </header>
 
         <div class="page-head">
@@ -203,10 +203,10 @@
                 </div>
 
                 <div class="qc-item">
-                    <h3>COMET-Kiwi <span class="qc-tag">optional dependency</span></h3>
+                    <h3>COMET-Kiwi <span class="qc-tag">gated model</span></h3>
                     <div class="qc-row"><span class="qc-label">Shows</span><span class="qc-body">A reference-free neural quality estimate for the draft (and, after Continue, for the final).</span></div>
                     <div class="qc-row"><span class="qc-label">Read it</span><span class="qc-body">Higher is better; values below 60 are flagged. It is an estimate over chunks, not proof of literary quality or long-range consistency.</span></div>
-                    <div class="qc-row"><span class="qc-label">Setup</span><span class="qc-body is-muted">Install <code>requirements-eval.txt</code>; the selected model may require Hugging Face access on first use. The app reports a missing dependency instead of fabricating a score.</span></div>
+                    <div class="qc-row"><span class="qc-label">Setup</span><span class="qc-body is-muted">Installed with the app, but <code>Unbabel/wmt22-cometkiwi-da</code> is gated on Hugging Face: request access on the model page, then run <code>huggingface-cli login</code> (or set <code>HF_TOKEN</code>). Its checkpoint downloads on first use. The app reports the problem instead of fabricating a score.</span></div>
                 </div>
 
             </div>
@@ -270,17 +270,17 @@
                 </div>
 
                 <div class="qc-item">
-                    <h3>LaBSE alignment <span class="qc-tag">optional dependency</span></h3>
+                    <h3>LaBSE alignment</h3>
                     <div class="qc-row"><span class="qc-label">Shows</span><span class="qc-body">Document-wide multilingual semantic alignment for every source/final chunk pair. It flags chunks that fall far below the document's own median similarity.</span></div>
                     <div class="qc-row"><span class="qc-label">Read it</span><span class="qc-body">A flagged chunk is a semantic-drift lead to inspect, not a proven mistranslation. The threshold is document-relative so it does not pretend one absolute score fits every language pair.</span></div>
-                    <div class="qc-row"><span class="qc-label">Setup</span><span class="qc-body is-muted">Install <code>requirements-quality.txt</code>. Model weights download locally the first time it runs.</span></div>
+                    <div class="qc-row"><span class="qc-label">Setup</span><span class="qc-body is-muted">Nothing to install. Model weights download locally the first time it runs.</span></div>
                 </div>
 
                 <div class="qc-item">
-                    <h3>Target-language segments <span class="qc-tag">optional dependency</span></h3>
+                    <h3>Target-language segments</h3>
                     <div class="qc-row"><span class="qc-label">Shows</span><span class="qc-body">Final chunks confidently classified as a language other than the selected target language.</span></div>
                     <div class="qc-row"><span class="qc-label">Read it</span><span class="qc-body">Use it to find untranslated or wrong-language segments. Short passages and low-confidence classifications are intentionally not treated as failures.</span></div>
-                    <div class="qc-row"><span class="qc-label">Setup</span><span class="qc-body is-muted">Also uses <code>requirements-quality.txt</code> and downloads its classifier on first use.</span></div>
+                    <div class="qc-row"><span class="qc-label">Setup</span><span class="qc-body is-muted">Nothing to install either — its classifier downloads on first use.</span></div>
                 </div>
 
                 <div class="qc-item">

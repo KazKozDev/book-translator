@@ -9,7 +9,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, v3]
   pull_request:
   workflow_dispatch:
 
@@ -20,12 +20,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # 3.9 is the floor the launcher enforces and the README promises, so it
-        # is tested rather than assumed. Every OS gets the current version,
-        # because the bugs that reach users are path and encoding bugs.
+        # 3.10 is the floor the launcher enforces and the README promises, so it
+        # is tested rather than assumed. The floor is set by gliner, which ships
+        # no 3.9 wheels — an older interpreter cannot install requirements.txt at
+        # all. Every OS gets the current version, because the bugs that reach
+        # users are path and encoding bugs.
         include:
           - os: ubuntu-latest
-            python-version: "3.9"
+            python-version: "3.10"
           - os: ubuntu-latest
             python-version: "3.12"
           - os: macos-latest

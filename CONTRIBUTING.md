@@ -17,7 +17,7 @@ architecture change is worth a conversation first.
 ## Before you start
 
 - Read the [README](README.md) and get the project running locally.
-- Python 3.9 or newer. The launcher refuses to start below that.
+- Python 3.10 or newer. The launcher refuses to start below that, and `gliner` has no wheels for 3.9.
 - [Ollama](https://ollama.com/) installed and running, if your change touches
   anything that calls a model.
 

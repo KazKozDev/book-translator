@@ -254,8 +254,11 @@ def start_translator() -> None:
 
 
 def main() -> None:
-    if sys.version_info < (3, 9):
-        fail("Python 3.9 or later is required.")
+    # 3.10, not 3.9: gliner==0.2.28 declares Requires-Python >=3.10, so on 3.9
+    # the pip step below fails at resolution with a message about wheels rather
+    # than about the interpreter. Better to say so before the venv is built.
+    if sys.version_info < (3, 10):
+        fail("Python 3.10 or later is required.")
     os.chdir(PROJECT_DIR)
     # The logo first, then where and when this is running, then the checks —
     # the order the shell launcher had before this file replaced it.

@@ -282,7 +282,9 @@
 
         .app-topbar { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 16px 0; margin-bottom: 18px; border-bottom: 1px solid var(--line); }
         .brand { display: flex; align-items: baseline; gap: 15px; letter-spacing: .09em; text-transform: uppercase; }
-        .brand-name { font-size: .95rem; font-weight: 700; color: var(--ink); }
+        /* The wordmark doubles as the way back to the workspace. */
+        .brand-name { font-size: .95rem; font-weight: 700; color: var(--ink); text-decoration: none; }
+        a.brand-name:hover { color: var(--accent); }
         .brand-descriptor { font-size: .8rem; font-weight: 500; color: var(--ink); opacity: .65; }
         .brand-version { font-size: .72rem; font-weight: 500; color: var(--faint); }
         .local-status { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: .72rem; font-weight: 500; letter-spacing: .09em; text-transform: uppercase; }
@@ -568,17 +570,14 @@
 <body>
     <div class="container">
         <header class="app-topbar">
-            <div class="brand"><span class="brand-name">Tolmach</span><span class="brand-descriptor">Book Translator</span><span class="brand-version">v3.0</span></div>
-            <div class="local-status">
+            <div class="brand"><a class="brand-name" href="/">Tolmach</a><span class="brand-descriptor">Book Translator</span><span class="brand-version">v3.0</span></div>
+            <nav class="local-status" aria-label="Primary navigation">
                 <span class="current-nav" aria-current="page">Home</span>
                 <span class="sep">•</span><a class="repo-link" href="/guide.html">Guide</a>
                 <span class="sep">•</span><a class="repo-link" href="/settings.html">Settings</a>
-                <!-- Opened as its own window: the point is to watch it beside
-                     the app while a run is going, not to navigate away. -->
-                <span class="sep">•</span><a class="repo-link" href="/logs.html" id="logWindowLink" title="Live log in a separate window">Log</a>
-                <span class="sep">•</span><a class="repo-link" href="https://github.com/KazKozDev/book-translator" target="_blank" rel="noopener">GitHub</a>
+                <span class="sep">•</span><a class="repo-link" href="/logs.html" title="Live log">Log</a>
                 <span class="sep">•</span><button type="button" class="theme-toggle" id="themeToggle" title="Switch to dark mode">🌙</button>
-            </div>
+            </nav>
         </header>
 
         <form id="translationForm">
@@ -1545,16 +1544,6 @@
             updateGlossaryPlaceholder();
 
             document.getElementById('themeToggle').addEventListener('click', toggleTheme);
-
-            // A named window, so pressing Log again focuses the console that is
-            // already open instead of stacking another copy of the stream.
-            document.getElementById('logWindowLink').addEventListener('click', event => {
-                const opened = window.open('/logs.html', 'tolmach-log', 'width=1180,height=760');
-                if (opened) {
-                    event.preventDefault();
-                    opened.focus();
-                }
-            });
 
             document.querySelectorAll('.test-run-btn').forEach(btn => {
                 btn.addEventListener('click', () => runEvaluationTest(btn.dataset.test));

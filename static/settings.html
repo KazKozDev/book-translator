@@ -13,7 +13,7 @@
         .container { max-width:1920px; margin:0 auto; padding:0 26px 44px; }
         .app-topbar { display:flex; align-items:center; justify-content:space-between; gap:24px; padding:16px 0; margin-bottom:18px; border-bottom:1px solid var(--line); }
         .brand { display:flex; align-items:baseline; gap:15px; letter-spacing:.09em; text-transform:uppercase; }
-        .brand-name { font-size:.95rem; font-weight:700; }.brand-descriptor { font-size:.8rem; font-weight:500; opacity:.65; }.brand-version { font-size:.72rem; color:var(--faint); }
+        .brand-name { font-size:.95rem; font-weight:700; color:var(--ink); text-decoration:none; }a.brand-name:hover { color:var(--accent); }.brand-descriptor { font-size:.8rem; font-weight:500; opacity:.65; }.brand-version { font-size:.72rem; color:var(--faint); }
         .local-status { display:flex; align-items:center; gap:10px; color:var(--muted); font-size:.72rem; font-weight:500; letter-spacing:.09em; text-transform:uppercase; }.local-status .sep { color:#d1d5db; }
         .repo-link { color:var(--muted); text-decoration:none; }.repo-link:hover { color:var(--accent); text-decoration:underline; }.current-nav { color:var(--ink); }
         .theme-toggle { border:0; background:none; padding:0; color:var(--muted); font-size:.9rem; line-height:1; cursor:pointer; text-transform:none; letter-spacing:0; }.theme-toggle:hover { color:var(--accent); }
@@ -23,7 +23,7 @@
         .form-group { margin-top:22px; }.role-heading { display:block; }.form-group select { width:100%; margin-top:8px; padding:11px 12px; border:1px solid var(--line); border-radius:6px; background:var(--paper); color:var(--ink); font:inherit; appearance:none; -webkit-appearance:none; background-image:none; cursor:pointer; }.form-group select:focus { outline:2px solid color-mix(in srgb, var(--accent) 40%, transparent); border-color:var(--accent); }
         .hint { margin-top:7px; color:var(--muted); font-size:.8rem; line-height:1.5; }.warning { color:var(--warning); font-weight:600; }.actions { display:flex; align-items:center; gap:14px; margin-top:28px; }.save-action { border:0; padding:0; background:transparent; color:var(--accent); font:inherit; font-size:.8rem; font-weight:700; letter-spacing:.08em; text-transform:uppercase; cursor:pointer; }.save-action:hover { color:var(--accent-dark); text-decoration:underline; }.save-action:disabled { color:var(--faint); cursor:not-allowed; text-decoration:none; }.saved { color:var(--muted); font-size:.82rem; }
         .footer-note { margin-top:52px; padding-top:22px; border-top:1px solid var(--line); color:var(--faint); font-size:.78rem; line-height:1.6; }.footer-note strong { display:block; margin-bottom:10px; color:var(--muted); }.footer-note p + p { margin-top:0; }
-        .neural-list { margin-top:18px; border-top:1px solid var(--line); }.neural-row { display:flex; flex-direction:column; gap:5px; padding:15px 0; border-bottom:1px solid var(--line); }.neural-name { font-size:.88rem; font-weight:700; }.neural-role { margin-top:4px; color:var(--muted); font-size:.8rem; line-height:1.45; }.neural-kind { order:-1; color:var(--faint); font-size:.72rem; font-weight:700; letter-spacing:.06em; text-transform:uppercase; }
+        .neural-list { margin-top:18px; border-top:1px solid var(--line); }.neural-row { display:flex; flex-direction:column; gap:5px; padding:15px 0; border-bottom:1px solid var(--line); }.neural-name { font-size:.88rem; font-weight:700; }.neural-role { margin-top:4px; color:var(--muted); font-size:.8rem; line-height:1.45; }.neural-role code { padding:1px 5px; border-radius:4px; background:var(--soft); font-size:.95em; }.neural-role a { color:var(--accent); text-decoration:none; }.neural-role a:hover { text-decoration:underline; }.neural-kind { order:-1; color:var(--faint); font-size:.72rem; font-weight:700; letter-spacing:.06em; text-transform:uppercase; }
         .settings-columns { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:22px; align-items:start; }.settings-columns .card { min-width:0; }
         @media (max-width:980px) { .settings-columns { grid-template-columns:1fr; } }
         @media (max-width:1180px) { .container { padding:0 16px 32px; } }
@@ -36,10 +36,10 @@
 <body>
     <div class="container">
         <header class="app-topbar">
-            <div class="brand"><span class="brand-name">Tolmach</span><span class="brand-descriptor">Book Translator</span><span class="brand-version">v3.0</span></div>
+            <div class="brand"><a class="brand-name" href="/">Tolmach</a><span class="brand-descriptor">Book Translator</span><span class="brand-version">v3.0</span></div>
             <nav class="local-status" aria-label="Primary navigation">
-                <a class="repo-link" href="/">Home</a><span class="sep">•</span><a class="repo-link" href="/guide.html">Guide</a><span class="sep">•</span><span class="current-nav" aria-current="page">Settings</span><span class="sep">•</span><a class="repo-link" href="/logs.html" target="tolmach-log" title="Live log in a separate window">Log</a>
-                <span class="sep">•</span><a class="repo-link" href="https://github.com/KazKozDev/book-translator" target="_blank" rel="noopener">GitHub</a><span class="sep">•</span><button type="button" class="theme-toggle" id="themeToggle" title="Switch theme">🌙</button>
+                <a class="repo-link" href="/">Home</a><span class="sep">•</span><a class="repo-link" href="/guide.html">Guide</a><span class="sep">•</span><span class="current-nav" aria-current="page">Settings</span><span class="sep">•</span><a class="repo-link" href="/logs.html" title="Live log">Log</a>
+                <span class="sep">•</span><button type="button" class="theme-toggle" id="themeToggle" title="Switch theme">🌙</button>
             </nav>
         </header>
         <main>
@@ -62,11 +62,13 @@
             </section>
             <section class="card">
                 <div class="section-kicker">Neural models</div>
-                <p>These models are chosen by the application for their specific task, not from the Ollama list.</p>
+                <p>These models are chosen by the application for their specific task, not from the Ollama list. They install with the app, and each downloads its weights the first time the feature that needs it is used.</p>
                 <div class="neural-list">
-                    <div class="neural-row"><div><div class="neural-name">GLiNER multilingual NER</div><p class="neural-role">Finds candidate names and entities during Prepare.</p></div><span class="neural-kind">Entity recognition</span></div>
-                    <div class="neural-row"><div><div class="neural-name">LaBSE</div><p class="neural-role">Checks document-wide source/final semantic alignment.</p></div><span class="neural-kind">Alignment</span></div>
-                    <div class="neural-row"><div><div class="neural-name">COMET-Kiwi</div><p class="neural-role">Reference-free quality estimate for draft and final translation.</p></div><span class="neural-kind">Quality estimate</span></div>
+                    <div class="neural-row"><div><div class="neural-name">GLiNER multilingual NER</div><p class="neural-role">Finds candidate names and entities during Prepare. <a href="https://huggingface.co/urchade/gliner_multi-v2.1" target="_blank" rel="noopener">Model page on Hugging Face</a>.</p></div><span class="neural-kind">Entity recognition</span></div>
+                    <div class="neural-row"><div><div class="neural-name">BGE-M3</div><p class="neural-role">Groups the mentions GLiNER found, so one character or place becomes one glossary entry. <a href="https://huggingface.co/BAAI/bge-m3" target="_blank" rel="noopener">Model page on Hugging Face</a>.</p></div><span class="neural-kind">Embedding</span></div>
+                    <div class="neural-row"><div><div class="neural-name">LaBSE</div><p class="neural-role">Checks document-wide source/final semantic alignment. <a href="https://huggingface.co/sentence-transformers/LaBSE" target="_blank" rel="noopener">Model page on Hugging Face</a>.</p></div><span class="neural-kind">Alignment</span></div>
+                    <div class="neural-row"><div><div class="neural-name">XLM-RoBERTa language detection</div><p class="neural-role">Flags final chunks that came back in the wrong language, or were never translated at all. <a href="https://huggingface.co/papluca/xlm-roberta-base-language-detection" target="_blank" rel="noopener">Model page on Hugging Face</a>.</p></div><span class="neural-kind">Language ID</span></div>
+                    <div class="neural-row"><div><div class="neural-name">COMET-Kiwi</div><p class="neural-role">Reference-free quality estimate for draft and final translation. The only one that is not automatic: the repository is gated, so request access, then run <code>huggingface-cli login</code> (or set <code>HF_TOKEN</code>) before the first run. <a href="https://huggingface.co/Unbabel/wmt22-cometkiwi-da" target="_blank" rel="noopener">Model page on Hugging Face</a>.</p></div><span class="neural-kind">Quality estimate</span></div>
                 </div>
             </section>
             </div>

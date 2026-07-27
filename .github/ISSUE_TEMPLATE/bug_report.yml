@@ -43,6 +43,6 @@ body:
     attributes:
       label: Logs or screenshots
       description: >-
-        Open the Log window from the app header and copy what the run printed,
+        Open the Log page from the app header and copy what the run printed,
         or attach logs/translations.log. It records what each pass found,
         patched and decided, and by which model.

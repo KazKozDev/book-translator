@@ -5,9 +5,9 @@ Upload a `.txt` file and get back a translation that a second AI pass has alread
 ```bash
 git clone https://github.com/KazKozDev/book-translator.git
 cd book-translator
-pip install -r requirements.txt
-ollama pull gpt-oss:20b
-python translator.py
+ollama pull translategemma:12b
+ollama pull qwen3:32b
+python launch.py
 ```
 
 Runs offline · No API keys · Open source
@@ -16,11 +16,14 @@ Runs offline · No API keys · Open source
 
 ## Quick start
 
-1. Make sure [Ollama](https://ollama.com/) is installed and running, and pull at least one model:
+1. Make sure [Ollama](https://ollama.com/) is installed and running, and pull the two models the pipeline needs — a TranslateGemma for the translation pass and a separate instruct model for everything that grades or edits it:
 
    ```bash
-   ollama pull gpt-oss:20b
+   ollama pull translategemma:12b
+   ollama pull qwen3:32b
    ```
+
+   These are the minimums the launcher checks for; larger models in either role work, and Settings lets you point each role at a different one.
 
 2. Install dependencies and start the app:
 
@@ -78,7 +81,7 @@ The model-based tests sample five chunks, chosen by risk (names, dialogue, numbe
 
 There is no single score. Adequacy and fluency move in opposite directions when a refinement pass trades meaning for polish, and an average is precisely what hides that. The **Verdict** block shows each axis as draft → final and states the gates in words: an adequacy regression, a judge that prefers the draft on accuracy while preferring the final on readability, a missing name rendering, an unsatisfied glossary constraint.
 
-LaBSE and Language ID are optional document-quality dependencies: `pip install -r requirements-quality.txt`. The launcher does not install them — their model weights download once on first use, and the pin there has to match `requirements-eval.txt`, since both land in one environment. XCOMET/MQM is intentionally not part of this first layer: run deterministic gates, LaBSE, and Language ID before adding a heavy quality evaluator.
+Every model behind these tests — GLiNER, BGE-M3, LaBSE, Language ID, COMET-Kiwi — installs with `requirements.txt`, which the launcher runs on every start, and its weights download once on first use. The one thing that is not automatic is COMET-Kiwi's checkpoint: `Unbabel/wmt22-cometkiwi-da` is gated on Hugging Face, so it needs access granted on the model page and `huggingface-cli login` (or `HF_TOKEN`) before that test returns a number. XCOMET/MQM is intentionally not part of this first layer: run deterministic gates, LaBSE, and Language ID before adding a heavy quality evaluator.
 
 ## Configuration
 
@@ -108,9 +111,10 @@ allowed — it is just the first pass run in reverse.
 
 ## Requirements
 
-- Python 3.9+ (the launcher refuses to run on anything older)
+- Python 3.10+ (the launcher refuses to run on anything older, and `gliner` — the entity model behind Prepare — has no 3.9 wheels)
 - [Ollama](https://ollama.com/) installed and running locally
-- At least one Ollama model pulled
+- Two Ollama models: a TranslateGemma for translation and a separate instruct model for refinement, verification and the judge tests
+- Disk space for the Hugging Face cache in `~/.cache/huggingface`: the entity, embedding and alignment models are a few hundred MB each, and COMET-Kiwi's checkpoint is several GB. Nothing is downloaded until the feature that needs it runs.
 
 ## Limitations
 
@@ -130,9 +134,9 @@ allowed — it is just the first pass run in reverse.
 - `launch.py` — the cross-platform bootstrap behind all three launcher files; standard library only, so it runs before the virtual environment exists
 - `banner.py` — the startup logo, shared by the launcher and the server so both print the same one
 - `static/index.html` — browser UI for uploads, model/genre selection, the names editor, progress tracking, the Quality Check panel, and downloads
-- `static/logs.html` — the live log console, opened in its own window from the Log link
+- `static/logs.html` — the live log console, opened from the Log link like any other page
 - `tests/` — the model-free half of the pipeline: `pip install -r requirements-dev.txt && python -m pytest tests/`
-- `uploads/`, `translations/`, `logs/` — runtime directories for uploaded files, exported output, and rotating logs. Loading a document rolls the logs over, so `logs/*.log` is the current book and `logs/*.log.1` the one before it; the Log window streams them live
+- `uploads/`, `translations/`, `logs/` — runtime directories for uploaded files, exported output, and rotating logs. Loading a document rolls the logs over, so `logs/*.log` is the current book and `logs/*.log.1` the one before it; the Log page streams them live
 - `cache.db` — cached chunk translations; `translations.db` — job history and status
 
 </details>

@@ -36,7 +36,21 @@
             padding: 11px 16px; border-bottom: 1px solid var(--line); background: var(--paper);
         }
         .brand { display: flex; align-items: baseline; gap: 10px; font-size: .74rem; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; }
+        /* The wordmark doubles as the way back to the workspace. */
+        .brand-name { color: var(--ink); text-decoration: none; }
+        a.brand-name:hover { color: var(--accent); }
         .brand .sub { color: var(--faint); font-weight: 500; }
+        /* Same nav as every other page — margin-left:auto on top of the spacer,
+           because when the header wraps on a narrow window the spacer stays on
+           the previous line and only the auto margin still pushes it right. */
+        .local-status { display: flex; align-items: center; gap: 10px; margin-left: auto; color: var(--muted); font-size: .72rem; font-weight: 500; letter-spacing: .09em; text-transform: uppercase; }
+        .local-status .sep { color: #d1d5db; }
+        :root.theme-dark .local-status .sep { color: var(--line); }
+        .repo-link { color: var(--muted); text-decoration: none; }
+        .repo-link:hover { color: var(--accent); text-decoration: underline; }
+        .current-nav { color: var(--ink); }
+        .theme-toggle { border: none; background: none; padding: 0; color: var(--muted); font-size: .9rem; line-height: 1; cursor: pointer; text-transform: none; letter-spacing: 0; }
+        .theme-toggle:hover { color: var(--accent); }
         .status { display: flex; align-items: center; gap: 7px; color: var(--muted); font-size: .72rem; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; }
         .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--faint); }
         .dot.live { background: var(--mark); }
@@ -126,9 +140,8 @@
 </head>
 <body>
     <header>
-        <div class="brand"><span>Tolmach</span><span class="sub">Log</span></div>
+        <div class="brand"><a class="brand-name" href="/">Tolmach</a><span class="sub">Log</span></div>
         <div class="status"><span class="dot" id="statusDot"></span><span id="statusText">Connecting…</span></div>
-        <div class="spacer"></div>
         <div class="controls">
             <button type="button" class="chip on" data-source="translations">Pipeline</button>
             <button type="button" class="chip on" data-source="api">Model</button>
@@ -139,8 +152,15 @@
             <button type="button" class="chip" id="wrap">Wrap</button>
             <button type="button" class="chip" id="clear" title="Clear this view only — the files are untouched">Clear</button>
             <button type="button" class="chip danger" id="reset" title="Empty the log files on disk — cannot be undone">Erase files</button>
-            <button type="button" class="chip" id="themeToggle" title="Switch theme">Theme</button>
         </div>
+        <div class="spacer"></div>
+        <nav class="local-status" aria-label="Primary navigation">
+            <a class="repo-link" href="/">Home</a>
+            <span class="sep">•</span><a class="repo-link" href="/guide.html">Guide</a>
+            <span class="sep">•</span><a class="repo-link" href="/settings.html">Settings</a>
+            <span class="sep">•</span><span class="current-nav" aria-current="page">Log</span>
+            <span class="sep">•</span><button type="button" class="theme-toggle" id="themeToggle" title="Switch theme">🌙</button>
+        </nav>
     </header>
     <div class="console" id="console"><p class="empty" id="empty">Waiting for log lines…</p></div>
     <footer><span id="counts">0 lines</span> · following logs/translations.log, logs/api.log, logs/app.log · set <code>LOG_LEVEL=DEBUG</code> before starting the app to include the full prompts</footer>
