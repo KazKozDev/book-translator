@@ -1,0 +1,83 @@
+# Adapted from the CI workflow kroryan contributed to the v2 line, which was
+# written for the book_translator/ package layout this version does not have.
+# What is kept: the three-OS matrix, the Python-version matrix, and the Bandit
+# security scan. What is dropped: black and isort (this codebase is not
+# black-formatted, so --check would fail every run and teach the team to ignore
+# CI), the Windows .exe build and the Docker build (no .spec or Dockerfile
+# here yet).
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  tests:
+    name: Tests · ${{ matrix.os }} · Python ${{ matrix.python-version }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # 3.9 is the floor the launcher enforces and the README promises, so it
+        # is tested rather than assumed. Every OS gets the current version,
+        # because the bugs that reach users are path and encoding bugs.
+        include:
+          - os: ubuntu-latest
+            python-version: "3.9"
+          - os: ubuntu-latest
+            python-version: "3.12"
+          - os: macos-latest
+            python-version: "3.12"
+          - os: windows-latest
+            python-version: "3.12"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Run tests
+        # No model calls, no Ollama, no network: the suite covers the half of
+        # the pipeline that is decidable without a model.
+        run: python -m pytest tests -q
+
+      - name: Check that the app imports and the banner renders
+        run: python -c "import translator, banner; banner.print_terminal_banner()"
+
+  lint:
+    name: Errors and undefined names
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install flake8
+      # Only the checks that mean "this is broken", not the ones that mean "this
+      # is not to my taste": syntax errors, undefined names, unused-star imports.
+      - run: flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics --exclude=venv,.venv
+
+  security:
+    name: Security scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install bandit
+      # Reported, not blocking: this is a localhost tool, and the scanner's
+      # findings need a person to read them.
+      - run: bandit -r . -ll --exclude ./venv,./.venv,./tests || true

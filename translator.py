@@ -175,6 +175,13 @@ def setup_access_log():
     handler.setFormatter(PlainAccessFormatter())
     werkzeug_logger.addHandler(handler)
 
+# psutil.disk_usage('/') is a Unix assumption: on Windows the project's drive
+# is what matters, and '/' there is not a path at all. Reported by a contributor
+# running this on Windows.
+def project_disk_usage():
+    return psutil.disk_usage(os.path.abspath(os.sep if os.name != 'nt' else os.getcwd()))
+
+
 # Monitoring setup
 @dataclass
 class TranslationMetrics:
@@ -211,7 +218,7 @@ class AppMonitor:
         return {
             'cpu_percent': psutil.cpu_percent(),
             'memory_percent': psutil.virtual_memory().percent,
-            'disk_usage': psutil.disk_usage('/').percent,
+            'disk_usage': project_disk_usage().percent,
             'uptime': time.time() - self.start_time
         }
 
@@ -351,9 +358,13 @@ class TranslationCache:
             ''', (hash_key, source_lang, target_lang, text, translated_text, machine_translation))
     
     def cleanup_old_entries(self, days: int = 30):
+        # Parameterised rather than interpolated. `days` is ours today, but a
+        # retention period is exactly the kind of value that later arrives from
+        # a settings screen, and by then the f-string is invisible.
         with sqlite3.connect(self.db_path) as conn:
             conn.execute(
-                f"DELETE FROM translation_cache WHERE last_used < datetime('now', '-{days} days')"
+                "DELETE FROM translation_cache WHERE last_used < datetime('now', ?)",
+                (f'-{int(days)} days',),
             )
 
 # Initialize cache
@@ -3997,7 +4008,9 @@ class TranslationRecovery:
     def cleanup_failed_translations(self, days: int = 7):
         with sqlite3.connect(self.db_path) as conn:
             conn.execute(
-                f"DELETE FROM translations WHERE status = 'error' AND created_at < datetime('now', '-{days} days')"
+                "DELETE FROM translations WHERE status = 'error' "
+                "AND created_at < datetime('now', ?)",
+                (f'-{int(days)} days',),
             )
             
 recovery = TranslationRecovery()
@@ -4120,7 +4133,53 @@ class UploadError(Exception):
     """An upload the caller should reject with a 400."""
 
 
-def read_uploaded_book(file):
+# Languages whose books arrive in cp1251 rather than cp1252 when they are not
+# UTF-8. Kept wider than this app's own language list: the source file's
+# encoding does not care which languages the interface offers.
+CYRILLIC_SOURCE_LANGUAGES = frozenset({'ru', 'uk', 'be', 'bg', 'sr', 'mk', 'kk'})
+
+
+def decode_text_file(filepath: str, source_lang: Optional[str] = None) -> str:
+    """Read a .txt book, trying the encodings a real book arrives in.
+
+    A single-byte codepage cannot fail to decode — every byte maps to some
+    character — so nothing raises when the guess is wrong: it just returns
+    mojibake. Measured on a real cp1251 Russian sample, strict cp1252 decoded
+    all of it happily into "Ìèñòåð Äóðñëü". So the order is not guessed, it is
+    taken from the source language the user already selected, and only then
+    falls back. This code used to try cp1251 alone, which did the same damage in
+    the other direction to any Portuguese or French book.
+
+    utf-8-sig is tried first and settles most files: real UTF-8 is
+    self-validating, and the -sig form also strips the BOM that Windows Notepad
+    writes and that plain utf-8 would leave as an invisible character at the
+    head of the first chunk.
+    """
+    raw = open(filepath, 'rb').read()
+    try:
+        return raw.decode('utf-8-sig')
+    except UnicodeDecodeError:
+        pass
+
+    cyrillic = (source_lang or '').strip().lower()[:2] in CYRILLIC_SOURCE_LANGUAGES
+    fallbacks = ('cp1251', 'cp1252', 'latin-1') if cyrillic else ('cp1252', 'cp1251', 'latin-1')
+    for encoding in fallbacks:
+        try:
+            text = raw.decode(encoding)
+        except (UnicodeDecodeError, LookupError):
+            continue
+        logger.app_logger.warning(
+            "%s is not UTF-8 — decoded as %s (source language %s). If the text "
+            "looks like nonsense, re-save the file as UTF-8.",
+            os.path.basename(filepath), encoding, source_lang or 'not given',
+        )
+        return text
+    # latin-1 cannot fail, so this is unreachable; kept so a future edit to the
+    # list cannot silently return None.
+    raise UploadError('Could not decode this file — re-save it as UTF-8.')
+
+
+def read_uploaded_book(file, source_lang: Optional[str] = None):
     """Save an uploaded book into UPLOAD_FOLDER and decode it.
 
     Returns (text, chapters, book_title, book_author, source_format, filepath).
@@ -4146,12 +4205,7 @@ def read_uploaded_book(file):
         )
         return text, chapters, book_title, book_author, 'epub', filepath
 
-    try:
-        with open(filepath, 'r', encoding='utf-8') as f:
-            text = f.read()
-    except UnicodeDecodeError:
-        with open(filepath, 'r', encoding='cp1251') as f:
-            text = f.read()
+    text = decode_text_file(filepath, source_lang)
     return text, None, None, None, 'txt', filepath
 
 
@@ -4194,7 +4248,7 @@ def prepare():
                 )}), 400
 
         try:
-            text, _, _, _, _, filepath = read_uploaded_book(request.files['file'])
+            text, _, _, _, _, filepath = read_uploaded_book(request.files['file'], source_lang)
         except UploadError as e:
             return jsonify({'error': str(e)}), 400
 
@@ -4281,7 +4335,7 @@ def translate():
             return jsonify({'error': 'Missing required parameters'}), 400
 
         try:
-            text, chapters, book_title, book_author, source_format, filepath = read_uploaded_book(file)
+            text, chapters, book_title, book_author, source_format, filepath = read_uploaded_book(file, source_lang)
         except UploadError as e:
             return jsonify({'error': str(e)}), 400
         filename = secure_filename(file.filename)
@@ -5071,7 +5125,7 @@ def health_check():
         with sqlite3.connect(DB_PATH) as conn:
             conn.execute('SELECT 1')
             
-        disk_usage = psutil.disk_usage('/')
+        disk_usage = project_disk_usage()
         if disk_usage.percent > 90:
             logger.app_logger.warning("Low disk space")
             

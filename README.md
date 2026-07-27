@@ -87,7 +87,7 @@ LaBSE and Language ID are optional document-quality dependencies: `pip install -
 | Port | `5001` | override with the `PORT` environment variable |
 | Ollama endpoint | `http://localhost:11434` | fixed, not currently configurable |
 | Model | chosen in the UI | any model already pulled in Ollama |
-| Languages | English, Russian, Spanish, French, German, Italian, Chinese, Japanese | selected per job |
+| Languages | English, Russian, Spanish, French, German, Italian, Portuguese, Chinese, Japanese, Korean | selected per job |
 | Genre | Unknown, Fiction, Technical, Academic, Business, Poetry | tunes the translation prompt |
 | Chunk size | 1200 characters | paragraph-sized segments; text is split on paragraph, then sentence boundaries |
 
@@ -136,6 +136,27 @@ allowed — it is just the first pass run in reverse.
 - `cache.db` — cached chunk translations; `translations.db` — job history and status
 
 </details>
+
+## Credits
+
+This version is a rewrite around a different pipeline — Prepare, draft, guarded
+patch — and it replaced the modular v2 line rather than growing out of it. The
+work that came before it is not gone, and some of it is in here:
+
+- **[kroryan](https://github.com/kroryan)** — the v2.0 modular architecture, the
+  CI workflow this repository's own workflow is adapted from, Windows
+  compatibility, and a set of security and stability fixes. Three of those
+  findings applied directly to this rewrite and were ported: SQL built by string
+  interpolation in the two cleanup queries, `psutil.disk_usage('/')` (not a path
+  on Windows), and single-encoding file reading. The last one had bitten in the
+  opposite direction here — the only fallback was cp1251, so a Portuguese or
+  French book came back as Cyrillic nonsense with nothing raised.
+- **[moonixt](https://github.com/moonixt)** — Portuguese support. Portuguese and
+  Korean are both in this version's language list.
+- **Derek W.** — README and startup instructions.
+
+The v2 line is tagged **`v2.0`**: `git checkout v2.0` gets the modular package,
+the Windows tray app and the Docker build exactly as they were.
 
 ## License
 
