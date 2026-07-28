@@ -139,8 +139,8 @@ def test_each_pipeline_role_uses_its_own_requested_model(tmp_path, monkeypatch):
             'genre': 'fiction',
         }
 
-    # Stage 0 runs two model calls with two independent role choices: one
-    # rules on entity identity, the other renders the glossary.
+    # Stage 0 runs two model calls, and the split stays reachable over the API
+    # even though the interface now offers one choice for both.
     prepare_response = client.post('/prepare', data={
         **upload('rendering-model'), 'entityModel': 'entity-model',
     }, content_type='multipart/form-data')
@@ -204,3 +204,50 @@ def test_each_pipeline_role_uses_its_own_requested_model(tmp_path, monkeypatch):
         'judge-model',
         'judge-model',
     ]
+
+
+def test_prepare_runs_both_of_its_passes_on_one_model_by_default(tmp_path, monkeypatch):
+    """The interface offers a single Glossary preparation choice: a small
+    model matched a much larger one at both passes, and splitting the roles
+    only made a 32 GB machine unload one model and load the other halfway
+    through Prepare. A request with no entityModel must therefore run the
+    identity pass on the model it was given, not on some default."""
+    monkeypatch.setattr(app_module, 'DB_PATH', str(tmp_path / 'translations.db'))
+    app_module.init_db()
+    RecordingTranslator.selected_models = []
+    RecordingTranslator.entity_resolver_models = []
+    monkeypatch.setattr(app_module, 'BookTranslator', RecordingTranslator)
+
+    class AvailableOllama:
+        def raise_for_status(self):
+            pass
+
+    monkeypatch.setattr(app_module.requests, 'get', lambda *args, **kwargs: AvailableOllama())
+    app_module.app.config.update(TESTING=True)
+
+    response = app_module.app.test_client().post('/prepare', data={
+        'file': (io.BytesIO(b'Hello world.'), 'sample.txt'),
+        'sourceLanguage': 'english',
+        'targetLanguage': 'russian',
+        'model': 'prepare-model',
+        'genre': 'fiction',
+    }, content_type='multipart/form-data')
+
+    assert response.status_code == 200
+    assert RecordingTranslator.entity_resolver_models == ['prepare-model']
+    # And only one translator is constructed, so the second role cannot
+    # quietly bring a second set of weights into memory.
+    assert RecordingTranslator.selected_models == ['prepare-model']
+
+
+def test_the_settings_page_offers_one_choice_for_glossary_preparation():
+    settings_page = (Path(__file__).resolve().parents[1] / 'static' / 'settings.html').read_text(
+        encoding='utf-8')
+    main_page = (Path(__file__).resolve().parents[1] / 'static' / 'index.html').read_text(
+        encoding='utf-8')
+
+    assert 'Glossary preparation' in settings_page
+    assert 'id="entityModel"' not in settings_page
+    # The main page must not send a stale saved preference for the role it no
+    # longer offers, or the two passes would silently split again.
+    assert 'entityModel' not in main_page

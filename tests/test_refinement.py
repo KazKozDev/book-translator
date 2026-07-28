@@ -20,8 +20,15 @@ def test_parses_json_wrapped_in_prose_and_fences():
 
 
 def test_unparseable_answers_yield_no_errors():
-    for raw in (None, '', 'I could not find any problems.', '[not json]', '{"span": "x"}'):
+    for raw in (None, '', 'I could not find any problems.', '[not json]', '{not json}'):
         assert BookTranslator._parse_json_array(raw) == []
+
+
+def test_a_lone_object_is_read_rather_than_discarded():
+    """One error, written without the array around it, is still one error.
+    Nothing skips validation by arriving this way: every span is still
+    checked against the draft before it can be patched in."""
+    assert BookTranslator._parse_json_array('{"span": "x"}') == [{'span': 'x'}]
 
 
 def test_only_spans_present_in_the_draft_survive_validation():

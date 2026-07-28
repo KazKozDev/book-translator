@@ -32,7 +32,7 @@ Runs offline · No API keys · Open source
    python translator.py
    ```
 
-3. Open [http://localhost:5001](http://localhost:5001), pick source/target language and a model, upload a `.txt` or `.epub` file, open **Names & brief** and press *Propose from the source*, then press Start. Download the result once refinement finishes.
+3. Open [http://localhost:5001](http://localhost:5001), pick source/target language and a model, upload a `.txt` or `.epub` file with **→ 1 UPLOAD**, open the **Glossary** panel and press **→ PREPARE**, then press **→ 2 START**. Download the result once refinement finishes.
 
 Or let the launcher do the setup: `python launch.py` creates the virtual environment, installs dependencies, checks that Ollama is running and has the two models the pipeline needs, frees port `5001`, starts the server and opens the browser. Double-clicking `Launch Book-Translator.command` (macOS), `Launch Book-Translator.sh` (Linux) or `Launch Book-Translator.bat` (Windows) runs exactly the same script.
 

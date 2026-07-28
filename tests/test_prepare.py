@@ -358,3 +358,89 @@ def test_a_pronoun_the_neural_extractor_calls_a_person_is_rejected():
 
     assert 'she' not in surfaces
     assert 'Fanny' in surfaces
+
+
+def test_rendering_batches_overlap_without_changing_the_result():
+    """Stage 0's wall clock is fifteen sequential calls to a large local
+    model, and nothing in one batch depends on another's answer. Overlapping
+    them is only safe if the merge still sees batch order: the first batch to
+    claim a source is the one that keeps it."""
+    import threading
+    import time
+
+    translator = BookTranslator.__new__(BookTranslator)
+    text = 'Grunnings, Privet Drive, Dursley, Dudley, Potters, Surrey, Hogwarts, Fenwick.'
+    candidates = [
+        {'surface': name, 'count': 3, 'kind': 'other', 'evidence': [], 'variants': []}
+        for name in ('Grunnings', 'Privet Drive', 'Dursley', 'Dudley',
+                     'Potters', 'Surrey', 'Hogwarts', 'Fenwick')
+    ]
+    answers = {
+        'Grunnings': '[{"source": "Grunnings", "target": "Граннингс"},'
+                     ' {"source": "Dursley", "target": "ИЗ ПЕРВОГО БАТЧА"}]',
+        'Potters': '[{"source": "Potters", "target": "Поттеры"},'
+                   ' {"source": "Dursley", "target": "из второго батча"}]',
+    }
+    in_flight, peak = set(), []
+    lock = threading.Lock()
+
+    def fake_call(prompt, temperature=0.2, read_timeout=0):
+        with lock:
+            in_flight.add(prompt)
+            peak.append(len(in_flight))
+        # The batch that comes first answers last, so an out-of-order arrival
+        # is what the merge actually has to survive.
+        time.sleep(0.05 if 'Grunnings' in prompt else 0.01)
+        with lock:
+            in_flight.discard(prompt)
+        return next((body for key, body in answers.items() if key in prompt), '[]')
+
+    translator._call_model = fake_call
+    translator.PREPARE_BATCH_TERMS = 4
+    records = translator.propose_proper_noun_records(
+        text, 'en', 'ru', 'fiction', candidates=candidates,
+    )
+
+    assert max(peak) > 1, 'the batches did not actually overlap'
+    by_source = {record['source']: record['target'] for record in records}
+    assert by_source['Grunnings'] == 'Граннингс' and by_source['Potters'] == 'Поттеры'
+    # Batch order decides the duplicate, not which call happened to finish first.
+    assert by_source['Dursley'] == 'ИЗ ПЕРВОГО БАТЧА'
+
+
+def test_an_answer_without_the_brackets_is_still_an_answer():
+    """A model that writes the objects one after another, with no array
+    around them, has answered correctly. Reading only the bracketed form
+    discarded whole batches of good renderings as "0 of 8 accepted"."""
+    unwrapped = """{"source": "Swift", "target": "Свифт", "mode": "inflectable"}
+{"source": "Bennet", "target": "Беннет", "mode": "inflectable"}
+{"source": "Pride and Prejudice", "target": "Гордость и предубеждение", "mode": "exact"}"""
+
+    items = BookTranslator._parse_json_array(unwrapped)
+
+    assert [item['source'] for item in items] == ['Swift', 'Bennet', 'Pride and Prejudice']
+
+
+def test_an_array_cut_off_before_its_closing_bracket_keeps_what_arrived():
+    items = BookTranslator._parse_json_array(
+        '[{"source": "Grunnings", "target": "Граннингс"}, {"source": "Dursley", "targ'
+    )
+
+    assert [item['source'] for item in items] == ['Grunnings']
+
+
+def test_a_proper_array_is_still_read_as_one():
+    """The bracketed path is unchanged, nesting and prose included."""
+    items = BookTranslator._parse_json_array(
+        'Here you go:\n```json\n[{"source": "A", "features": {"nested": 1}}, "junk",'
+        ' {"source": "B"}]\n```\nHope that helps.'
+    )
+
+    assert [item['source'] for item in items] == ['A', 'B']
+    assert items[0]['features'] == {'nested': 1}
+
+
+def test_an_empty_answer_stays_empty():
+    assert BookTranslator._parse_json_array('[]') == []
+    assert BookTranslator._parse_json_array('No proper nouns here.') == []
+    assert BookTranslator._parse_json_array(None) == []

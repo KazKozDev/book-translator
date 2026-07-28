@@ -1,0 +1,27 @@
+# Tool configuration for the repository. Deliberately no [project] or
+# [build-system] table: this is an application, not a distributable package.
+# Every path it uses is relative to the working directory — 'static', 'uploads',
+# 'translations', 'translations.db' — so it runs from its checkout and a
+# `pip install` of it would create those directories wherever the caller
+# happened to be standing and then fail to find the front end. Declaring it
+# installable would be a claim the code does not honour.
+#
+# The runtime dependency list stays in requirements.txt for the same reason:
+# launch.py installs that file on every start, and a second copy here would be
+# the copy nobody updates.
+
+[tool.pytest.ini_options]
+# The modules live at the repository root rather than in a package directory,
+# so the root has to be importable for `import translator` to resolve.
+pythonpath = ["."]
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py310"  # The floor launch.py enforces and the README promises.
+
+[tool.ruff.lint]
+# The same line CI draws with flake8: only the checks that mean "this is
+# broken" — syntax errors, undefined names, unused imports and variables — and
+# none that mean "this is not to my taste". A style rule that fires on every
+# run is a rule that teaches people to ignore the linter.
+select = ["E9", "F"]

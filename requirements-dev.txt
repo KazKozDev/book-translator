@@ -3,7 +3,11 @@
 #
 #   pip install -r requirements-dev.txt
 #
+# One linter, not three. black was here but never ran: CI dropped it because
+# this codebase is not black-formatted, so leaving it installed only invited
+# somebody to reformat five thousand lines by accident. ruff replaces flake8
+# and reads its rules from pyproject.toml, so the local run and the CI run
+# cannot drift apart.
 -r requirements.txt
 pytest==7.4.3
-black==23.12.1
-flake8==6.1.0
+ruff==0.12.2

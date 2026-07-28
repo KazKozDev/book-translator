@@ -13,6 +13,7 @@ import os
 import platform
 import shutil
 import signal
+import socket
 import subprocess
 import sys
 import time
@@ -20,6 +21,7 @@ import urllib.error
 import urllib.request
 import webbrowser
 from pathlib import Path
+from typing import Any, NoReturn
 
 # Standard library only, like everything else this file touches before the
 # virtual environment exists — banner.py imports nothing else either.
@@ -44,7 +46,7 @@ def log(mark: str, message: str) -> None:
     print(f"{mark} {message}", flush=True)
 
 
-def fail(message: str) -> None:
+def fail(message: str) -> NoReturn:
     log("✗", message)
     if sys.stdin.isatty():
         input("Press Enter to close…")
@@ -57,7 +59,7 @@ def ask(question: str) -> bool:
     return input(f"  {question} [y/N] ").strip().lower() in {"y", "yes", "д", "да"}
 
 
-def run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+def run(command: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
     return subprocess.run(command, check=False, text=True, **kwargs)
 
 
@@ -192,10 +194,26 @@ def ensure_pipeline_models(ollama: str) -> None:
 def listening_pids() -> list[int]:
     # psutil is deliberately executed inside the freshly prepared venv; the
     # system Python running this bootstrap need not have project packages.
+    #
+    # Per process, not psutil.net_connections(): the system-wide call needs
+    # root on macOS and raises AccessDenied on the first process it cannot
+    # read, so this returned nothing there and a stale server survived the
+    # restart it was written to perform. Walking processes and skipping the
+    # ones we may not inspect still finds our own server, which is the only
+    # one that can be holding this port for us.
     code = (
-        "import json, psutil; "
-        "print(json.dumps(sorted({c.pid for c in psutil.net_connections(kind='inet') "
-        "if c.pid and c.status == 'LISTEN' and c.laddr.port == " + str(PORT) + "})))"
+        "import json, psutil, warnings\n"
+        "warnings.simplefilter('ignore')\n"
+        "pids = set()\n"
+        "for process in psutil.process_iter(['pid']):\n"
+        "    try:\n"
+        "        connections = getattr(process, 'net_connections', process.connections)\n"
+        "        for c in connections(kind='inet'):\n"
+        "            if c.status == 'LISTEN' and c.laddr.port == " + str(PORT) + ":\n"
+        "                pids.add(process.pid)\n"
+        "    except (psutil.AccessDenied, psutil.NoSuchProcess):\n"
+        "        continue\n"
+        "print(json.dumps(sorted(pids)))"
     )
     result = run([str(PYTHON), "-c", code], capture_output=True)
     try:
@@ -204,20 +222,65 @@ def listening_pids() -> list[int]:
         return []
 
 
+def port_free() -> bool:
+    """Whether the port can be bound right now.
+
+    Asked by binding it, because that is the question the next process asks.
+    A server that has been told to stop can still hold the socket while it
+    finishes what it was doing, and nothing else — not its PID being gone,
+    not the page no longer answering — settles that.
+    """
+    with socket.socket() as probe:
+        probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        try:
+            probe.bind(("0.0.0.0", PORT))
+        except OSError:
+            return False
+    return True
+
+
+def wait_for_free(seconds: float) -> bool:
+    deadline = time.monotonic() + seconds
+    while time.monotonic() < deadline:
+        if port_free():
+            return True
+        time.sleep(0.25)
+    return port_free()
+
+
+def stop_servers(pids: list[int], *, force: bool) -> None:
+    for pid in pids:
+        if IS_WINDOWS:
+            run(["taskkill", "/PID", str(pid), "/T"] + (["/F"] if force else []),
+                capture_output=True)
+        else:
+            try:
+                os.kill(pid, signal.SIGKILL if force else signal.SIGTERM)
+            except ProcessLookupError:
+                pass
+
+
 def free_port() -> None:
+    """Stop whatever is serving this port, so launching twice means restart."""
     pids = listening_pids()
     if not pids:
         return
-    log("!", f"Port {PORT} is in use by PID(s): {', '.join(map(str, pids))}; restarting the app")
-    for pid in pids:
-        if IS_WINDOWS:
-            run(["taskkill", "/PID", str(pid), "/T", "/F"], capture_output=True)
-        else:
-            try:
-                os.kill(pid, signal.SIGTERM)
-            except ProcessLookupError:
-                pass
-    time.sleep(1)
+    log("!", f"Port {PORT} is in use by PID(s): {', '.join(map(str, pids))}; "
+             "stopping the old server")
+    stop_servers(pids, force=False)
+    # Ten seconds, not one: a server asked to stop in the middle of a long
+    # Prepare keeps the port until that request is done with it. Waiting one
+    # second and starting anyway is how the new process ended up dying on a
+    # bind error while the old one served the browser that had just opened.
+    if wait_for_free(10.0):
+        log("✓", "Old server stopped")
+        return
+    log("!", "It did not stop when asked; forcing it")
+    stop_servers(listening_pids() or pids, force=True)
+    if wait_for_free(5.0):
+        log("✓", "Old server stopped")
+        return
+    fail(f"Port {PORT} is still held by another process. Close it and launch again.")
 
 
 def port_ready() -> bool:
@@ -237,6 +300,14 @@ def start_translator() -> None:
     env["TOLMACH_BANNER_PRINTED"] = "1"
     server = subprocess.Popen([str(PYTHON), "translator.py"], cwd=PROJECT_DIR, env=env)
     for _ in range(30):
+        # The child's own health is asked about first. A 200 on this port only
+        # proves something is serving it, not that it is the process just
+        # started: when a stale server survived free_port(), the port answered
+        # immediately, this loop reported Ready, and the browser opened onto
+        # the old process while the new one had already died on a bind error.
+        if server.poll() is not None:
+            fail(f"translator.py exited before opening the interface. If port {PORT} is "
+                 "held by an older server, stop it and launch again.")
         if port_ready():
             url = f"http://127.0.0.1:{PORT}/?launched={int(time.time())}"
             log("✓", f"Ready: {url}")
@@ -246,8 +317,6 @@ def start_translator() -> None:
             except KeyboardInterrupt:
                 server.terminate()
             return
-        if server.poll() is not None:
-            fail("translator.py exited before opening the interface.")
         time.sleep(0.5)
     server.terminate()
     fail(f"translator.py did not open port {PORT}.")

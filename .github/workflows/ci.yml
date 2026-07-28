@@ -65,10 +65,12 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-      - run: pip install flake8
-      # Only the checks that mean "this is broken", not the ones that mean "this
-      # is not to my taste": syntax errors, undefined names, unused-star imports.
-      - run: flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics --exclude=venv,.venv
+      - run: pip install ruff==0.12.2
+      # Which rules run is decided in pyproject.toml, not on this line, so a
+      # local `ruff check` and this job cannot disagree about what passes.
+      # Still only the checks that mean "this is broken", not the ones that
+      # mean "this is not to my taste".
+      - run: ruff check --output-format=github .
 
   security:
     name: Security scan

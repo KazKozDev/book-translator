@@ -40,6 +40,11 @@
         .current-nav { color: var(--ink); }
         .theme-toggle { border: none; background: none; padding: 0; color: var(--muted); font-size: .9rem; line-height: 1; cursor: pointer; text-transform: none; letter-spacing: 0; }
         .theme-toggle:hover { color: var(--accent); }
+        /* The glyph names the theme that's on, so it's driven by the same class
+           as the palette: set before paint, identical on every page, and there's
+           no moment where the icon and the colours disagree. */
+        .theme-toggle::before { content: '\2600\FE0F'; }
+        :root.theme-dark .theme-toggle::before { content: '\1F319'; }
 
         .page-head { padding: 18px 0 8px; }
         .eyebrow { color: var(--faint); font-size: .74rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
@@ -120,8 +125,8 @@
                 <a class="repo-link" href="/">Home</a>
                 <span class="sep">•</span><span class="current-nav" aria-current="page">Guide</span>
                 <span class="sep">•</span><a class="repo-link" href="/settings.html">Settings</a>
-                <span class="sep">•</span><a class="repo-link" href="/logs.html" title="Live log">Log</a>
-                <span class="sep">•</span><button type="button" class="theme-toggle" id="themeToggle" title="Switch to dark mode">🌙</button>
+                <span class="sep">•</span><a class="repo-link" href="/logs.html" target="tolmach-log" title="Live log">Log</a>
+                <span class="sep">•</span><button type="button" class="theme-toggle" id="themeToggle" title="Switch theme" aria-label="Switch theme"></button>
             </nav>
         </header>
 
@@ -147,7 +152,7 @@
                 </li>
                 <li>
                     <div class="step-title">Prepare and review the glossary — optional</div>
-                    <p>Open <strong>Glossary</strong> and press <strong>→ PREPARE</strong> after uploading the source. This is a document-wide analysis, not translation: GLiNER finds entity candidates, recurring source forms are clustered, the entity-resolution model rules on that clustering — confirming what belongs together and splitting what does not — and the glossary-rendering model then proposes a target rendering and enforcement mode for each name, working from that name's own quoted context. Both roles are chosen in Settings; identity is the one that repays a larger model.</p>
+                    <p>Open <strong>Glossary</strong> and press <strong>→ PREPARE</strong> after uploading the source. This is a document-wide analysis, not translation: GLiNER finds entity candidates, recurring source forms are clustered, a model rules on that clustering — confirming what belongs together and splitting what does not — and then proposes a target rendering and enforcement mode for each name, working from that name's own quoted context. One model does both passes, chosen in Settings under Glossary preparation; a small one is the right choice, because this stage's whole wall clock is the rendering call and size does not measurably improve it.</p>
                     <p>The result is a proposal, not verified terminology. Review every line, remove noise, correct bad renderings and add anything it missed. If you already wrote a glossary, Prepare deliberately leaves it untouched rather than silently replacing your work. When two distinct source entities receive the same target rendering, the panel warns you to resolve that conflict before Start.</p>
                 </li>
                 <li>
@@ -335,8 +340,8 @@
         function applyThemeButton() {
             const btn = document.getElementById('themeToggle');
             const isDark = isDarkThemeActive();
-            btn.textContent = isDark ? '☀️' : '🌙';
             btn.title = isDark ? 'Switch to light mode' : 'Switch to dark mode';
+            btn.setAttribute('aria-label', btn.title);
         }
         document.getElementById('themeToggle').addEventListener('click', () => {
             const next = isDarkThemeActive() ? 'light' : 'dark';

@@ -60,6 +60,11 @@
         .current-nav { color: var(--ink); }
         .theme-toggle { border: none; background: none; padding: 0; color: var(--muted); font-size: .9rem; line-height: 1; cursor: pointer; text-transform: none; letter-spacing: 0; }
         .theme-toggle:hover { color: var(--accent); }
+        /* The glyph names the theme that's on, so it's driven by the same class
+           as the palette: set before paint, identical on every page, and there's
+           no moment where the icon and the colours disagree. */
+        .theme-toggle::before { content: '\2600\FE0F'; }
+        :root.theme-dark .theme-toggle::before { content: '\1F319'; }
         .status { display: flex; align-items: center; gap: 7px; color: var(--muted); font-size: .72rem; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; }
         .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--faint); }
         .dot.live { background: var(--mark); }
@@ -155,7 +160,7 @@
                 <span class="sep">•</span><a class="repo-link" href="/guide.html">Guide</a>
                 <span class="sep">•</span><a class="repo-link" href="/settings.html">Settings</a>
                 <span class="sep">•</span><span class="current-nav" aria-current="page">Log</span>
-                <span class="sep">•</span><button type="button" class="theme-toggle" id="themeToggle" title="Switch theme">🌙</button>
+                <span class="sep">•</span><button type="button" class="theme-toggle" id="themeToggle" title="Switch theme" aria-label="Switch theme"></button>
             </nav>
         </div>
         <div class="toolbar">
@@ -459,11 +464,19 @@
                 button.disabled = false;
             }
         });
-        document.getElementById('themeToggle').addEventListener('click', () => {
+        const themeToggle = document.getElementById('themeToggle');
+        function describeThemeToggle() {
+            themeToggle.title = document.documentElement.classList.contains('theme-dark')
+                ? 'Switch to light mode' : 'Switch to dark mode';
+            themeToggle.setAttribute('aria-label', themeToggle.title);
+        }
+        themeToggle.addEventListener('click', () => {
             const dark = !document.documentElement.classList.contains('theme-dark');
             document.documentElement.classList.toggle('theme-dark', dark);
             localStorage.setItem('theme', dark ? 'dark' : 'light');
+            describeThemeToggle();
         });
+        describeThemeToggle();
         connect();
     </script>
 </body>

@@ -17,6 +17,10 @@
         .local-status { display:flex; align-items:center; gap:10px; color:var(--muted); font-size:.72rem; font-weight:500; letter-spacing:.09em; text-transform:uppercase; }.local-status .sep { color:#d1d5db; }
         .repo-link { color:var(--muted); text-decoration:none; }.repo-link:hover { color:var(--accent); text-decoration:underline; }.current-nav { color:var(--ink); }
         .theme-toggle { border:0; background:none; padding:0; color:var(--muted); font-size:.9rem; line-height:1; cursor:pointer; text-transform:none; letter-spacing:0; }.theme-toggle:hover { color:var(--accent); }
+        /* The glyph names the theme that's on, so it's driven by the same class
+           as the palette: set before paint, identical on every page, and there's
+           no moment where the icon and the colours disagree. */
+        .theme-toggle::before { content:'\2600\FE0F'; }:root.theme-dark .theme-toggle::before { content:'\1F319'; }
         .page-head { padding:18px 0 8px; }.eyebrow { color:var(--faint); font-size:.74rem; font-weight:700; letter-spacing:.08em; text-transform:uppercase; }.page-head h1 { margin:10px 0 0; font-size:1.7rem; font-weight:700; letter-spacing:-.01em; }.page-head p { margin-top:10px; color:var(--muted); font-size:.92rem; line-height:1.65; max-width:640px; }
         .card { margin-top:26px; padding:26px 28px; border:1px solid var(--line); border-radius:12px; background:var(--paper); }.card h2 { font-size:1.05rem; }.card > p { margin-top:7px; color:var(--muted); font-size:.86rem; line-height:1.55; }
         .section-kicker, .role-heading { color:var(--faint); font-size:.72rem; font-weight:700; letter-spacing:.08em; text-transform:uppercase; }
@@ -38,8 +42,8 @@
         <header class="app-topbar">
             <div class="brand"><a class="brand-name" href="/">Tolmach</a><span class="brand-descriptor">Book Translator</span><span class="brand-version">v3.0</span></div>
             <nav class="local-status" aria-label="Primary navigation">
-                <a class="repo-link" href="/">Home</a><span class="sep">•</span><a class="repo-link" href="/guide.html">Guide</a><span class="sep">•</span><span class="current-nav" aria-current="page">Settings</span><span class="sep">•</span><a class="repo-link" href="/logs.html" title="Live log">Log</a>
-                <span class="sep">•</span><button type="button" class="theme-toggle" id="themeToggle" title="Switch theme">🌙</button>
+                <a class="repo-link" href="/">Home</a><span class="sep">•</span><a class="repo-link" href="/guide.html">Guide</a><span class="sep">•</span><span class="current-nav" aria-current="page">Settings</span><span class="sep">•</span><a class="repo-link" href="/logs.html" target="tolmach-log" title="Live log">Log</a>
+                <span class="sep">•</span><button type="button" class="theme-toggle" id="themeToggle" title="Switch theme" aria-label="Switch theme"></button>
             </nav>
         </header>
         <main>
@@ -55,8 +59,7 @@
                 <div class="form-group"><label class="role-heading" for="translationModel">Translation</label><select id="translationModel" disabled><option>Loading models…</option></select><p class="hint" id="translationHint">Used only for Start.</p></div>
                 <div class="form-group"><label class="role-heading" for="refinementModel">Refinement</label><select id="refinementModel" disabled><option>Loading models…</option></select><p class="hint">Used only for Continue, the editing pass after the draft is ready.</p></div>
                 <div class="form-group"><label class="role-heading" for="verifierModel">Verifier</label><select id="verifierModel" disabled><option>Loading models…</option></select><p class="hint" id="verifierHint">Rules on every edit Refinement proposes: it sees the source and both versions, twice with the order swapped, and the edit is kept only if it wins both times. <strong>Pick a model clearly larger than Refinement.</strong> A model grading its own edits answers by which version came first rather than by what it says, the two orderings then disagree, and every fix is thrown away — the pass looks like it ran and changes nothing.</p></div>
-                <div class="form-group"><label class="role-heading" for="entityModel">Entity resolution</label><select id="entityModel" disabled><option>Loading models…</option></select><p class="hint">Used only for Prepare, and only to rule on identity: whether two source forms name one entity, which spelling variants belong together, and which the clustering got wrong. This is reasoning about the document rather than translation, so it is the role that repays a larger model — a small one gives two different characters the same rendering.</p></div>
-                <div class="form-group"><label class="role-heading" for="generalInstructModel">Glossary rendering</label><select id="generalInstructModel" disabled><option>Loading models…</option></select><p class="hint">Used only for Prepare: proposes the target-language rendering and the enforcement mode for each name the entity pass agreed on.</p></div>
+                <div class="form-group"><label class="role-heading" for="generalInstructModel">Glossary preparation</label><select id="generalInstructModel" disabled><option>Loading models…</option></select><p class="hint">Used only for Prepare, for both of its passes: ruling on identity — whether two source forms name one entity and which the clustering got wrong — and then proposing the target-language rendering and the enforcement mode for each name. <strong>Prefer a small model here.</strong> Prepare's whole wall clock is the rendering pass, one call per batch of eight names, and rendering a name is recall rather than reasoning: given the same prompt and the same eight names, a 9B answered ten times faster than a 35B and got exactly the same ones right, both missing the traditional renderings of well-known titles. The identity pass agreed with the large model too, and picked the more useful entry — the bare surname, which also covers the full name. Read the proposal before Start whichever model wrote it; that is where a wrong rendering is meant to be caught.</p></div>
                 <div class="form-group"><label class="role-heading" for="judgeModel">Judge</label><select id="judgeModel" disabled><option>Loading models…</option></select><p class="hint">Used for LLM judge and the backtranslation diagnostic. Translation-only TranslateGemma models are excluded.</p></div>
                 <div class="actions"><button type="button" class="save-action" id="saveSettings" disabled>Save setup</button><span class="saved" id="saveStatus" aria-live="polite"></span></div>
             </section>
@@ -90,7 +93,6 @@
         const translationModel = document.getElementById('translationModel');
         const refinementModel = document.getElementById('refinementModel');
         const verifierModel = document.getElementById('verifierModel');
-        const entityModel = document.getElementById('entityModel');
         const generalInstructModel = document.getElementById('generalInstructModel');
         const judgeModel = document.getElementById('judgeModel');
         const hint = document.getElementById('translationHint');
@@ -122,14 +124,13 @@
                 const models = [...data.models].sort((a, b) => a.name === PREFERRED_MODEL ? -1 : b.name === PREFERRED_MODEL ? 1 : 0);
                 const instructModels = models.filter(model => !isTranslateGemma(model.name));
                 translationModel.innerHTML = optionsFor(models);
-                [refinementModel, verifierModel, entityModel, generalInstructModel, judgeModel].forEach(select => {
+                [refinementModel, verifierModel, generalInstructModel, judgeModel].forEach(select => {
                     select.innerHTML = instructModels.length ? optionsFor(instructModels) : '<option value="">No suitable instruct model installed</option>';
                 });
                 const savedTranslation = localStorage.getItem('translationModel');
                 translationModel.value = models.some(m => m.name === savedTranslation) ? savedTranslation : models.some(m => m.name === PREFERRED_MODEL) ? PREFERRED_MODEL : models[0].name;
                 const valueFor = key => { const saved = localStorage.getItem(key); return instructModels.some(m => m.name === saved) ? saved : instructModels.some(m => m.name === translationModel.value) ? translationModel.value : instructModels[0]?.name || ''; };
                 refinementModel.value = valueFor('refinementModel');
-                entityModel.value = valueFor('entityModel') || valueFor('generalInstructModel');
                 generalInstructModel.value = valueFor('generalInstructModel');
                 judgeModel.value = valueFor('judgeModel');
                 // No saved preference falls back to the Judge choice — already
@@ -138,17 +139,20 @@
                 const savedVerifier = localStorage.getItem('verifierModel');
                 verifierModel.value = instructModels.some(m => m.name === savedVerifier) ? savedVerifier : judgeModel.value;
                 translationModel.disabled = false;
-                [refinementModel, verifierModel, entityModel, generalInstructModel, judgeModel].forEach(select => select.disabled = !instructModels.length);
+                [refinementModel, verifierModel, generalInstructModel, judgeModel].forEach(select => select.disabled = !instructModels.length);
                 save.disabled = !instructModels.length; updateTranslationHint(); updateVerifierHint();
             } catch (error) {
-                [translationModel, refinementModel, verifierModel, entityModel, generalInstructModel, judgeModel].forEach(select => select.innerHTML = `<option>Could not load models: ${error.message}</option>`); status.textContent = 'Start Ollama, then reload this page.';
+                [translationModel, refinementModel, verifierModel, generalInstructModel, judgeModel].forEach(select => select.innerHTML = `<option>Could not load models: ${error.message}</option>`); status.textContent = 'Start Ollama, then reload this page.';
             }
         }
-        save.addEventListener('click', () => { localStorage.setItem('translationModel', translationModel.value); localStorage.setItem('refinementModel', refinementModel.value); localStorage.setItem('verifierModel', verifierModel.value); localStorage.setItem('entityModel', entityModel.value); localStorage.setItem('generalInstructModel', generalInstructModel.value); localStorage.setItem('judgeModel', judgeModel.value); status.textContent = 'Saved. Return to the app when ready.'; });
+        save.addEventListener('click', () => { localStorage.setItem('translationModel', translationModel.value); localStorage.setItem('refinementModel', refinementModel.value); localStorage.setItem('verifierModel', verifierModel.value); localStorage.removeItem('entityModel'); localStorage.setItem('generalInstructModel', generalInstructModel.value); localStorage.setItem('judgeModel', judgeModel.value); status.textContent = 'Saved. Return to the app when ready.'; });
         translationModel.addEventListener('change', updateTranslationHint);
         verifierModel.addEventListener('change', updateVerifierHint);
         refinementModel.addEventListener('change', updateVerifierHint);
-        document.getElementById('themeToggle').addEventListener('click', () => { const dark = !document.documentElement.classList.contains('theme-dark'); document.documentElement.classList.toggle('theme-dark', dark); localStorage.setItem('theme', dark ? 'dark' : 'light'); });
+        const themeToggle = document.getElementById('themeToggle');
+        function describeThemeToggle() { themeToggle.title = document.documentElement.classList.contains('theme-dark') ? 'Switch to light mode' : 'Switch to dark mode'; themeToggle.setAttribute('aria-label', themeToggle.title); }
+        themeToggle.addEventListener('click', () => { const dark = !document.documentElement.classList.contains('theme-dark'); document.documentElement.classList.toggle('theme-dark', dark); localStorage.setItem('theme', dark ? 'dark' : 'light'); describeThemeToggle(); });
+        describeThemeToggle();
         loadModels();
     </script>
 </body>

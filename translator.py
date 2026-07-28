@@ -8,24 +8,13 @@ import os
 # Setting it lazily during a request can load the same proto descriptor twice.
 os.environ.setdefault('PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION', 'python')
 import sqlite3
-from datetime import datetime, timedelta
-import logging
-from logging.handlers import RotatingFileHandler
-import hashlib
 import traceback
-import psutil
-import subprocess
 import threading
 import signal
-import atexit
 import re
 import sys
-import random
-import difflib
-import unicodedata
-from statistics import mean, median
-from collections import deque, Counter
-from dataclasses import dataclass, field
+from collections import Counter
+from concurrent.futures import ThreadPoolExecutor
 from functools import wraps
 
 try:
@@ -35,23 +24,12 @@ except ImportError:
 from flask import Flask, request, jsonify, Response, send_file, send_from_directory
 from flask_cors import CORS
 from werkzeug.utils import secure_filename
-import zipfile
-import io
 import uuid
-from datetime import datetime as dt
-import html as html_escape
-import ebooklib
-from ebooklib import epub as epub_lib
-from bs4 import BeautifulSoup
 
 app = Flask(__name__)
 CORS(app)
 
-LANG_NAMES = {
-    'en': 'English', 'es': 'Spanish', 'fr': 'French', 'de': 'German',
-    'it': 'Italian', 'pt': 'Portuguese', 'ru': 'Russian', 'zh': 'Chinese',
-    'ja': 'Japanese', 'ko': 'Korean'
-}
+from languages import LANG_NAMES  # noqa: E402
 
 # TranslateGemma (Gemma 3 based, 4B/12B/27B) is a translation-only model: it
 # was trained on one fixed prompt shape and cannot follow editor or judge
@@ -62,7 +40,10 @@ TRANSLATEGEMMA_TEMPERATURE = 0.3  # A dedicated MT model wants near-greedy decod
 # The banner lives in its own stdlib-only module so the launcher — which runs
 # before the virtual environment exists and cannot import this file — shows the
 # same logo from the same source.
-from banner import TERMINAL_LOGO, print_terminal_banner  # noqa: E402
+# TERMINAL_LOGO is re-exported, not used here: test_the_banner_has_one_source
+# asserts both entry points resolve to the same object, so linters calling it
+# an unused import are wrong.
+from banner import TERMINAL_LOGO, print_terminal_banner  # noqa: E402,F401
 
 
 def is_translategemma(model_name: Optional[str]) -> bool:
@@ -72,439 +53,32 @@ def is_translategemma(model_name: Optional[str]) -> bool:
 UPLOAD_FOLDER = 'uploads'
 TRANSLATIONS_FOLDER = 'translations'
 STATIC_FOLDER = 'static'
-# Overridable so that a test run does not write into the log a person is
-# watching: three warnings about "translation 1" from a fixture, landing in the
-# live console between two real chunks, is worse than no log at all.
-LOG_FOLDER = os.environ.get('TOLMACH_LOG_DIR', 'logs')
 DB_PATH = 'translations.db'
 CACHE_DB_PATH = 'cache.db'
+
+# Logging and process metrics live in monitoring.py, and so do the two live
+# instances — quality_tests.py needs the same logger, and a second module
+# building its own would split the log in half. Imported rather than
+# constructed here, so ``translator.logger`` still names the one object the
+# rest of the app and the tests already reach for.
+from monitoring import (  # noqa: E402
+    LOG_FOLDER,
+    logger,
+    monitor,
+    project_disk_usage,
+    setup_access_log,
+)
 
 # Create necessary directories
 for folder in [UPLOAD_FOLDER, TRANSLATIONS_FOLDER, STATIC_FOLDER, LOG_FOLDER]:
     os.makedirs(folder, exist_ok=True)
 
-# Logger setup
-class AppLogger:
-    def __init__(self, log_dir='logs'):
-        self.log_dir = log_dir
-        os.makedirs(log_dir, exist_ok=True)
-        
-        self.app_logger = self._setup_logger(
-            'app_logger',
-            os.path.join(log_dir, 'app.log')
-        )
-        
-        self.translation_logger = self._setup_logger(
-            'translation_logger',
-            os.path.join(log_dir, 'translations.log')
-        )
-        
-        self.api_logger = self._setup_logger(
-            'api_logger',
-            os.path.join(log_dir, 'api.log')
-        )
+# The chunk cache and the glossary rules are each their own module; only
+# the one live cache instance stays here.
+from translation_cache import TranslationCache  # noqa: E402
+from terminology import GlossaryTerm, TerminologyManager  # noqa: E402,F401
 
-    def _setup_logger(self, name, log_file):
-        logger = logging.getLogger(name)
-        # LOG_LEVEL=DEBUG turns on the verbose records that are too noisy for a
-        # normal run — notably the full prompt sent to the model for every
-        # chunk, which is how you check what a model actually received.
-        logger.setLevel(os.environ.get('LOG_LEVEL', 'INFO').upper())
-        if logger.handlers:
-            return logger
-        
-        handler = RotatingFileHandler(
-            log_file,
-            maxBytes=10*1024*1024,
-            backupCount=5,
-            encoding='utf-8'
-        )
-        
-        formatter = logging.Formatter(
-            '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-        )
-        handler.setFormatter(formatter)
-
-        logger.addHandler(handler)
-        return logger
-
-    @property
-    def loggers(self) -> List[logging.Logger]:
-        return [self.app_logger, self.translation_logger, self.api_logger]
-
-    def rotate(self) -> List[str]:
-        """Start fresh log files, keeping the old ones as ``*.log.1``.
-
-        Used when a new document is loaded: one book per log file makes the
-        console readable, and rolling over rather than truncating means the
-        previous run is still on disk to look at afterwards. The handlers keep
-        their existing backupCount, so this cannot grow without bound.
-        """
-        rotated = []
-        for log in self.loggers:
-            for handler in log.handlers:
-                if isinstance(handler, RotatingFileHandler):
-                    try:
-                        handler.doRollover()
-                        rotated.append(os.path.basename(handler.baseFilename))
-                    except OSError as e:
-                        self.app_logger.error(f"Could not roll over {handler.baseFilename}: {e}")
-        return rotated
-
-# Initialize logger
-logger = AppLogger(log_dir=LOG_FOLDER)
-
-class PlainAccessFormatter(logging.Formatter):
-    """Strip the ANSI coloring werkzeug puts on its own per-request access log
-    lines, so the console stays plain text."""
-
-    _ANSI_RE = re.compile(r'\x1b\[[0-9;]*m')
-
-    def format(self, record):
-        return self._ANSI_RE.sub('', record.getMessage())
-
-
-def setup_access_log():
-    """Attach a plain-text console handler to werkzeug's access logger,
-    replacing its default colored formatting."""
-    werkzeug_logger = logging.getLogger('werkzeug')
-    werkzeug_logger.handlers.clear()
-    werkzeug_logger.propagate = False
-    werkzeug_logger.setLevel(logging.INFO)
-    handler = logging.StreamHandler(sys.stderr)
-    handler.setFormatter(PlainAccessFormatter())
-    werkzeug_logger.addHandler(handler)
-
-# psutil.disk_usage('/') is a Unix assumption: on Windows the project's drive
-# is what matters, and '/' there is not a path at all. Reported by a contributor
-# running this on Windows.
-def project_disk_usage():
-    return psutil.disk_usage(os.path.abspath(os.sep if os.name != 'nt' else os.getcwd()))
-
-
-# Monitoring setup
-@dataclass
-class TranslationMetrics:
-    total_requests: int = 0
-    successful_translations: int = 0
-    failed_translations: int = 0
-    average_translation_time: float = 0
-    translation_times: deque = field(default_factory=lambda: deque(maxlen=100))
-
-class AppMonitor:
-    def __init__(self):
-        self.metrics = TranslationMetrics()
-        self._lock = threading.Lock()
-        self.start_time = time.time()
-        self.active_model: Optional[str] = None
-
-    def set_active_model(self, model_name: str):
-        with self._lock:
-            self.active_model = model_name
-
-    def record_translation_attempt(self, success: bool, translation_time: float):
-        with self._lock:
-            self.metrics.total_requests += 1
-            if success:
-                self.metrics.successful_translations += 1
-                self.metrics.translation_times.append(translation_time)
-                self.metrics.average_translation_time = (
-                    sum(self.metrics.translation_times) / len(self.metrics.translation_times)
-                )
-            else:
-                self.metrics.failed_translations += 1
-    
-    def get_system_metrics(self) -> Dict:
-        return {
-            'cpu_percent': psutil.cpu_percent(),
-            'memory_percent': psutil.virtual_memory().percent,
-            'disk_usage': project_disk_usage().percent,
-            'uptime': time.time() - self.start_time
-        }
-
-    def get_ollama_gpu_metrics(self) -> Dict[str, str]:
-        """Report Ollama's active model and processor without inventing GPU data.
-
-        On Apple Silicon, CPU and GPU share the same physical memory.  Ollama's
-        ``ps`` output is therefore the reliable source for whether a loaded
-        model is actually running on the GPU; it does not expose a separate
-        VRAM percentage for this architecture.
-        """
-        try:
-            result = subprocess.run(
-                ['ollama', 'ps'],
-                capture_output=True,
-                text=True,
-                timeout=3,
-                check=False,
-            )
-        except (FileNotFoundError, subprocess.TimeoutExpired):
-            return {'status': 'Unavailable', 'model': 'Ollama not reachable'}
-
-        if result.returncode != 0:
-            return {'status': 'Unavailable', 'model': 'Ollama not reachable'}
-
-        rows = [line.strip() for line in result.stdout.splitlines()[1:] if line.strip()]
-        if not rows:
-            return {'status': 'Idle', 'model': 'No model loaded'}
-
-        # Ollama can keep several models resident at once (e.g. after testing
-        # with more than one). Prefer whichever row matches the model this
-        # app itself last used, so switching models in the selector is
-        # reflected here instead of showing an arbitrary loaded model.
-        active_model = self.active_model
-        chosen_row = rows[0]
-        if active_model:
-            for row in rows:
-                if row.split()[0] == active_model:
-                    chosen_row = row
-                    break
-
-        # Columns are separated by two or more spaces. The final processor
-        # column is emitted by Ollama as e.g. "100% GPU" or "100% CPU".
-        columns = re.split(r'\s{2,}', chosen_row)
-        processor = next(
-            (column for column in columns if re.fullmatch(r'\d+% (?:GPU|CPU)', column)),
-            None,
-        )
-        if processor:
-            return {'status': processor, 'model': columns[0]}
-        return {'status': 'Active', 'model': columns[0]}
-    
-    def get_metrics(self) -> Dict:
-        with self._lock:
-            metrics_data = {
-                'translation_metrics': {
-                    'total_requests': self.metrics.total_requests,
-                    'successful_translations': self.metrics.successful_translations,
-                    'failed_translations': self.metrics.failed_translations,
-                    'average_translation_time': self.metrics.average_translation_time
-                },
-                'system_metrics': self.get_system_metrics()
-            }
-            metrics_data['ollama_gpu'] = self.get_ollama_gpu_metrics()
-            
-            if self.metrics.total_requests > 0:
-                metrics_data['translation_metrics']['success_rate'] = (
-                    self.metrics.successful_translations / self.metrics.total_requests * 100
-                )
-            else:
-                metrics_data['translation_metrics']['success_rate'] = 0
-                
-            return metrics_data
-
-# Initialize monitor
-monitor = AppMonitor()
-
-# Translation cache setup
-class TranslationCache:
-    def __init__(self, db_path: str = CACHE_DB_PATH):
-        self.db_path = db_path
-        self._init_cache_db()
-    
-    def _init_cache_db(self):
-        with sqlite3.connect(self.db_path) as conn:
-            conn.execute('''
-                CREATE TABLE IF NOT EXISTS translation_cache (
-                    hash_key TEXT PRIMARY KEY,
-                    source_lang TEXT,
-                    target_lang TEXT,
-                    original_text TEXT,
-                    translated_text TEXT,
-                    machine_translation TEXT,
-                    created_at TIMESTAMP,
-                    last_used TIMESTAMP
-                )
-            ''')
-
-    def _generate_hash(self, text: str, source_lang: str, target_lang: str, model: str = "") -> str:
-        key = f"{text}:{source_lang}:{target_lang}:{model}".encode('utf-8')
-        return hashlib.sha256(key).hexdigest()
-    
-    def get_cached_translation(self, text: str, source_lang: str, target_lang: str, model: str = "") -> Optional[Dict[str, str]]:
-        hash_key = self._generate_hash(text, source_lang, target_lang, model)
-        
-        with sqlite3.connect(self.db_path) as conn:
-            cur = conn.execute('''
-                SELECT translated_text, machine_translation
-                FROM translation_cache
-                WHERE hash_key = ?
-            ''', (hash_key,))
-            
-            result = cur.fetchone()
-            if result:
-                conn.execute('''
-                    UPDATE translation_cache
-                    SET last_used = CURRENT_TIMESTAMP
-                    WHERE hash_key = ?
-                ''', (hash_key,))
-                return {
-                    'translated_text': result[0],
-                    'machine_translation': result[1]
-                }
-        
-        return None
-    
-    def cache_translation(self, text: str, translated_text: str, machine_translation: str, 
-                         source_lang: str, target_lang: str, model: str = ""):
-        hash_key = self._generate_hash(text, source_lang, target_lang, model)
-        
-        with sqlite3.connect(self.db_path) as conn:
-            conn.execute('''
-                INSERT OR REPLACE INTO translation_cache
-                (hash_key, source_lang, target_lang, original_text, translated_text, 
-                 machine_translation, created_at, last_used)
-                VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-            ''', (hash_key, source_lang, target_lang, text, translated_text, machine_translation))
-    
-    def cleanup_old_entries(self, days: int = 30):
-        # Parameterised rather than interpolated. `days` is ours today, but a
-        # retention period is exactly the kind of value that later arrives from
-        # a settings screen, and by then the f-string is invisible.
-        with sqlite3.connect(self.db_path) as conn:
-            conn.execute(
-                "DELETE FROM translation_cache WHERE last_used < datetime('now', ?)",
-                (f'-{int(days)} days',),
-            )
-
-# Initialize cache
-cache = TranslationCache()
-
-# Terminology constraints
-@dataclass(frozen=True)
-class GlossaryTerm:
-    source: str
-    target: str
-    mode: str = "inflectable"
-
-
-class TerminologyManager:
-    """Language-neutral, per-book terminology constraints."""
-
-    VALID_MODES = {"exact", "inflectable", "preferred"}
-    MAX_TERMS = 500
-    MAX_TERM_LENGTH = 200
-
-    def __init__(self, terms: Optional[List[GlossaryTerm]] = None):
-        deduplicated = {}
-        for term in terms or []:
-            deduplicated[term.source.casefold()] = term
-        self.terms = list(deduplicated.values())
-
-    @classmethod
-    def from_text(cls, glossary_text: str):
-        """Parse `source => target | mode` or TSV lines; mode defaults to inflectable."""
-        terms = []
-        for line_number, raw_line in enumerate(glossary_text.splitlines(), 1):
-            line = raw_line.strip()
-            if not line or line.startswith("#"):
-                continue
-
-            mode = "inflectable"
-            if "\t" in line:
-                parts = [part.strip() for part in line.split("\t")]
-                if len(parts) not in (2, 3):
-                    raise ValueError(
-                        f"Glossary line {line_number}: use source<TAB>target<TAB>mode"
-                    )
-                source, target = parts[:2]
-                if len(parts) == 3:
-                    mode = parts[2].lower()
-            else:
-                separator = "=>" if "=>" in line else "=" if "=" in line else None
-                if not separator:
-                    raise ValueError(
-                        f"Glossary line {line_number}: use source => target | mode"
-                    )
-                source, remainder = [part.strip() for part in line.split(separator, 1)]
-                if "|" in remainder:
-                    target, mode = [part.strip() for part in remainder.rsplit("|", 1)]
-                    mode = mode.lower()
-                else:
-                    target = remainder.strip()
-
-            if not source or not target:
-                raise ValueError(f"Glossary line {line_number}: both terms are required")
-            if len(source) > cls.MAX_TERM_LENGTH or len(target) > cls.MAX_TERM_LENGTH:
-                raise ValueError(
-                    f"Glossary line {line_number}: a term exceeds {cls.MAX_TERM_LENGTH} characters"
-                )
-            if mode not in cls.VALID_MODES:
-                raise ValueError(
-                    f"Glossary line {line_number}: mode must be exact, inflectable, or preferred"
-                )
-            terms.append(GlossaryTerm(source=source, target=target, mode=mode))
-
-        if len(terms) > cls.MAX_TERMS:
-            raise ValueError(f"Glossary supports at most {cls.MAX_TERMS} terms")
-        return cls(terms)
-
-    def relevant_terms(self, source_text: str) -> List[GlossaryTerm]:
-        folded_text = source_text.casefold()
-        return [term for term in self.terms if term.source.casefold() in folded_text]
-
-    def prompt_context(self, source_text: str) -> str:
-        relevant = self.relevant_terms(source_text)
-        if not relevant:
-            return ""
-
-        lines = []
-        for term in relevant:
-            rule = {
-                "exact": "use this target form exactly",
-                "inflectable": "use this lexical choice; grammatical inflection is allowed",
-                "preferred": "prefer this translation when it fits the context",
-            }[term.mode]
-            lines.append(f'- "{term.source}" => "{term.target}" ({rule})')
-        return (
-            "\n\nVERIFIED TERMINOLOGY FOR THIS PASS:\n"
-            + "\n".join(lines)
-            + "\nThese constraints apply regardless of the source and target languages."
-        )
-
-    def exact_violations(self, source_text: str, translated_text: str) -> List[Dict[str, str]]:
-        translated_folded = translated_text.casefold()
-        return [
-            {"source": term.source, "required_target": term.target}
-            for term in self.relevant_terms(source_text)
-            if term.mode == "exact" and term.target.casefold() not in translated_folded
-        ]
-
-    def enforce_exact_source_forms(self, translated_text: str) -> Tuple[str, List[Dict[str, str]]]:
-        """Replace an exact term only when the model leaked its source form.
-
-        A glossary is still provided to the model as translation context: it
-        remains the only safe way to choose a rendering that is absent from
-        the output.  But an ``exact`` rule has one deterministic case we can
-        honour without guessing — the model translated the surrounding prose
-        and left the literal source term unchanged.  Fix that case here, both
-        for fresh generations and cached chunks.  ``inflectable`` and
-        ``preferred`` terms are intentionally never rewritten this way.
-        """
-        replacements: List[Dict[str, str]] = []
-        result = translated_text
-        for term in self.terms:
-            if term.mode != "exact" or term.source.casefold() == term.target.casefold():
-                continue
-            # Do not turn a source substring inside a longer word into a
-            # glossary term. ``\w`` is Unicode-aware, so this works for Latin,
-            # Cyrillic and CJK source terms alike.
-            pattern = re.compile(rf"(?<!\w){re.escape(term.source)}(?!\w)", re.IGNORECASE)
-            result, count = pattern.subn(term.target, result)
-            if count:
-                replacements.append({
-                    "source": term.source,
-                    "target": term.target,
-                    "count": count,
-                })
-        return result, replacements
-
-    def fingerprint(self) -> str:
-        canonical = sorted(
-            (term.source.casefold(), term.target, term.mode) for term in self.terms
-        )
-        payload = json.dumps(canonical, ensure_ascii=False, separators=(",", ":"))
-        return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
+cache = TranslationCache(CACHE_DB_PATH)
 
 # Which translations this process is streaming right now.
 #
@@ -540,26 +114,14 @@ def is_run_active(translation_id: int) -> bool:
 
 # Part of the Stage 2 cache key, so that changing what the refinement pass
 # DOES invalidates results produced by the old behaviour. The inputs alone are
-# not enough: same chunk, same glossary, same brief, same model — and a
-# different answer, because the pass itself changed. Bump this whenever the
-# estimate/patch/verify behaviour changes in a way that would alter output.
+# not enough: same chunk, same glossary, same model — and a different answer,
+# because the pass itself changed. Bump this whenever the estimate/patch/verify
+# behaviour changes in a way that would alter output.
 #   v2: single "review and improve" rewrite replaced by estimate/patch/verify
 #   v3: style-only and minor subjective errors reported but no longer applied
 #   v4: omission/addition patches skip the verifier, which now runs on its own
 #       model rather than on the one that wrote the draft
 STAGE2_PIPELINE_VERSION = 'v4'
-
-
-def context_fingerprint(text: str) -> str:
-    """Short, stable hash of a free-text prompt block (the Stage 0 brief),
-    for keying the translation cache on it. Mirrors
-    TerminologyManager.fingerprint, which does the same job for the glossary:
-    anything that changes the prompt has to change the cache key, or a later
-    run silently replays drafts produced under different instructions."""
-    normalized = (text or '').strip()
-    if not normalized:
-        return 'none'
-    return hashlib.sha256(normalized.encode('utf-8')).hexdigest()[:16]
 
 
 # Error handling setup
@@ -684,141 +246,22 @@ def init_db():
 init_db()
 
 
-def is_epub_filename(filename: str) -> bool:
-    return filename.lower().endswith('.epub')
+from quality_tests import QualityTests  # noqa: E402
+
+# EPUB in and out lives in its own module: it depends on nothing in here.
+from epub_io import (  # noqa: E402
+    is_epub_filename,
+    extract_epub_book,
+    build_epub_from_chapters,
+)
 
 
-def extract_epub_book(filepath: str):
-    """Read an EPUB and return (chapters, title, author) in spine (reading) order.
-
-    Each chapter is plain text with paragraphs separated by blank lines — enough
-    to feed the existing chunk-based translation pipeline. Inline formatting
-    (bold/italic/links) is intentionally not preserved; see build_epub_from_chapters.
-    """
-    book = epub_lib.read_epub(filepath, options={'ignore_ncx': True})
-
-    chapters = []
-    for idref, _linear in book.spine:
-        item = book.get_item_with_id(idref)
-        if item is None or item.get_type() != ebooklib.ITEM_DOCUMENT:
-            continue
-        # The auto-generated nav/TOC document is also an ITEM_DOCUMENT — skip it,
-        # it's a list of links to other chapters, not book content.
-        if isinstance(item, epub_lib.EpubNav):
-            continue
-        soup = BeautifulSoup(item.get_content(), 'html.parser')
-        blocks = [
-            block.get_text(' ', strip=True)
-            for block in soup.find_all(['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'li', 'blockquote'])
-        ]
-        blocks = [block for block in blocks if block]
-        text = '\n\n'.join(blocks) if blocks else soup.get_text('\n\n', strip=True)
-        chapters.append(text)
-
-    title = None
-    author = None
-    title_meta = book.get_metadata('DC', 'title')
-    if title_meta:
-        title = title_meta[0][0]
-    creator_meta = book.get_metadata('DC', 'creator')
-    if creator_meta:
-        author = creator_meta[0][0]
-
-    return chapters, title, author
-
-
-def build_epub_from_chapters(chapters: List[str], title: str, author: str) -> bytes:
-    """Assemble a minimal, valid EPUB from translated chapter texts.
-
-    Mirrors /export/epub's hand-rolled EPUB writer but for N chapters instead
-    of one, so translations of multi-chapter books keep their chapter breaks.
-    """
-    safe_title = html_escape.escape(title or 'Translation')
-    safe_author = html_escape.escape(author or 'Book Translator')
-    book_uid = str(uuid.uuid4())
-    buffer = io.BytesIO()
-
-    manifest_items = []
-    spine_items = []
-    nav_points = []
-    for i, chapter_text in enumerate(chapters, 1):
-        manifest_items.append(
-            f'<item id="chapter{i}" href="chapter{i}.xhtml" media-type="application/xhtml+xml"/>'
-        )
-        spine_items.append(f'<itemref idref="chapter{i}"/>')
-        nav_points.append(f'''<navPoint id="chapter{i}" playOrder="{i}">
-            <navLabel><text>Chapter {i}</text></navLabel>
-            <content src="chapter{i}.xhtml"/>
-        </navPoint>''')
-
-    content_opf = f'''<?xml version="1.0" encoding="UTF-8"?>
-<package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="BookID">
-    <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
-        <dc:title>{safe_title}</dc:title>
-        <dc:creator>{safe_author}</dc:creator>
-        <dc:language>en</dc:language>
-        <dc:identifier id="BookID">{book_uid}</dc:identifier>
-        <meta property="dcterms:modified">{dt.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')}</meta>
-    </metadata>
-    <manifest>
-        {''.join(manifest_items)}
-        <item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>
-    </manifest>
-    <spine toc="ncx">
-        {''.join(spine_items)}
-    </spine>
-</package>'''
-
-    toc_ncx = f'''<?xml version="1.0" encoding="UTF-8"?>
-<ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1">
-    <head>
-        <meta name="dtb:uid" content="{book_uid}"/>
-        <meta name="dtb:depth" content="1"/>
-    </head>
-    <docTitle><text>{safe_title}</text></docTitle>
-    <navMap>
-        {''.join(nav_points)}
-    </navMap>
-</ncx>'''
-
-    container_xml = '''<?xml version="1.0" encoding="UTF-8"?>
-<container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
-    <rootfiles>
-        <rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/>
-    </rootfiles>
-</container>'''
-
-    with zipfile.ZipFile(buffer, 'w', zipfile.ZIP_DEFLATED) as epub:
-        epub.writestr('mimetype', 'application/epub+zip', compress_type=zipfile.ZIP_STORED)
-        epub.writestr('META-INF/container.xml', container_xml)
-        epub.writestr('OEBPS/content.opf', content_opf)
-        epub.writestr('OEBPS/toc.ncx', toc_ncx)
-        for i, chapter_text in enumerate(chapters, 1):
-            paragraphs = [p.strip() for p in chapter_text.split('\n\n') if p.strip()]
-            html_paragraphs = ''.join(
-                f'<p>{html_escape.escape(p)}</p>\n' for p in paragraphs
-            )
-            chapter_xhtml = f'''<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE html>
-<html xmlns="http://www.w3.org/1999/xhtml">
-<head>
-    <title>{safe_title}</title>
-    <style>
-        body {{ font-family: serif; line-height: 1.6; margin: 2em; }}
-        p {{ margin-bottom: 1em; text-indent: 1.5em; }}
-        p:first-of-type {{ text-indent: 0; }}
-    </style>
-</head>
-<body>
-    {html_paragraphs}
-</body>
-</html>'''
-            epub.writestr(f'OEBPS/chapter{i}.xhtml', chapter_xhtml)
-
-    return buffer.getvalue()
-
-
-class BookTranslator:
+# The Stage 3 quality tests are the other half of this class, kept in
+# quality_tests.py: a thousand lines of optional, on-demand diagnostics that
+# were burying the pipeline they diagnose. Inherited rather than delegated to,
+# so every call site — inside the class and in the /evaluate route — reads
+# exactly as it did when the methods were defined below.
+class BookTranslator(QualityTests):
     def __init__(
         self,
         model_name: str = "llama3.3:70b-instruct-q2_K",
@@ -964,6 +407,13 @@ class BookTranslator:
     # candidate can carry its own quoted context and the answer still fits in
     # num_ctx, which is what a single truncated excerpt could never promise.
     PREPARE_BATCH_TERMS = 8
+    # How many of those calls are in flight at once. Ollama serves concurrent
+    # requests from one loaded model when OLLAMA_NUM_PARALLEL allows it, and
+    # queues them when it does not, so this is a ceiling rather than a
+    # promise. Kept small on purpose: a request that waits its turn is still
+    # counting against PREPARE_READ_TIMEOUT, and four slow calls queued behind
+    # each other stay well inside it.
+    PREPARE_CONCURRENCY = max(1, int(os.getenv('PREPARE_CONCURRENCY', '4')))
     # Per-quote budget for that context. Two short quotes per name say more
     # about how a name is used than the opening pages of the book do.
     PREPARE_EVIDENCE_CHARS = 240
@@ -975,15 +425,6 @@ class BookTranslator:
     # per-chunk work. A 27B model answering in 200s is not a failure; running
     # out of patience at 180s and reporting "no proper nouns found" was.
     PREPARE_READ_TIMEOUT = 600
-    # Optional document diagnostics. They stay lazy because loading either
-    # model is a deliberate quality-check action, never a prerequisite for
-    # translating a book.
-    LABSE_MODEL_ID = 'sentence-transformers/LaBSE'
-    LANGUAGE_ID_MODEL_ID = 'papluca/xlm-roberta-base-language-detection'
-    _labse_model = None
-    _labse_lock = threading.Lock()
-    _language_id_pipeline = None
-    _language_id_lock = threading.Lock()
 
     @classmethod
     def harvest_proper_noun_candidates(cls, text: str, limit: int = PNR_MAX_TERMS) -> List[Dict]:
@@ -1096,28 +537,62 @@ class BookTranslator:
         harvested.sort(key=lambda record: (-record['count'], record['surface']))
         return harvested[:limit] if limit else harvested
 
-    @staticmethod
-    def _parse_json_array(raw: Optional[str]) -> List[Dict]:
-        """Pull a JSON array of objects out of a model answer.
+    @classmethod
+    def _parse_json_array(cls, raw: Optional[str]) -> List[Dict]:
+        """Pull the objects a model answered with out of its reply.
 
         Local instruct models wrap JSON in prose or fences more often than
         not, so the outermost bracket pair is extracted rather than trusting
         the whole response to parse. Anything unparseable yields [] — every
         caller here treats "no structured answer" as "nothing to apply",
         never as an error worth failing the pass over.
+
+        Asking for an array is not the same as getting one. A model that
+        answers with the objects one after another and no brackets around
+        them has answered the question correctly, and reading only the
+        bracketed form threw whole batches of good renderings away as "0 of 8
+        accepted" — the answers were complete, well-formed and simply not
+        wrapped. So a reply with no usable array is read object by object,
+        which also rescues an array that was cut off before its closing
+        bracket.
         """
         if not raw:
             return []
         start, end = raw.find('['), raw.rfind(']')
-        if start == -1 or end <= start:
-            return []
-        try:
-            parsed = json.loads(raw[start:end + 1])
-        except (ValueError, TypeError):
-            return []
-        if not isinstance(parsed, list):
-            return []
-        return [item for item in parsed if isinstance(item, dict)]
+        if start != -1 and end > start:
+            try:
+                parsed = json.loads(raw[start:end + 1])
+            except (ValueError, TypeError):
+                parsed = None
+            if isinstance(parsed, list):
+                items = [item for item in parsed if isinstance(item, dict)]
+                if items:
+                    return items
+        return cls._scan_json_objects(raw)
+
+    @staticmethod
+    def _scan_json_objects(raw: str) -> List[Dict]:
+        """Every complete JSON object in a string, in the order written.
+
+        Decodes from each opening brace and skips past whatever it decoded,
+        so nested objects are consumed with their parent rather than reported
+        twice, and prose between objects is stepped over.
+        """
+        decoder = json.JSONDecoder()
+        items: List[Dict] = []
+        index = raw.find('{')
+        while index != -1:
+            try:
+                value, offset = decoder.raw_decode(raw, index)
+            except ValueError:
+                index = raw.find('{', index + 1)
+                continue
+            if isinstance(value, dict):
+                items.append(value)
+                index = raw.find('{', offset)
+            else:
+                index = raw.find('{', index + 1)
+        return items
 
     @classmethod
     def build_glossary_candidates(cls, text: str) -> Tuple[List[Dict], List[Dict]]:
@@ -1133,6 +608,7 @@ class BookTranslator:
         because the two miss different things and Stage 0 only gets one pass.
         """
         try:
+            import build_glossary
             from build_glossary import build_document_glossary
         except ImportError as exc:
             raise RuntimeError(
@@ -1140,7 +616,19 @@ class BookTranslator:
                 'pip install -r requirements.txt.'
             ) from exc
 
+        # Model loading and the per-batch NER sweep are the longest silences in
+        # Stage 0. They report to stderr for the command line; running under the
+        # server they belong in the log the interface is following.
+        build_glossary.report = logger.translation_logger.info
+
+        logger.translation_logger.info(
+            f"Stage 0: extracting glossary candidates from {len(text):,} characters"
+        )
         entries, review_queue = build_document_glossary(text)
+        logger.translation_logger.info(
+            f"Stage 0: extraction found {len(entries)} clustered candidate(s), "
+            f"{len(review_queue)} pair(s) for review"
+        )
         kind_map = {
             'location': 'place',
             'organization': 'organisation',
@@ -1188,6 +676,11 @@ class BookTranslator:
             {'surface': record['surface'], 'count': record['count'], 'kind': 'other', 'evidence': []}
             for record in cls.harvest_proper_noun_candidates(text, limit=0)
         ]
+        # One pass over the document instead of one per candidate: the check
+        # below asks the same question of a few thousand candidates, and a
+        # regex scan of a whole book each time is most of what Stage 0 spends
+        # before it reaches a model at all.
+        letter_runs = cls._letter_runs(text)
         for record in list(candidates) + harvested:
             surface = str(record.get('surface') or '').strip()
             if not surface or not cls.is_glossary_source(text, surface):
@@ -1197,9 +690,7 @@ class BookTranslator:
             # lowercase is a common word wearing a capital at the start of a
             # sentence. This is the harvest's own discriminator, applied to
             # the neural list, which had none.
-            if ' ' not in surface and re.search(
-                rf'(?<![^\W\d_]){re.escape(surface.lower())}(?![^\W\d_])', text,
-            ):
+            if ' ' not in surface and cls._written_lowercase(text, surface, letter_runs):
                 continue
             existing = merged.get(surface.casefold())
             if existing is None:
@@ -1292,6 +783,31 @@ class BookTranslator:
             and term in text
         )
 
+    # A maximal run of letters: what a word looks like to the boundary
+    # assertions the lowercase check used to spell out inline.
+    _LETTER_RUN_RE = re.compile(r'[^\W\d_]+', re.UNICODE)
+
+    @classmethod
+    def _letter_runs(cls, text: str) -> frozenset:
+        """Every maximal run of letters in the document, exactly as written."""
+        return frozenset(cls._LETTER_RUN_RE.findall(text))
+
+    @classmethod
+    def _written_lowercase(cls, text: str, surface: str, letter_runs: frozenset) -> bool:
+        """Whether the document also writes this term in lowercase.
+
+        An occurrence with no letter on either side is precisely a maximal
+        letter run, so for an all-letter term the answer is a set lookup
+        rather than a scan of the book. Terms with an apostrophe or a hyphen
+        span more than one run and keep the scan.
+        """
+        lowered = surface.lower()
+        if cls._LETTER_RUN_RE.fullmatch(lowered):
+            return lowered in letter_runs
+        return bool(re.search(
+            rf'(?<![^\W\d_]){re.escape(lowered)}(?![^\W\d_])', text,
+        ))
+
     @staticmethod
     def _quote(text: str, limit: int) -> str:
         """One line of evidence, collapsed and clipped for a prompt."""
@@ -1360,7 +876,13 @@ class BookTranslator:
         """
         groups = self.cluster_review_groups(text, candidates, review_queue or [])
         if not groups:
+            logger.translation_logger.info(
+                'Stage 0: nothing ambiguous to adjudicate — no entity-resolution call'
+            )
             return candidates, []
+        logger.translation_logger.info(
+            f"Stage 0: adjudicating {len(groups)} entity group(s) with {self.model_name}"
+        )
 
         source_name = LANG_NAMES.get(source_lang, source_lang)
         listing = []
@@ -1416,6 +938,11 @@ Rules:
                 'canonical': canonical,
                 'proposed_by': group['merged_by'],
             })
+        confirmed = sum(1 for decision in decisions if decision['same_entity'])
+        logger.translation_logger.info(
+            f"Stage 0: entity resolution ruled on {len(decisions)}/{len(groups)} group(s) — "
+            f"{confirmed} confirmed, {len(decisions) - confirmed} split"
+        )
         return self.apply_cluster_decisions(text, candidates, decisions), decisions
 
     @classmethod
@@ -1556,19 +1083,45 @@ Rules:
             candidates[start:start + self.PREPARE_BATCH_TERMS]
             for start in range(0, len(candidates), self.PREPARE_BATCH_TERMS)
         ] or [[]]
-        for batch in batches:
-            prompt = self._rendering_prompt(text, batch, source_lang, target_lang, genre)
-            raw = self._call_model(
-                prompt, temperature=0.2, read_timeout=self.PREPARE_READ_TIMEOUT,
+        workers = min(self.PREPARE_CONCURRENCY, len(batches))
+        logger.translation_logger.info(
+            f"Stage 0: rendering {len(candidates)} candidate(s) into "
+            f"{LANG_NAMES.get(target_lang, target_lang)} in {len(batches)} batch(es)"
+            + (f", {workers} at a time" if workers > 1 else "")
+        )
+        def render(batch: List[Dict]) -> Optional[str]:
+            return self._call_model(
+                self._rendering_prompt(text, batch, source_lang, target_lang, genre),
+                temperature=0.2, read_timeout=self.PREPARE_READ_TIMEOUT,
             )
-            for item in self._parse_json_array(raw):
-                record = self._rendering_record(text, item, counts)
-                if record is None or record['source'].casefold() in seen:
-                    continue
-                seen.add(record['source'].casefold())
-                records.append(record)
-            if len(records) >= self.PNR_MAX_TERMS:
-                break
+
+        # Nothing in a batch depends on another batch's answer: each is its own
+        # list of terms with its own quoted context. So the calls overlap —
+        # which is essentially all of Stage 0's wall clock on a book, fifteen
+        # sequential calls to a large local model. map() submits them all and
+        # still yields in batch order, so the merge below sees exactly the
+        # sequence it always saw: same prompts, same sampling, same order, and
+        # the same line in the log as each batch's turn comes up.
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            for number, (batch, raw) in enumerate(zip(batches, pool.map(render, batches)), 1):
+                accepted = 0
+                for item in self._parse_json_array(raw):
+                    record = self._rendering_record(text, item, counts)
+                    if record is None or record['source'].casefold() in seen:
+                        continue
+                    seen.add(record['source'].casefold())
+                    records.append(record)
+                    accepted += 1
+                # A source form the document does not literally contain is
+                # dropped by _rendering_record, so batch size and accepted
+                # count differ on purpose — worth seeing rather than inferring
+                # from a final total.
+                logger.translation_logger.info(
+                    f"Stage 0: rendering batch {number}/{len(batches)} — "
+                    f"{accepted} of {len(batch)} term(s) accepted"
+                )
+                if len(records) >= self.PNR_MAX_TERMS:
+                    break
 
         records.sort(key=lambda record: (-record['count'], record['source']))
         return records[:self.PNR_MAX_TERMS]
@@ -2251,6 +1804,26 @@ Rules:
             translation_time = time.time() - start_time
             monitor.record_translation_attempt(success, translation_time)
 
+    def _call_model(
+        self, prompt: str, temperature: float = 0.2, read_timeout: int = 180,
+    ) -> Optional[str]:
+        try:
+            # This path covers Prepare, refinement, and model-based quality
+            # checks.  Mark only a model that is about to reach Ollama active.
+            monitor.set_active_model(self.model_name)
+            response = self.session.post(
+                self.api_url,
+                json=self._ollama_payload(prompt, temperature=temperature),
+                timeout=(30, read_timeout),
+            )
+            response.raise_for_status()
+            result = json.loads(response.text)
+            return self._ollama_response_text(result)
+        except Exception as e:
+            logger.api_logger.error(f"Evaluation model call failed: {e}")
+            return None
+
+
     # ------------------------------------------------------------------
     # Ollama request/response plumbing.
     #
@@ -2340,8 +1913,33 @@ Rules:
     @classmethod
     def _ollama_response_text(cls, result: Dict) -> Optional[str]:
         """Pull the answer out of an /api/generate result, dropping the
-        separate 'thinking' field and any inline reasoning."""
-        text = cls._strip_reasoning(result.get('response') or '')
+        separate 'thinking' field and any inline reasoning.
+
+        Both ways an answer can be spoiled are reported here, because neither
+        is visible anywhere else: a caller receives None and cannot tell
+        whether the model found nothing or never got to say what it found.
+        """
+        raw = result.get('response') or ''
+        thinking = result.get('thinking') or ''
+        if thinking or cls._REASONING_BLOCK_RE.search(raw) or '<think' in raw.lower():
+            logger.api_logger.warning(
+                f"Model reasoned despite think=false: {len(thinking):,} chars in the "
+                f"thinking field, {len(raw):,} in the answer. The trace is dropped, but "
+                f"it was generated — and paid for — before the answer."
+            )
+        # Ollama stops for 'length' when the answer ran into num_ctx. Whatever
+        # came back is the first half of a sentence or of a JSON array, and
+        # every parser downstream reads that as "nothing".
+        if result.get('done_reason') == 'length':
+            logger.api_logger.warning(
+                f"Model answer was cut off at the context limit after "
+                f"{result.get('eval_count') or '?'} tokens — the reply is incomplete."
+            )
+        text = cls._strip_reasoning(raw)
+        if raw and not text:
+            logger.api_logger.warning(
+                'Model answer was entirely reasoning — nothing left after stripping it.'
+            )
         return text or None
 
     @staticmethod
@@ -2485,7 +2083,7 @@ Return ONLY the translation without comments."""
             logger.api_logger.warning("No response field in Stage 1 result")
             return text, 'Model returned no output — kept the original text untranslated for this chunk.'
         except requests.exceptions.Timeout:
-            logger.api_logger.error(f"Stage 1 timeout after 300s - text too long or model too slow")
+            logger.api_logger.error("Stage 1 timeout after 300s - text too long or model too slow")
             return text, 'Model timed out after 5 minutes (likely still loading/swapping) — kept the original text untranslated for this chunk.'
         except Exception as e:
             logger.api_logger.error(f"Stage 1 error: {e}")
@@ -2896,1071 +2494,6 @@ Respond with EXACTLY one word: A, B, or TIE."""
             return draft_translation, None, details
         return patched, None, details
 
-    # ------------------------------------------------------------------
-    # Stage 3: standalone quality tests, run on demand from the UI after
-    # Stage 1 and/or Stage 2 — never automatically. Several of these call
-    # the model again (backtranslation, LLM-judge) or a QE model
-    # (COMET-Kiwi), which is too slow to run on every chunk of a full
-    # book, so they sample a handful of chunks instead of the whole text.
-    # ------------------------------------------------------------------
-
-    EVAL_SAMPLE_SIZE = 5
-
-    @staticmethod
-    def _sample_indices(length: int, sample_size: int) -> List[int]:
-        """Evenly spaced indices across [0, length), for sampling chunks
-        without re-processing an entire book on every test run."""
-        if length <= 0:
-            return []
-        k = min(sample_size, length)
-        if k <= 1:
-            return [0]
-        return sorted({round(i * (length - 1) / (k - 1)) for i in range(k)})
-
-    # Dialogue openers across the conventions this app's language list uses.
-    _DIALOGUE_RE = re.compile(r'["“”«»„]|(?:^|\n)\s*[—–-]\s')
-
-    @classmethod
-    def _risk_ranked_indices(cls, chunks: List[str], sample_size: int) -> List[int]:
-        """Indices of the riskiest chunks, rather than evenly spaced ones.
-
-        Evenly spaced sampling weights every chunk equally, but translation
-        errors are not evenly spaced: they cluster where there are names to
-        render consistently, dialogue to keep in register, and numbers to
-        carry over exactly. Spending the same five model calls on those
-        chunks finds strictly more than spending them on scenery.
-
-        Falls back to even spacing when nothing scores — a chunk list with no
-        names, no dialogue and no numbers has no risk profile to rank by.
-        """
-        scored = []
-        for index, chunk in enumerate(chunks):
-            if not chunk.strip():
-                continue
-            names = len(cls.harvest_proper_noun_candidates(chunk, limit=20))
-            dialogue = len(cls._DIALOGUE_RE.findall(chunk))
-            digits = sum(character.isdigit() for character in chunk)
-            score = names * 3 + min(dialogue, 10) + min(digits, 10)
-            if score:
-                scored.append((score, index))
-
-        if not scored:
-            return cls._sample_indices(len(chunks), sample_size)
-        # Highest score first, index as the tie-break so a rerun samples the
-        # same chunks and its numbers stay comparable to the previous run's.
-        scored.sort(key=lambda pair: (-pair[0], pair[1]))
-        return sorted(index for _, index in scored[:sample_size])
-
-    def _call_model(
-        self, prompt: str, temperature: float = 0.2, read_timeout: int = 180,
-    ) -> Optional[str]:
-        try:
-            # This path covers Prepare, refinement, and model-based quality
-            # checks.  Mark only a model that is about to reach Ollama active.
-            monitor.set_active_model(self.model_name)
-            response = self.session.post(
-                self.api_url,
-                json=self._ollama_payload(prompt, temperature=temperature),
-                timeout=(30, read_timeout),
-            )
-            response.raise_for_status()
-            result = json.loads(response.text)
-            return self._ollama_response_text(result)
-        except Exception as e:
-            logger.api_logger.error(f"Evaluation model call failed: {e}")
-            return None
-
-    # -- Stage 2 tests: is refinement actually helping, without breaking anything? --
-
-    def eval_length_ratio(self, source_text: str, draft_text: str, final_text: str) -> Dict:
-        """Final length against the SOURCE, with final-against-draft as a
-        secondary number.
-
-        Measuring the final against the draft answers a question nobody is
-        asking: both were produced by the same pipeline from the same text, so
-        the ratio sits near 1.00 whatever happened to the meaning. Measuring
-        against the source is what shows compression — a target text that
-        comes out the same length as an English source is suspicious, because
-        most target languages expand.
-        """
-        source_len, draft_len, final_len = len(source_text), len(draft_text), len(final_text)
-        ratio = (final_len / source_len) if source_len else 1.0
-        draft_ratio = (final_len / draft_len) if draft_len else 1.0
-        # A deliberately wide band: expansion factors are language-pair
-        # specific (EN→RU runs 1.10–1.20, EN→ZH well under 1), so this can
-        # only catch the gross cases — a target half the size of its source,
-        # or twice it — without a per-pair table to compare against.
-        flagged = not (0.55 <= ratio <= 1.6)
-        return {
-            'test': 'length_ratio',
-            'label': 'Length ratio (final / source)',
-            'value': round(ratio, 3),
-            'details': {
-                'source_chars': source_len,
-                'draft_chars': draft_len,
-                'final_chars': final_len,
-                'final_over_draft': round(draft_ratio, 3),
-            },
-            'flagged': flagged,
-            'note': (
-                f"Final is {ratio:.2f}x the source's length ({source_len} → {final_len} chars) "
-                f"— outside 0.55–1.6x, so text was probably lost or duplicated. "
-                f"Final/draft {draft_ratio:.2f}x."
-                if flagged else
-                f"Final is {ratio:.2f}x the source's length ({source_len} → {final_len} chars); "
-                f"final/draft {draft_ratio:.2f}x. Compare against what your language pair "
-                f"normally does — a ratio near 1.00 into a language that usually expands "
-                f"means the translation is compressing."
-            ),
-        }
-
-    def eval_diff_ratio(self, draft_text: str, final_text: str) -> Dict:
-        # autojunk MUST stay off. It treats any character occurring in more
-        # than 1% of a long sequence as junk to be ignored — which in prose is
-        # most of the alphabet, so it reports two nearly identical texts as
-        # wildly different. On a measured example the same pair scored 0.82
-        # with autojunk and 0.98 without; 0.98 was the truth.
-        ratio = difflib.SequenceMatcher(None, draft_text, final_text, autojunk=False).ratio()
-        # Refinement is now a span patcher, not a rewriter, so a high
-        # similarity is the expected outcome and no longer a complaint. A LOW
-        # one is the alarm: it means something rewrote the text wholesale.
-        flagged = ratio < 0.75
-        if ratio < 0.75:
-            note = f"Similarity {ratio:.2f} — over a quarter of the text changed. Refinement patches reported spans, so this much movement means something rewrote the text wholesale; check for hallucination or duplication."
-        elif ratio > 0.995:
-            note = f"Similarity {ratio:.2f} — refinement changed almost nothing. Either the draft was already clean or the review pass found nothing it could locate; check how many errors it reported."
-        else:
-            note = f"Similarity {ratio:.2f} — {(1 - ratio) * 100:.1f}% of the text changed, which is the range a span-level patch should land in."
-        return {
-            'test': 'diff_ratio',
-            'label': 'Draft/final similarity',
-            'value': round(ratio, 3),
-            'flagged': flagged,
-            'note': note,
-        }
-
-    def eval_ngram_repetition(self, text: str, n: int = 4) -> Dict:
-        words = text.split()
-        if len(words) < n * 2:
-            return {
-                'test': 'ngram_repetition',
-                'label': 'Repeated phrase ratio',
-                'value': 0.0,
-                'flagged': False,
-                'note': 'Text too short to evaluate.',
-            }
-        ngrams = [tuple(words[i:i + n]) for i in range(len(words) - n + 1)]
-        counts = Counter(ngrams)
-        repeated = sum(count for count in counts.values() if count > 1)
-        ratio = repeated / len(ngrams)
-        flagged = ratio > 0.15
-        return {
-            'test': 'ngram_repetition',
-            'label': 'Repeated phrase ratio',
-            'value': round(ratio, 3),
-            'flagged': flagged,
-            'note': (
-                f"{ratio:.0%} of {n}-word phrases repeat — likely duplicated passages."
-                if flagged else
-                f"{ratio:.0%} of {n}-word phrases repeat — normal for natural prose."
-            ),
-        }
-
-    def eval_terminology_delta(
-        self, original_text: str, draft_text: str, final_text: str,
-        terminology: 'TerminologyManager',
-    ) -> Dict:
-        draft_violations = terminology.exact_violations(original_text, draft_text)
-        final_violations = terminology.exact_violations(original_text, final_text)
-        delta = len(draft_violations) - len(final_violations)
-        if len(draft_violations) == 0 and len(final_violations) == 0:
-            note = 'No verified terms were violated in either pass.'
-        elif delta > 0:
-            note = f'Refinement fixed {delta} glossary violation(s) ({len(draft_violations)} → {len(final_violations)}).'
-        elif delta < 0:
-            note = f'Refinement introduced {-delta} new glossary violation(s) ({len(draft_violations)} → {len(final_violations)}).'
-        else:
-            note = f'Refinement left {len(final_violations)} glossary violation(s) unfixed.'
-        return {
-            'test': 'terminology_delta',
-            'label': 'Glossary violations (draft vs final)',
-            'value': delta,
-            'details': {
-                'draft_violations': len(draft_violations),
-                'final_violations': len(final_violations),
-            },
-            'flagged': len(final_violations) > 0,
-            'note': note,
-        }
-
-    # -- Deterministic document-level checks. No model, no sampling: these
-    # read the whole final text, which is what the LLM-judge tests can never
-    # do, and they are the only tests here whose answer is a fact rather
-    # than an opinion. --
-
-    @staticmethod
-    def _script_of(character: str) -> Optional[str]:
-        """The script a letter belongs to ('LATIN', 'CYRILLIC', 'CJK', …),
-        or None for anything that isn't a letter.
-
-        Read out of the Unicode character name rather than a table of code
-        point ranges, so it covers every script without this file having to
-        know which languages exist."""
-        if not character.isalpha():
-            return None
-        try:
-            return unicodedata.name(character).split()[0]
-        except ValueError:
-            return None
-
-    @classmethod
-    def dominant_script(cls, text: str) -> Optional[str]:
-        """The script most of a text's letters are written in."""
-        counts = Counter(
-            script for script in (cls._script_of(character) for character in text) if script
-        )
-        return counts.most_common(1)[0][0] if counts else None
-
-    def eval_script_leakage(self, source_text: str, final_text: str) -> Dict:
-        """Words in the final translation still written in the source's
-        script.
-
-        This is the cheapest possible check for a name that was never
-        translated at all — "Grunnings" sitting in the middle of a Cyrillic
-        page — and no LLM judge is needed to see it. Some leakage is
-        legitimate (a brand kept in Latin on purpose), so the words are
-        listed rather than just counted, and the reader decides.
-        """
-        target_script = self.dominant_script(final_text)
-        source_script = self.dominant_script(source_text)
-        if not target_script or not source_script or target_script == source_script:
-            return {
-                'test': 'script_leakage',
-                'label': 'Untranslated source-script words',
-                'value': 0,
-                'flagged': False,
-                'note': (
-                    'Source and target use the same script, so untranslated words '
-                    'cannot be told apart this way.'
-                    if target_script and source_script else
-                    'Not enough text to determine the scripts involved.'
-                ),
-            }
-
-        leaked = Counter()
-        for match in self._WORD_RE.finditer(final_text):
-            word = match.group(0)
-            if self.dominant_script(word) == source_script:
-                leaked[word] += 1
-
-        total = sum(leaked.values())
-        examples = ', '.join(
-            f'{word} ({count}x)' if count > 1 else word
-            for word, count in leaked.most_common(8)
-        )
-        return {
-            'test': 'script_leakage',
-            'label': 'Untranslated source-script words',
-            'value': total,
-            'details': {
-                'distinct_words': len(leaked),
-                'target_script': target_script.title(),
-                'source_script': source_script.title(),
-                'words': dict(leaked.most_common(20)),
-            },
-            'flagged': total > 0,
-            'note': (
-                f'{total} {source_script.title()}-script word(s) left in the '
-                f'{target_script.title()} translation, {len(leaked)} distinct: {examples}. '
-                'Check each one — a name left in the source script is a missed '
-                'translation, a brand kept on purpose is not.'
-                if total else
-                f'No {source_script.title()}-script words left in the '
-                f'{target_script.title()} translation.'
-            ),
-        }
-
-    # How much of a target term has to match for two surface forms to count
-    # as the same name inflected, rather than two different renderings. Names
-    # inflect at the end, so the comparison is on the leading characters.
-    ENTITY_STEM_MIN = 4
-
-    @classmethod
-    def _entity_stem(cls, term: str) -> str:
-        """The leading part of a target term that inflection leaves alone."""
-        head = term.split()[-1] if term.split() else term
-        if len(head) <= cls.ENTITY_STEM_MIN:
-            return head.casefold()
-        return head[:max(cls.ENTITY_STEM_MIN, len(head) - 2)].casefold()
-
-    @classmethod
-    def _matches_entity_rendering(cls, candidate: str, target: str) -> bool:
-        """Whether one target-language word can be an inflected rendering.
-
-        A stem alone allows case endings, but must never let a shorter word
-        stand in for the agreed name: ``Фенвик`` is not an inflection of
-        ``Фенвикс``. This is deliberately conservative rather than pretending
-        to provide morphology for every supported target language.
-        """
-        head = target.split()[-1] if target.split() else target
-        folded = candidate.casefold()
-        return len(folded) >= len(head) and folded.startswith(cls._entity_stem(target))
-
-    def eval_entity_consistency(
-        self, original_chunks: List[str], final_chunks: List[str],
-        terminology: 'TerminologyManager',
-    ) -> Dict:
-        """Is every agreed rendering actually used everywhere its name occurs?
-
-        Runs per chunk over the whole document, which is the point: a chunk
-        can be internally perfect and still call the family something
-        different from what the previous chunk called it. Any inflected form
-        counts as a use — matching is on the stem, since a name that cannot
-        take target-language endings would make the sentence around it
-        ungrammatical.
-
-        Reports the chunks where a name's source appears but no form of its
-        agreed rendering does. That is the signature of a name being dropped,
-        translated by meaning in one place and transcribed in another, or
-        left in the source script.
-        """
-        if not terminology.terms:
-            return {
-                'test': 'entity_consistency',
-                'label': 'Named-entity consistency',
-                'value': None,
-                'flagged': True,
-                'note': (
-                    'No terms to check. Run Prepare before Start (or fill the glossary '
-                    'by hand) — with an empty glossary this test can only ever pass, '
-                    'which for a text whose main risk is proper nouns is the most '
-                    'expensive check to skip.'
-                ),
-            }
-
-        # Two names whose stems are prefixes of each other cannot be told
-        # apart by stem matching: "Дурсль" and "Дурсли" both reduce to
-        # "Дурс", so a chunk that says the singular where the source has the
-        # plural still counts as satisfied. Stem matching is what makes
-        # inflection acceptable, and without morphology for the target
-        # language the two requirements genuinely conflict — so the pairs are
-        # named as needing a human eye rather than quietly passed.
-        stems = {term.source: self._entity_stem(term.target) for term in terminology.terms}
-        ambiguous = sorted({
-            tuple(sorted((left, right)))
-            for left, left_stem in stems.items()
-            for right, right_stem in stems.items()
-            if left != right and (left_stem.startswith(right_stem) or right_stem.startswith(left_stem))
-        })
-
-        pairs = list(zip(original_chunks, final_chunks))
-        findings, checked = [], 0
-        for term in terminology.terms:
-            stem = stems[term.source]
-            folded_source = term.source.casefold()
-            occurrences, satisfied, forms = 0, 0, Counter()
-            for original_chunk, final_chunk in pairs:
-                if folded_source not in original_chunk.casefold():
-                    continue
-                occurrences += 1
-                chunk_forms = [
-                    match.group(0) for match in self._WORD_RE.finditer(final_chunk)
-                    if self._matches_entity_rendering(match.group(0), term.target)
-                ]
-                if chunk_forms:
-                    satisfied += 1
-                    forms.update(chunk_forms)
-            if not occurrences:
-                continue
-            checked += 1
-            if satisfied < occurrences:
-                findings.append({
-                    'source': term.source,
-                    'target': term.target,
-                    'chunks_with_source': occurrences,
-                    'chunks_with_rendering': satisfied,
-                    'forms_used': [form for form, _ in forms.most_common(8)],
-                })
-
-        findings.sort(key=lambda finding: finding['chunks_with_source'] - finding['chunks_with_rendering'], reverse=True)
-        if not checked:
-            note = 'None of the glossary terms occur in the source text, so nothing was checked.'
-        elif not findings:
-            note = f'All {checked} term(s) that occur in the source are rendered in every chunk they appear in.'
-        else:
-            worst = '; '.join(
-                f'"{finding["source"]}" → "{finding["target"]}" missing from '
-                f'{finding["chunks_with_source"] - finding["chunks_with_rendering"]} of '
-                f'{finding["chunks_with_source"]} chunk(s)'
-                for finding in findings[:4]
-            )
-            note = f'{len(findings)} of {checked} term(s) are not rendered everywhere: {worst}.'
-
-        if ambiguous:
-            listed = '; '.join(f'{left} / {right}' for left, right in ambiguous[:4])
-            note += (
-                f' Cannot distinguish these renderings automatically, so check them by '
-                f'hand: {listed}. They differ only in the endings that inflection is '
-                f'allowed to change.'
-            )
-
-        return {
-            'test': 'entity_consistency',
-            'label': 'Named-entity consistency',
-            'value': len(findings),
-            'details': {
-                'terms_checked': checked,
-                'findings': findings[:20],
-                'ambiguous_pairs': [list(pair) for pair in ambiguous[:20]],
-            },
-            'flagged': bool(findings),
-            'note': note,
-        }
-
-    _NUMBER_RE = re.compile(
-        r'(?<![\w.,])(?:\d{1,3}(?:[\s,\u00a0]\d{3})+|\d+)(?:[.,]\d+)?(?![\w.,])'
-    )
-
-    @classmethod
-    def _numeric_tokens(cls, text: str) -> Counter:
-        """Numbers in a comparison-safe spelling.
-
-        This deliberately does not guess that ``one`` and ``один`` are the
-        same number. Digit-bearing facts (years, dates, prices, quantities,
-        section numbers) are factual and can be checked across almost every
-        language pair; spelled-out numbers need language-specific parsing.
-        """
-        values = []
-        for match in cls._NUMBER_RE.finditer(text):
-            token = match.group(0).replace('\u00a0', '').replace(' ', '')
-            # 1,000 is a thousands separator; 1,5 is a decimal comma. The
-            # former has exactly three digits after its last separator.
-            if ',' in token and token.rsplit(',', 1)[1].isdigit() and len(token.rsplit(',', 1)[1]) == 3:
-                token = token.replace(',', '')
-            elif ',' in token:
-                token = token.replace(',', '.')
-            values.append(token)
-        return Counter(values)
-
-    def eval_numeric_preservation(self, source_text: str, final_text: str) -> Dict:
-        """Deterministic gate for digit-written numbers and dates."""
-        source_values = self._numeric_tokens(source_text)
-        final_values = self._numeric_tokens(final_text)
-        missing = list((source_values - final_values).elements())
-        unexpected = list((final_values - source_values).elements())
-        if not source_values:
-            return {
-                'test': 'numeric_preservation',
-                'label': 'Numbers and dates',
-                'value': 0,
-                'flagged': False,
-                'details': {'source_values': [], 'missing': [], 'unexpected': []},
-                'note': 'No digit-written numbers or dates in the source to check.',
-            }
-        flagged = bool(missing)
-        missing_preview = ', '.join(missing[:12])
-        unexpected_preview = ', '.join(unexpected[:12])
-        note = (
-            f'Missing or changed source value(s): {missing_preview}. '
-            'Numbers and dates are facts; inspect the corresponding chunks before shipping.'
-            if missing else
-            f'All {sum(source_values.values())} digit-written source number(s)/date component(s) survive in the final.'
-        )
-        if unexpected:
-            note += f' Extra target value(s) to inspect: {unexpected_preview}.'
-        return {
-            'test': 'numeric_preservation',
-            'label': 'Numbers and dates',
-            'value': len(missing),
-            'flagged': flagged,
-            'details': {
-                'source_values': sorted(source_values.elements()),
-                'missing': missing[:50],
-                'unexpected': unexpected[:50],
-            },
-            'note': note,
-        }
-
-    def eval_chunk_coverage(self, original_chunks: List[str], final_chunks: List[str]) -> Dict:
-        """Detect a missing or blank translation segment without a model."""
-        source_count, final_count = len(original_chunks), len(final_chunks)
-        empty_final = [
-            index + 1 for index, source in enumerate(original_chunks)
-            if source.strip() and (index >= final_count or not final_chunks[index].strip())
-        ]
-        count_mismatch = source_count != final_count
-        flagged = count_mismatch or bool(empty_final)
-        if flagged:
-            parts = []
-            if count_mismatch:
-                parts.append(f'{source_count} source chunk(s), {final_count} final chunk(s)')
-            if empty_final:
-                parts.append('empty final chunk(s): ' + ', '.join(map(str, empty_final[:20])))
-            note = 'Chunk coverage failed — ' + '; '.join(parts) + '.'
-        else:
-            note = f'All {source_count} source chunks have a non-empty aligned final chunk.'
-        return {
-            'test': 'chunk_coverage',
-            'label': 'Chunk coverage',
-            'value': len(empty_final) + abs(source_count - final_count),
-            'flagged': flagged,
-            'details': {
-                'source_chunks': source_count,
-                'final_chunks': final_count,
-                'empty_final_chunks': empty_final[:50],
-            },
-            'note': note,
-        }
-
-    @classmethod
-    def _get_labse_model(cls):
-        try:
-            from sentence_transformers import SentenceTransformer
-        except ImportError as exc:
-            raise RuntimeError(
-                'sentence-transformers is missing from the environment — the venv is '
-                'incomplete. Run: ./venv/bin/python -m pip install -r requirements.txt'
-            ) from exc
-        if cls._labse_model is None:
-            with cls._labse_lock:
-                if cls._labse_model is None:
-                    cls._labse_model = SentenceTransformer(cls.LABSE_MODEL_ID)
-        return cls._labse_model
-
-    def eval_labse_alignment(self, original_chunks: List[str], final_chunks: List[str]) -> Dict:
-        """Document-wide source/final alignment and semantic-drift outliers.
-
-        Chunks are already source-aligned by the translation pipeline. LaBSE
-        measures every pair in one shared multilingual embedding space; it is
-        a drift signal, not a fabricated claim that it can prove correctness.
-        """
-        length = min(len(original_chunks), len(final_chunks))
-        if not length:
-            return {
-                'test': 'labse_alignment', 'label': 'LaBSE document alignment',
-                'value': None, 'flagged': True,
-                'note': 'No aligned source/final chunks available for LaBSE.',
-            }
-        model = self._get_labse_model()
-        source = original_chunks[:length]
-        final = final_chunks[:length]
-        embeddings = model.encode(source + final, normalize_embeddings=True, show_progress_bar=False)
-        scores = [
-            float(sum(left * right for left, right in zip(embeddings[index], embeddings[length + index])))
-            for index in range(length)
-        ]
-        baseline = median(scores)
-        # A document-relative threshold catches the one paragraph that lost
-        # meaning without imposing an English-centric absolute score.
-        threshold = max(0.20, baseline - 0.20)
-        flags = [
-            {'chunk': index + 1, 'similarity': round(score, 3)}
-            for index, score in enumerate(scores) if score < threshold
-        ]
-        return {
-            'test': 'labse_alignment',
-            'label': 'LaBSE document alignment',
-            'value': round(mean(scores), 3),
-            'flagged': bool(flags),
-            'details': {
-                'chunks_compared': length,
-                'median_similarity': round(baseline, 3),
-                'drift_threshold': round(threshold, 3),
-                'drift_flags': flags[:50],
-                'lowest_chunks': [
-                    {'chunk': index + 1, 'similarity': round(score, 3)}
-                    for index, score in sorted(enumerate(scores), key=lambda pair: pair[1])[:10]
-                ],
-            },
-            'note': (
-                f'{len(flags)} semantic-drift outlier(s) below the document-relative '
-                f'threshold {threshold:.2f}; inspect those source/final chunks.'
-                if flags else
-                f'{length} aligned chunk pair(s), mean similarity {mean(scores):.2f}; '
-                'no document-relative drift outlier.'
-            ),
-        }
-
-    @classmethod
-    def _get_language_id_pipeline(cls):
-        try:
-            from transformers import pipeline
-        except ImportError as exc:
-            raise RuntimeError(
-                'transformers is missing from the environment — the venv is incomplete. '
-                'Run: ./venv/bin/python -m pip install -r requirements.txt'
-            ) from exc
-        if cls._language_id_pipeline is None:
-            with cls._language_id_lock:
-                if cls._language_id_pipeline is None:
-                    cls._language_id_pipeline = pipeline(
-                        'text-classification', model=cls.LANGUAGE_ID_MODEL_ID, tokenizer=cls.LANGUAGE_ID_MODEL_ID,
-                    )
-        return cls._language_id_pipeline
-
-    def eval_language_id(self, final_chunks: List[str], target_lang: str) -> Dict:
-        """Flag non-target-language final segments, including untranslated text."""
-        expected = (target_lang or '').casefold()
-        classifier = self._get_language_id_pipeline()
-        findings = []
-        checked = 0
-        for index, chunk in enumerate(final_chunks):
-            if len(chunk.strip()) < 20:
-                continue
-            result = classifier(chunk[:2000], truncation=True)[0]
-            label = str(result.get('label', '')).removeprefix('__label__').casefold()
-            score = float(result.get('score', 0))
-            checked += 1
-            if label != expected and score >= 0.70:
-                findings.append({'chunk': index + 1, 'detected': label, 'confidence': round(score, 3)})
-        return {
-            'test': 'language_id',
-            'label': 'Target-language segments',
-            'value': len(findings),
-            'flagged': bool(findings),
-            'details': {
-                'expected_language': expected,
-                'chunks_checked': checked,
-                'wrong_language_segments': findings[:50],
-            },
-            'note': (
-                f'{len(findings)} segment(s) confidently detected as a language other than {LANG_NAMES.get(expected, expected)}: '
-                + '; '.join(f"chunk {f['chunk']} → {f['detected']} ({f['confidence']:.0%})" for f in findings[:10])
-                if findings else
-                f'All {checked} sufficiently long final chunk(s) were classified as {LANG_NAMES.get(expected, expected)} or were low-confidence.'
-            ),
-        }
-
-    def eval_llm_judge_stage2(
-        self, original_chunks: List[str], draft_chunks: List[str], final_chunks: List[str],
-        source_lang: str, target_lang: str,
-    ) -> Dict:
-        """Pairwise draft vs final, on two separate questions, with the
-        source in front of the judge.
-
-        This test used to show the judge two target-language passages and ask
-        which read better — no source, "purely on naturalness, style and
-        tone". That measures exactly the axis a rewriting refinement pass
-        optimises, so it reported the pass as harmless while adequacy fell.
-        Accuracy is now asked first and separately, and a final that reads
-        better but says less shows up as a split verdict instead of a win.
-
-        Chunk-aligned, not paragraph-aligned: Stage 2 stores final_chunks, so
-        draft and final can be compared at the same granularity the Stage 1
-        judge uses.
-        """
-        length = min(len(original_chunks), len(draft_chunks), len(final_chunks))
-        if length == 0:
-            return {
-                'test': 'llm_judge_stage2',
-                'label': 'LLM judge — draft vs final',
-                'value': None,
-                'flagged': True,
-                'note': (
-                    'Nothing to compare. This test needs per-chunk draft and final text; '
-                    're-run Continue if this translation was refined by an older version.'
-                ),
-            }
-
-        source_name = LANG_NAMES.get(source_lang, source_lang)
-        target_name = LANG_NAMES.get(target_lang, target_lang)
-        indices = self._risk_ranked_indices(original_chunks[:length], self.EVAL_SAMPLE_SIZE)
-        tally = {
-            'accuracy': Counter(),
-            'readability': Counter(),
-        }
-        samples_used = 0
-
-        for idx in indices:
-            original, draft, final = original_chunks[idx], draft_chunks[idx], final_chunks[idx]
-            if not draft.strip() or not final.strip() or not original.strip():
-                continue
-            if draft == final:
-                # Nothing was changed here, so there is nothing to judge —
-                # counting it as a tie would pad the result with agreement
-                # the judge never actually expressed.
-                continue
-
-            swap = random.random() < 0.5
-            version_a, version_b = (final, draft) if swap else (draft, final)
-            prompt = f"""You are an independent editor comparing two {target_name} translations of the same {source_name} source. You wrote neither of them.
-
-SOURCE ({source_name}):
-{original}
-
-VERSION A:
-{version_a}
-
-VERSION B:
-{version_b}
-
-Answer two separate questions. They can have different answers, and often do.
-
-1. ACCURACY: which version conveys the source more faithfully — nothing changed, nothing left out, nothing invented?
-2. READABILITY: which version reads better as {target_name} prose?
-
-Respond with EXACTLY two lines and nothing else:
-ACCURACY: A|B|TIE
-READABILITY: A|B|TIE"""
-            raw = self._call_model(prompt)
-            samples_used += 1
-            if not raw:
-                continue
-
-            for axis, pattern in (('accuracy', r'ACCURACY:\s*(A|B|TIE)'), ('readability', r'READABILITY:\s*(A|B|TIE)')):
-                match = re.search(pattern, raw.upper())
-                if not match:
-                    continue
-                letter = match.group(1)
-                if letter == 'A':
-                    tally[axis]['final' if swap else 'draft'] += 1
-                elif letter == 'B':
-                    tally[axis]['draft' if swap else 'final'] += 1
-                else:
-                    tally[axis]['tie'] += 1
-
-        if not samples_used:
-            return {
-                'test': 'llm_judge_stage2',
-                'label': 'LLM judge — draft vs final',
-                'value': 0,
-                'details': {'samples': 0},
-                'flagged': False,
-                'note': (
-                    'Refinement left every sampled chunk byte-identical, so there was '
-                    'nothing to compare.'
-                ),
-            }
-
-        accuracy, readability = tally['accuracy'], tally['readability']
-        details = {
-            'samples': samples_used,
-            'accuracy': {'final_wins': accuracy['final'], 'draft_wins': accuracy['draft'], 'ties': accuracy['tie']},
-            'readability': {'final_wins': readability['final'], 'draft_wins': readability['draft'], 'ties': readability['tie']},
-        }
-        # The failure this is here to catch: the final wins on readability
-        # while losing on accuracy. That is a refinement pass buying polish
-        # with meaning, and it must not read as a pass.
-        traded_meaning_for_polish = (
-            accuracy['draft'] > accuracy['final'] and readability['final'] >= readability['draft']
-        )
-        note = (
-            f"Accuracy: final {accuracy['final']}, draft {accuracy['draft']}, tie {accuracy['tie']}. "
-            f"Readability: final {readability['final']}, draft {readability['draft']}, tie {readability['tie']}. "
-            f"({samples_used} changed chunk(s) sampled.)"
-        )
-        if traded_meaning_for_polish:
-            note += (
-                ' The draft is more accurate while the final reads better — refinement '
-                'is trading meaning for polish. Ship the draft unless you can see why not.'
-            )
-        return {
-            'test': 'llm_judge_stage2',
-            'label': 'LLM judge — draft vs final',
-            'value': accuracy['final'],
-            'details': details,
-            'flagged': traded_meaning_for_polish or accuracy['draft'] > accuracy['final'],
-            'note': note,
-        }
-
-    # -- Stage 1 tests: is the draft itself an adequate, fluent translation? --
-
-    @staticmethod
-    def _adequacy_fluency_prompt(source_name: str, target_name: str, original: str, candidate: str) -> str:
-        return f"""You are a strict, expert translation quality judge. You did not produce this translation — evaluate it objectively and critically. Most real translations, even good ones, are NOT flawless — reserve top scores for output you would defend against expert scrutiny.
-
-SOURCE ({source_name}):
-{original}
-
-TRANSLATION ({target_name}):
-{candidate}
-
-Rate the translation on two scales, using the anchors below. Pick the anchor that best matches, even if imperfectly.
-
-ADEQUACY (how completely the source's meaning, including nuance and implication, is preserved):
-5 = Every detail and nuance preserved; nothing added, omitted, or distorted.
-4 = Meaning fully preserved; at most one minor, inconsequential nuance softened.
-3 = Core meaning preserved, but some secondary details, connotations, or tone are lost or altered.
-2 = Meaning is noticeably distorted or incomplete: omissions, mistranslations, or added content that changes meaning.
-1 = Meaning is largely lost, contradicted, or unrelated to the source.
-
-FLUENCY (how natural the translation reads to a native {target_name} speaker):
-5 = Reads as if originally written by a skilled native speaker; no awkward phrasing anywhere.
-4 = Natural throughout; at most one minor phrase an editor might tweak but wouldn't flag as wrong.
-3 = Understandable and mostly natural, but has noticeable non-native phrasing, odd word order, or clunky sentences.
-2 = Grammatically odd or stilted in multiple places; reads as machine-translated.
-1 = Broken grammar, garbled syntax, or unreadable.
-
-Respond with EXACTLY two lines and nothing else:
-ADEQUACY: <1-5>
-FLUENCY: <1-5>"""
-
-    def _score_adequacy_fluency(
-        self, pairs: List[Tuple[str, str]], source_name: str, target_name: str,
-    ) -> Tuple[List[int], List[int], int]:
-        """Runs the adequacy/fluency judge prompt over (original, candidate)
-        pairs. Shared by the Stage 1 draft judge and the final-vs-original
-        judge — same rubric, different candidate text."""
-        adequacy_scores, fluency_scores, samples_used = [], [], 0
-        for original, candidate in pairs:
-            if not original.strip() or not candidate.strip():
-                continue
-            prompt = self._adequacy_fluency_prompt(source_name, target_name, original, candidate)
-            raw = self._call_model(prompt)
-            samples_used += 1
-            if not raw:
-                continue
-            adequacy = re.search(r'ADEQUACY:\s*(\d)', raw)
-            fluency = re.search(r'FLUENCY:\s*(\d)', raw)
-            if adequacy:
-                adequacy_scores.append(int(adequacy.group(1)))
-            if fluency:
-                fluency_scores.append(int(fluency.group(1)))
-        return adequacy_scores, fluency_scores, samples_used
-
-    def eval_llm_judge_stage1(
-        self, original_chunks: List[str], draft_chunks: List[str],
-        source_lang: str, target_lang: str,
-    ) -> Dict:
-        return self._judge_adequacy_fluency(
-            'llm_judge_stage1', 'LLM judge — adequacy & fluency (draft)',
-            original_chunks, draft_chunks, source_lang, target_lang, 'draft',
-        )
-
-    def eval_llm_judge_final(
-        self, original_chunks: List[str], final_chunks: List[str],
-        source_lang: str, target_lang: str,
-    ) -> Dict:
-        """The same rubric as the Stage 1 judge, scored on the FINAL text.
-
-        Deliberately identical in every respect except which translation is
-        being scored — same prompt, same sampling, same chunk boundaries — so
-        that the difference between the two numbers means something. Scoring
-        the draft by chunk and the final by paragraph position, as this did
-        before, produced two numbers on two different texts and an
-        "adequacy regression" that was partly an artifact of the alignment.
-        """
-        return self._judge_adequacy_fluency(
-            'llm_judge_final', 'LLM judge — adequacy & fluency (final)',
-            original_chunks, final_chunks, source_lang, target_lang, 'final',
-        )
-
-    def _judge_adequacy_fluency(
-        self, test_name: str, label: str,
-        original_chunks: List[str], candidate_chunks: List[str],
-        source_lang: str, target_lang: str, candidate_name: str,
-    ) -> Dict:
-        length = min(len(original_chunks), len(candidate_chunks))
-        if length == 0:
-            return {
-                'test': test_name,
-                'label': label,
-                'value': None,
-                'flagged': True,
-                'note': (
-                    f'No per-chunk {candidate_name} text to score. Re-run the pass that '
-                    'produces it if this translation predates chunk-level storage.'
-                ),
-            }
-
-        source_name = LANG_NAMES.get(source_lang, source_lang)
-        target_name = LANG_NAMES.get(target_lang, target_lang)
-        # Deterministic, and the same for the draft judge and the final judge,
-        # which is what makes their two scores subtractable.
-        indices = self._risk_ranked_indices(original_chunks[:length], self.EVAL_SAMPLE_SIZE)
-        pairs = [(original_chunks[idx], candidate_chunks[idx]) for idx in indices]
-        adequacy_scores, fluency_scores, samples_used = self._score_adequacy_fluency(pairs, source_name, target_name)
-
-        if not adequacy_scores and not fluency_scores:
-            return {
-                'test': test_name,
-                'label': label,
-                'value': None,
-                'flagged': True,
-                'note': 'The judge model did not return a usable score for any sampled chunk.',
-            }
-
-        avg_adequacy = round(mean(adequacy_scores), 2) if adequacy_scores else None
-        avg_fluency = round(mean(fluency_scores), 2) if fluency_scores else None
-        return {
-            'test': test_name,
-            'label': label,
-            'value': avg_adequacy,
-            'details': {
-                'avg_adequacy': avg_adequacy,
-                'avg_fluency': avg_fluency,
-                'samples': samples_used,
-                'sampled_chunks': indices,
-                'scored': candidate_name,
-            },
-            'flagged': (avg_adequacy is not None and avg_adequacy < 3) or (avg_fluency is not None and avg_fluency < 3),
-            'note': (
-                f'{candidate_name.title()}: adequacy {avg_adequacy}/5, fluency {avg_fluency}/5 '
-                f'over {samples_used} sampled chunk(s). Both numbers are averages of five '
-                f'1–5 ratings, so treat differences under about 0.5 as noise.'
-            ),
-        }
-
-    def eval_backtranslation_chrf(
-        self, original_chunks: List[str], draft_chunks: List[str],
-        source_lang: str, target_lang: str,
-    ) -> Dict:
-        if sacrebleu is None:
-            return {
-                'test': 'backtranslation_chrf',
-                'label': 'Backtranslation chrF',
-                'value': None,
-                'flagged': True,
-                'note': 'sacrebleu is not installed — run: pip install -r requirements.txt',
-            }
-
-        indices = self._sample_indices(len(original_chunks), self.EVAL_SAMPLE_SIZE)
-        scores = []
-        for idx in indices:
-            original = original_chunks[idx]
-            draft = draft_chunks[idx]
-            if not original.strip() or not draft.strip():
-                continue
-            back_translation, warning = self.stage1_primary_translation(
-                draft, source_lang=target_lang, target_lang=source_lang,
-            )
-            if warning:
-                continue
-            scores.append(sacrebleu.sentence_chrf(back_translation, [original]).score)
-
-        if not scores:
-            return {
-                'test': 'backtranslation_chrf',
-                'label': 'Backtranslation chrF',
-                'value': None,
-                'flagged': True,
-                'note': 'Backtranslation did not produce a usable result for any sampled chunk.',
-            }
-
-        avg = round(mean(scores), 1)
-        return {
-            'test': 'backtranslation_chrf',
-            'label': 'Backtranslation chrF (diagnostic only)',
-            'value': avg,
-            'details': {'samples': len(scores), 'per_sample': [round(s, 1) for s in scores], 'diagnostic_only': True},
-            'flagged': avg < 40,
-            'note': (
-                f'chrF {avg}/100 over {len(scores)} sampled chunk(s). Diagnostic only, and '
-                'not a quality score: chrF measures character overlap with a reference, and '
-                'a back-translation is not a reference. The number is the combined error of '
-                'the forward and reverse translations, so it cannot be read as the quality '
-                'of either. Useful for spotting a chunk that came back as something '
-                'completely different; useless for comparing runs.'
-            ),
-        }
-
-    COMET_KIWI_MODEL = 'Unbabel/wmt22-cometkiwi-da'
-
-    def eval_comet_kiwi(
-        self, original_chunks: List[str], candidate_chunks: List[str],
-        candidate_name: str = 'draft',
-    ) -> Dict:
-        """Reference-free neural QE, over whichever translation is handed to
-        it — the draft after Start, the final after Continue. Which one was
-        scored is reported, because a QE number with no stated subject is how
-        a panel ends up showing the draft's score next to a shipped final.
-
-        unbabel-comet is a base requirement, so the import below is a guard
-        against a half-built venv rather than the normal path. The multi-GB
-        checkpoint is still fetched here, on the first run of this test.
-
-        Downloads the checkpoint via huggingface_hub directly (rather than
-        through comet.models.download_model) because that helper swallows
-        the original error on a gated/access-denied repo and re-raises a
-        generic "not supported by COMET" KeyError with no way to tell that
-        apart from a real problem — this repo IS gated on Hugging Face, so
-        that failure mode is the common case, not an edge case.
-        """
-        try:
-            import torch
-            from comet import load_from_checkpoint
-            from huggingface_hub import snapshot_download
-            from huggingface_hub.errors import GatedRepoError
-        except ImportError:
-            return {
-                'test': 'comet_kiwi',
-                'label': 'COMET-Kiwi (reference-free QE)',
-                'value': None,
-                'flagged': True,
-                'note': (
-                    'unbabel-comet is missing from the environment — the venv is '
-                    'incomplete. Run: ./venv/bin/python -m pip install -r requirements.txt'
-                ),
-            }
-
-        try:
-            length = min(len(original_chunks), len(candidate_chunks))
-            indices = self._risk_ranked_indices(original_chunks[:length], self.EVAL_SAMPLE_SIZE)
-            data = [
-                {'src': original_chunks[idx], 'mt': candidate_chunks[idx]}
-                for idx in indices
-                if original_chunks[idx].strip() and candidate_chunks[idx].strip()
-            ]
-            if not data:
-                raise ValueError('No chunks available to score')
-
-            try:
-                model_dir = snapshot_download(repo_id=self.COMET_KIWI_MODEL)
-            except GatedRepoError:
-                return {
-                    'test': 'comet_kiwi',
-                    'label': 'COMET-Kiwi (reference-free QE)',
-                    'value': None,
-                    'flagged': True,
-                    'note': (
-                        f'COMET-Kiwi ({self.COMET_KIWI_MODEL}) is a gated Hugging Face model — '
-                        f'request access at https://huggingface.co/{self.COMET_KIWI_MODEL}, then run '
-                        '`huggingface-cli login` (or set the HF_TOKEN env var) and try again.'
-                    ),
-                }
-
-            checkpoint_path = os.path.join(model_dir, 'checkpoints', 'model.ckpt')
-            model = load_from_checkpoint(checkpoint_path)
-            # unbabel-comet's DataLoader setup (comet/models/base.py) always
-            # passes multiprocessing_context="fork" when MPS is available,
-            # but defaults num_workers to 0 for gpus=0 — a combination
-            # PyTorch's DataLoader rejects outright, so predict() throws on
-            # every Apple Silicon Mac regardless of sample count. Forcing
-            # num_workers>0 to satisfy that isn't a fix either: forking a
-            # process that already has a loaded HF fast tokenizer breaks the
-            # tokenizer in the child (AttributeError inside the worker). The
-            # only combination that actually works — no multiprocessing at
-            # all — is what comet already does on every other platform, so
-            # make it think MPS isn't available for the scope of this one
-            # CPU-only (gpus=0) call.
-            mps_is_available = torch.backends.mps.is_available
-            torch.backends.mps.is_available = lambda: False
-            try:
-                output = model.predict(data, batch_size=4, gpus=0)
-            finally:
-                torch.backends.mps.is_available = mps_is_available
-            avg = round(float(output.system_score) * 100, 1)  # type: ignore[attr-defined]
-            return {
-                'test': 'comet_kiwi',
-                'label': 'COMET-Kiwi (reference-free QE)',
-                'value': avg,
-                'details': {'samples': len(data), 'scored': candidate_name, 'sampled_chunks': indices},
-                'flagged': avg < 60,
-                'note': (
-                    f'COMET-Kiwi {avg}/100 for the {candidate_name} over {len(data)} sampled '
-                    f'chunk(s) (0–100, higher is better). Sentence-level by design, so it is '
-                    f'blind to anything that spans chunks.'
-                ),
-            }
-        except Exception as e:
-            logger.api_logger.error(f"COMET-Kiwi evaluation failed: {e}")
-            return {
-                'test': 'comet_kiwi',
-                'label': 'COMET-Kiwi (reference-free QE)',
-                'value': None,
-                'flagged': True,
-                'note': f'COMET-Kiwi failed: {e}',
-            }
 
     def get_installed_models(self) -> List[Dict]:
         """Everything Ollama has pulled, with the details the UI needs.
@@ -3977,9 +2510,7 @@ FLUENCY: <1-5>"""
         response.raise_for_status()
         return response.json().get('models') or []
 
-    def get_available_models(self) -> List[str]:
-        return [model['name'] for model in self.get_installed_models()]
-    
+
 # Translation Recovery
 class TranslationRecovery:
     def __init__(self, db_path: str = DB_PATH):
@@ -4218,13 +2749,12 @@ def read_uploaded_book(file, source_lang: Optional[str] = None):
 @with_error_handling
 def prepare():
     """STAGE 0: read the book and propose the contract the translation will
-    run under — one agreed rendering per recurring proper noun, plus a short
-    brief about the document as a whole.
+    run under — one agreed rendering per recurring proper noun.
 
     Deliberately does not create a translation row or translate anything.
-    Both artifacts come back as editable text and are then submitted with
-    Start like any hand-written glossary, so what actually reaches the model
-    is always what the user saw and approved.
+    The glossary comes back as editable text and is then submitted with Start
+    like any hand-written one, so what actually reaches the model is always
+    what the user saw and approved.
     """
     if 'file' not in request.files:
         return jsonify({'error': 'No file part'}), 400
@@ -4235,11 +2765,14 @@ def prepare():
         target_lang = request.form.get('targetLanguage')
         model_name = request.form.get('model')
         genre = request.form.get('genre', 'unknown')
-        # Stage 0 makes two different demands. Ruling on whether two source
-        # forms name one entity is reasoning about the document; rendering a
-        # name into the target language is translation knowledge. They get
-        # their own model choices, and the entity role falls back to the
-        # rendering one when the browser has no separate preference.
+        # Stage 0 makes two different demands — ruling on whether two source
+        # forms name one entity, and rendering a name into the target language
+        # — but on the same-prompt comparison the two roles were run on, a
+        # small model matched a much larger one at both, and splitting them
+        # only made a 32 GB machine unload one model and load the other
+        # halfway through Prepare. So the interface offers one choice, and a
+        # separate entity model stays available to anything calling /prepare
+        # directly.
         entity_model_name = request.form.get('entityModel') or model_name
 
         if not all([source_lang, target_lang, model_name]):
@@ -4247,8 +2780,8 @@ def prepare():
         for name in (model_name, entity_model_name):
             if is_translategemma(name):
                 return jsonify({'error': (
-                    'TranslateGemma is translation-only and cannot extract names or '
-                    'write a brief. Pick a general instruct model to prepare, then '
+                    'TranslateGemma is translation-only and cannot extract or '
+                    'render names. Pick a general instruct model to prepare, then '
                     'switch back to TranslateGemma for Start if you like.'
                 )}), 400
 
@@ -4257,10 +2790,16 @@ def prepare():
         except UploadError as e:
             return jsonify({'error': str(e)}), 400
 
+        logger.translation_logger.info(
+            f"Stage 0 started: {source_lang} → {target_lang} (genre: {genre}), "
+            + (f"model: {model_name}" if entity_model_name == model_name
+               else f"entities: {entity_model_name}, rendering: {model_name}")
+        )
         translator = BookTranslator(model_name=model_name)
         try:
             candidates, review_queue = translator.build_glossary_candidates(text)
         except RuntimeError as e:
+            logger.translation_logger.error(f"Stage 0 failed: {e}")
             return jsonify({'error': str(e)}), 503
         extracted = len(candidates)
         # The clustering step guessed which source forms are one entity. Have
@@ -4278,6 +2817,10 @@ def prepare():
             text, source_lang, target_lang, genre, candidates=candidates,
         )
         rendering_conflicts = translator.find_rendering_conflicts(records)
+        logger.translation_logger.info(
+            f"Stage 0 finished: {len(records)} glossary record(s) proposed, "
+            f"{len(rendering_conflicts)} rendering conflict(s) to review"
+        )
         # Serialised in the glossary's own text format, so the proposal lands
         # in the existing textarea and goes through the same parser and the
         # same validation as anything typed by hand.
@@ -5009,89 +3552,17 @@ def export_epub():
         if not text:
             return jsonify({'error': 'No text provided'}), 400
         
-        # Create unique filename
-        epub_id = str(uuid.uuid4())
-        epub_filename = f'translation_{epub_id}.epub'
+        # One chapter, but built by the same writer the multi-chapter path
+        # uses. The hand-rolled copy that used to live here interpolated the
+        # title, author and body text into XML unescaped, so an ampersand
+        # anywhere in the book produced an EPUB no reader would open.
+        epub_bytes = build_epub_from_chapters([text], title=title, author=author)
+
+        epub_filename = f'translation_{uuid.uuid4()}.epub'
         epub_path = os.path.join(TRANSLATIONS_FOLDER, epub_filename)
-        
-        # Create EPUB structure
-        with zipfile.ZipFile(epub_path, 'w', zipfile.ZIP_DEFLATED) as epub:
-            # mimetype (must be first, uncompressed)
-            epub.writestr('mimetype', 'application/epub+zip', compress_type=zipfile.ZIP_STORED)
-            
-            # META-INF/container.xml
-            container_xml = '''<?xml version="1.0" encoding="UTF-8"?>
-<container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
-    <rootfiles>
-        <rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/>
-    </rootfiles>
-</container>'''
-            epub.writestr('META-INF/container.xml', container_xml)
-            
-            # OEBPS/content.opf
-            content_opf = f'''<?xml version="1.0" encoding="UTF-8"?>
-<package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="BookID">
-    <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
-        <dc:title>{title}</dc:title>
-        <dc:creator>{author}</dc:creator>
-        <dc:language>en</dc:language>
-        <dc:identifier id="BookID">{epub_id}</dc:identifier>
-        <meta property="dcterms:modified">{dt.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')}</meta>
-    </metadata>
-    <manifest>
-        <item id="chapter1" href="chapter1.xhtml" media-type="application/xhtml+xml"/>
-        <item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>
-    </manifest>
-    <spine toc="ncx">
-        <itemref idref="chapter1"/>
-    </spine>
-</package>'''
-            epub.writestr('OEBPS/content.opf', content_opf)
-            
-            # OEBPS/toc.ncx
-            toc_ncx = f'''<?xml version="1.0" encoding="UTF-8"?>
-<ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1">
-    <head>
-        <meta name="dtb:uid" content="{epub_id}"/>
-        <meta name="dtb:depth" content="1"/>
-    </head>
-    <docTitle>
-        <text>{title}</text>
-    </docTitle>
-    <navMap>
-        <navPoint id="chapter1" playOrder="1">
-            <navLabel>
-                <text>Chapter 1</text>
-            </navLabel>
-            <content src="chapter1.xhtml"/>
-        </navPoint>
-    </navMap>
-</ncx>'''
-            epub.writestr('OEBPS/toc.ncx', toc_ncx)
-            
-            # OEBPS/chapter1.xhtml
-            # Convert paragraphs to HTML
-            paragraphs = text.split('\n\n')
-            html_paragraphs = ''.join([f'<p>{p.strip()}</p>\n' for p in paragraphs if p.strip()])
-            
-            chapter_xhtml = f'''<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE html>
-<html xmlns="http://www.w3.org/1999/xhtml">
-<head>
-    <title>{title}</title>
-    <style>
-        body {{ font-family: serif; line-height: 1.6; margin: 2em; }}
-        p {{ margin-bottom: 1em; text-indent: 1.5em; }}
-        p:first-of-type {{ text-indent: 0; }}
-    </style>
-</head>
-<body>
-    <h1>{title}</h1>
-    {html_paragraphs}
-</body>
-</html>'''
-            epub.writestr('OEBPS/chapter1.xhtml', chapter_xhtml)
-        
+        with open(epub_path, 'wb') as f:
+            f.write(epub_bytes)
+
         logger.app_logger.info(f"EPUB created: {epub_filename}")
         
         return send_file(
