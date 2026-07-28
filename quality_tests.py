@@ -25,6 +25,7 @@ try:
 except ImportError:
     sacrebleu = None
 
+import prompts
 from languages import LANG_NAMES
 from monitoring import logger
 from terminology import TerminologyManager
@@ -706,25 +707,11 @@ class QualityTests:
 
             swap = random.random() < 0.5
             version_a, version_b = (final, draft) if swap else (draft, final)
-            prompt = f"""You are an independent editor comparing two {target_name} translations of the same {source_name} source. You wrote neither of them.
-
-SOURCE ({source_name}):
-{original}
-
-VERSION A:
-{version_a}
-
-VERSION B:
-{version_b}
-
-Answer two separate questions. They can have different answers, and often do.
-
-1. ACCURACY: which version conveys the source more faithfully — nothing changed, nothing left out, nothing invented?
-2. READABILITY: which version reads better as {target_name} prose?
-
-Respond with EXACTLY two lines and nothing else:
-ACCURACY: A|B|TIE
-READABILITY: A|B|TIE"""
+            prompt = prompts.render(
+                'quality/pairwise_editor',
+                source_name=source_name, target_name=target_name,
+                original=original, version_a=version_a, version_b=version_b,
+            )
             raw = self._call_model(prompt)
             samples_used += 1
             if not raw:
@@ -790,33 +777,11 @@ READABILITY: A|B|TIE"""
 
     @staticmethod
     def _adequacy_fluency_prompt(source_name: str, target_name: str, original: str, candidate: str) -> str:
-        return f"""You are a strict, expert translation quality judge. You did not produce this translation — evaluate it objectively and critically. Most real translations, even good ones, are NOT flawless — reserve top scores for output you would defend against expert scrutiny.
-
-SOURCE ({source_name}):
-{original}
-
-TRANSLATION ({target_name}):
-{candidate}
-
-Rate the translation on two scales, using the anchors below. Pick the anchor that best matches, even if imperfectly.
-
-ADEQUACY (how completely the source's meaning, including nuance and implication, is preserved):
-5 = Every detail and nuance preserved; nothing added, omitted, or distorted.
-4 = Meaning fully preserved; at most one minor, inconsequential nuance softened.
-3 = Core meaning preserved, but some secondary details, connotations, or tone are lost or altered.
-2 = Meaning is noticeably distorted or incomplete: omissions, mistranslations, or added content that changes meaning.
-1 = Meaning is largely lost, contradicted, or unrelated to the source.
-
-FLUENCY (how natural the translation reads to a native {target_name} speaker):
-5 = Reads as if originally written by a skilled native speaker; no awkward phrasing anywhere.
-4 = Natural throughout; at most one minor phrase an editor might tweak but wouldn't flag as wrong.
-3 = Understandable and mostly natural, but has noticeable non-native phrasing, odd word order, or clunky sentences.
-2 = Grammatically odd or stilted in multiple places; reads as machine-translated.
-1 = Broken grammar, garbled syntax, or unreadable.
-
-Respond with EXACTLY two lines and nothing else:
-ADEQUACY: <1-5>
-FLUENCY: <1-5>"""
+        return prompts.render(
+            'quality/adequacy_fluency',
+            source_name=source_name, target_name=target_name,
+            original=original, candidate=candidate,
+        )
 
     def _score_adequacy_fluency(
         self, pairs: List[Tuple[str, str]], source_name: str, target_name: str,

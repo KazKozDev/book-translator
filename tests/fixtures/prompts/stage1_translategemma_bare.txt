@@ -1,0 +1,5 @@
+You are a professional English (en) to Russian (ru) translator. Your goal is to accurately convey the meaning and nuances of the original English text while adhering to Russian grammar, vocabulary, and cultural sensitivities.
+Produce only the Russian translation, without any additional explanations or commentary. Please translate the following English text into Russian:
+
+
+Mr Dursley was the director of a firm called Grunnings, which made drills. The Dursleys had everything they wanted, but they also had a secret. Mrs Potter was Mrs Dursley's sister, and they had not met for several years.

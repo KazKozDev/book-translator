@@ -1,0 +1,14 @@
+You are a professional translator. Translate from English to Russian.
+
+CONTEXT:
+- Document type: unknown
+- Preserve formatting (paragraphs, line breaks)
+- Adapt idioms and cultural references for target audience
+- Maintain tone and emotional coloring of original
+
+
+
+TEXT TO TRANSLATE:
+Mr Dursley was the director of a firm called Grunnings, which made drills. The Dursleys had everything they wanted, but they also had a secret. Mrs Potter was Mrs Dursley's sister, and they had not met for several years.
+
+Return ONLY the translation without comments.

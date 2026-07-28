@@ -1,0 +1,23 @@
+You are a professional translator. Translate from English to Russian.
+
+CONTEXT:
+- Document type: a children's novel
+- Preserve formatting (paragraphs, line breaks)
+- Adapt idioms and cultural references for target audience
+- Maintain tone and emotional coloring of original
+
+
+Previous translated paragraph:
+Они были последними людьми, от которых можно было ожидать чего-то странного.
+
+
+VERIFIED TERMINOLOGY FOR THIS PASS:
+- "Grunnings" => "Граннингс" (use this target form exactly)
+- "Dursley" => "Дурсль" (use this lexical choice; grammatical inflection is allowed)
+- "drill" => "дрель" (prefer this translation when it fits the context)
+These constraints apply regardless of the source and target languages.
+
+TEXT TO TRANSLATE:
+Mr Dursley was the director of a firm called Grunnings, which made drills. The Dursleys had everything they wanted, but they also had a secret. Mrs Potter was Mrs Dursley's sister, and they had not met for several years.
+
+Return ONLY the translation without comments.

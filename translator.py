@@ -29,6 +29,7 @@ import uuid
 app = Flask(__name__)
 CORS(app)
 
+import prompts  # noqa: E402
 from languages import LANG_NAMES  # noqa: E402
 
 # TranslateGemma (Gemma 3 based, 4B/12B/27B) is a translation-only model: it
@@ -895,20 +896,10 @@ class BookTranslator(QualityTests):
                 f"{index}. {' | '.join(group['forms'])}"
                 + (f"\n   context: {evidence}" if evidence else '')
             )
-        prompt = f"""These groups of expressions come from one {source_name} document. A clustering step guessed that the forms inside each group name the same entity, or could not decide. Rule on each group.
-
-GROUPS:
-{chr(10).join(listing)}
-
-Respond with ONLY a JSON array, no prose, no code fence. One element per numbered group:
-{{"group": <number>, "same_entity": true|false, "canonical": "<the form to use as the entry, copied exactly from the group>"}}
-
-Rules:
-- same_entity is true only when every form in the group refers to one and the same entity.
-- A singular name and its plural or family form are DIFFERENT entities: "Dursley" and "Dursleys" must stay separate, and so must a person and the place named after them.
-- A name with a title and the bare name are the same entity ("Mrs. Fenwick" and "Fenwick"); prefer the bare name as the canonical form.
-- "canonical" must be one of the forms shown in that group, copied character for character. When same_entity is false, give the form that is most usable on its own.
-- Rule on every group. Do not add groups."""
+        prompt = prompts.render(
+            'stage0_prepare/cluster_adjudication',
+            source_name=source_name, listing=chr(10).join(listing),
+        )
 
         decisions, ruled = [], set()
         for item in self._parse_json_array(self._call_model(
@@ -1132,12 +1123,11 @@ Rules:
         """The Stage 0 rendering prompt for one batch of candidates."""
         source_name = LANG_NAMES.get(source_lang, source_lang)
         target_name = LANG_NAMES.get(target_lang, target_lang)
-        genre_line = f"\nThe document is: {genre}." if genre and genre != 'unknown' else ""
-        mode_rules = """
-Choose "mode" per term:
-- "exact": the target must appear letter for letter every time — codes, invented brands, titles of works, anything a reader would notice being altered.
-- "inflectable": the lexical choice is fixed but the target language may inflect it — the normal choice for names of people and places.
-- "preferred": use this rendering where it fits, and allow a freer translation where it does not — descriptive names and common-noun terms."""
+        genre_line = ""
+        if genre and genre != 'unknown':
+            genre_line = "\n" + prompts.render(
+                'stage0_prepare/rendering_rules', 'genre_line', genre=genre,
+            )
 
         if batch:
             listing = []
@@ -1163,36 +1153,26 @@ Choose "mode" per term:
                 for quote in list(quotes)[:2]:
                     entry += f"\n    context: {quote!r}"
                 listing.append(entry)
-            task = f"""Below are entity candidates from a {source_name} document, each with the context it appears in.
-
-For each expression that is a PROPER NOUN (person, family, place, street, company, brand, invented term), give the single {target_name} rendering that must be used for it everywhere in the document. Skip anything that is not a proper noun — ordinary words, sentence openers, common nouns, dates and weekdays.{genre_line}
-
-CANDIDATES:
-{chr(10).join(listing)}"""
+            task = prompts.render(
+                'stage0_prepare/rendering_from_candidates',
+                source_name=source_name, target_name=target_name,
+                genre_line=genre_line, listing=chr(10).join(listing),
+            )
         else:
             # No candidate survived extraction, which is the normal case for a
             # script that carries no capitalisation signal. The excerpt is all
             # there is to go on.
-            task = f"""Below is an excerpt from a {source_name} document.
+            task = prompts.render(
+                'stage0_prepare/rendering_from_excerpt',
+                source_name=source_name, target_name=target_name,
+                genre_line=genre_line, excerpt=text[:self.PREPARE_SOURCE_BUDGET],
+            )
 
-List the PROPER NOUNS in it (person, family, place, street, company, brand, invented term) and give the single {target_name} rendering that must be used for each one everywhere in the document.{genre_line}
-
-EXCERPT:
-{text[:self.PREPARE_SOURCE_BUDGET]}"""
-
-        return f"""{task}
-
-Respond with ONLY a JSON array, no prose, no code fence. Each element:
-{{"source": "<expression exactly as written in the {source_name} text>", "target": "<the {target_name} rendering>", "kind": "person|place|organisation|work|term|other", "mode": "exact|inflectable|preferred"}}
-
-Rules:
-- One element per distinct proper noun. Do not repeat.
-- "source" must be copied character for character from the document. You may add a proper noun you can see in the context quotes that is missing from the candidate list, as long as you copy it exactly; never write a form the document does not contain.
-- "target" is the base form only. Do not add grammatical endings, articles, or explanations.
-- Leave titles and honorifics out of "source": write "Fenwick", never "Mrs. Fenwick" or "Mr. and Mrs. Fenwick".
-- Distinct source forms need distinct renderings: a singular name and its plural or family form must not both become the same target string.
-- Names of people and places are normally transcribed, not translated by meaning, unless the document's tradition clearly demands otherwise.{mode_rules}
-- If there are no proper nouns at all, respond with []."""
+        rules = prompts.render(
+            'stage0_prepare/rendering_rules',
+            source_name=source_name, target_name=target_name,
+        )
+        return f"{task}\n\n{rules}"
 
     @classmethod
     def _rendering_record(cls, text: str, item: Dict, counts: Dict[str, int]) -> Optional[Dict]:
@@ -1952,22 +1932,19 @@ Rules:
         terminology_context: str,
     ) -> str:
         """The Stage 1 prompt for general instruct models."""
-        context_section = f"\n\nPrevious translated paragraph:\n{previous_chunk}" if previous_chunk else ""
+        context_section = ""
+        if previous_chunk:
+            context_section = "\n\n" + prompts.render(
+                'stage1_translate/default', 'previous_paragraph',
+                previous_chunk=previous_chunk,
+            )
 
-        return f"""You are a professional translator. Translate from {source_name} to {target_name}.
-
-CONTEXT:
-- Document type: {genre}
-- Preserve formatting (paragraphs, line breaks)
-- Adapt idioms and cultural references for target audience
-- Maintain tone and emotional coloring of original
-{context_section}
-{terminology_context}
-
-TEXT TO TRANSLATE:
-{text}
-
-Return ONLY the translation without comments."""
+        return prompts.render(
+            'stage1_translate/default',
+            source_name=source_name, target_name=target_name, genre=genre,
+            context_section=context_section, terminology_context=terminology_context,
+            text=text,
+        )
 
     @staticmethod
     def _stage1_prompt_translategemma(
@@ -1990,40 +1967,39 @@ Return ONLY the translation without comments."""
         tail the model was trained on stay untouched. With nothing extra to
         add, the result is byte-identical to the documented prompt.
         """
-        opening = (
-            f"You are a professional {source_name} ({source_lang}) to "
-            f"{target_name} ({target_lang}) translator. Your goal is to accurately "
-            f"convey the meaning and nuances of the original {source_name} text "
-            f"while adhering to {target_name} grammar, vocabulary, and cultural "
-            "sensitivities."
+        opening = prompts.render(
+            'stage1_translate/translategemma', 'opening',
+            source_name=source_name, source_lang=source_lang,
+            target_name=target_name, target_lang=target_lang,
         )
-        produce_only = (
-            f"Produce only the {target_name} translation, without any additional "
-            "explanations or commentary."
+        produce_only = prompts.render(
+            'stage1_translate/translategemma', 'produce_only', target_name=target_name,
         )
-        instruction = (
-            f"Please translate the following {source_name} text into {target_name}:"
+        instruction = prompts.render(
+            'stage1_translate/translategemma', 'instruction',
+            source_name=source_name, target_name=target_name,
         )
 
         extras = []
         if previous_chunk:
-            extras.append(
-                "Previous translated paragraph (context only — do not repeat it "
-                f"in your answer):\n{previous_chunk}"
-            )
+            extras.append(prompts.render(
+                'stage1_translate/translategemma', 'previous_paragraph',
+                previous_chunk=previous_chunk,
+            ))
         terminology_context = terminology_context.strip()
         if terminology_context:
             extras.append(terminology_context)
 
         if extras or (genre and genre != 'unknown'):
-            context_lines = [
-                "- Preserve formatting (paragraphs, line breaks)",
-                "- Adapt idioms and cultural references for target audience",
-                "- Maintain tone and emotional coloring of original",
-            ]
+            document_type = ""
             if genre and genre != 'unknown':
-                context_lines.insert(0, f"- Document type: {genre}")
-            extras.insert(0, "CONTEXT:\n" + "\n".join(context_lines))
+                document_type = "\n" + prompts.render(
+                    'stage1_translate/translategemma', 'document_type', genre=genre,
+                )
+            extras.insert(0, prompts.render(
+                'stage1_translate/translategemma', 'context',
+                document_type=document_type,
+            ))
 
         if not extras:
             return f"{opening}\n{produce_only} {instruction}\n\n\n{text}"
@@ -2175,36 +2151,13 @@ Return ONLY the translation without comments."""
         source_name: str, target_name: str,
         terminology_context: str, violation_section: str,
     ) -> str:
-        return f"""You are a translation quality reviewer. You do not rewrite translations — you report errors in them.
-
-SOURCE ({source_name}):
-{original_text}
-
-TRANSLATION TO REVIEW ({target_name}):
-{draft_translation}
-{terminology_context}
-{violation_section}
-
-Find places where the {target_name} translation is WRONG about the source. Report only real errors:
-- mistranslation — the {target_name} says something the source does not
-- omission — something in the source is missing from the translation
-- addition — the translation invents something not in the source
-- terminology — a required rendering from the list above was not used
-- consistency — a name or term is rendered differently here than the required form
-- grammar — ungrammatical or broken {target_name}
-- style — register or tone clearly wrong for the source
-
-Do NOT report anything that is merely a matter of taste: a synonym you prefer, a smoother rhythm, a more literary word choice. If the translation is accurate, return an empty list.
-
-Respond with ONLY a JSON array, no prose, no code fence. Each element:
-{{"span": "<the exact substring of the {target_name} translation that is wrong, copied character for character>", "type": "<one of the categories above>", "severity": "critical|major|minor", "replacement": "<what that span should say instead>"}}
-
-Rules:
-- "span" MUST appear in the {target_name} translation above exactly as you write it. Copy it, do not paraphrase or re-type it from memory.
-- Keep spans short — a few words, not whole paragraphs.
-- "replacement" fixes only that span and must fit grammatically where the span sat.
-- For an omission, let "span" be the words the missing content belongs next to, and "replacement" those same words with the content restored.
-- At most {self.MAX_ESTIMATE_SPANS} elements. If there is nothing wrong, respond with []."""
+        return prompts.render(
+            'stage2_refine/estimate',
+            source_name=source_name, target_name=target_name,
+            original_text=original_text, draft_translation=draft_translation,
+            terminology_context=terminology_context, violation_section=violation_section,
+            max_spans=self.MAX_ESTIMATE_SPANS,
+        )
 
     @classmethod
     def validate_estimate_spans(cls, items: List[Dict], draft_translation: str) -> List[Dict]:
@@ -2274,9 +2227,8 @@ Rules:
                 f'"{item["source"]}" => "{item["required_target"]}"'
                 for item in terminology_violations
             )
-            violation_section = (
-                "\n\nThese required renderings are missing from the translation "
-                f"and must be reported as terminology errors: {missing}"
+            violation_section = "\n\n" + prompts.render(
+                'stage2_refine/estimate', 'terminology_violations', missing=missing,
             )
 
         prompt = self._estimate_prompt(
@@ -2359,20 +2311,11 @@ Rules:
 
         for patched_is_a in (True, False):
             version_a, version_b = (after, before) if patched_is_a else (before, after)
-            prompt = f"""You are comparing two {target_name} translations of the same {source_name} source. You wrote neither of them.
-
-SOURCE ({source_name}):
-{original_text}
-
-VERSION A:
-{version_a}
-
-VERSION B:
-{version_b}
-
-Which version conveys the source more faithfully — no meaning changed, nothing left out, nothing invented? Ignore which one sounds more elegant; accuracy is the only question.
-
-Respond with EXACTLY one word: A, B, or TIE."""
+            prompt = prompts.render(
+                'stage2_refine/verify',
+                source_name=source_name, target_name=target_name,
+                original_text=original_text, version_a=version_a, version_b=version_b,
+            )
             raw = verifier._call_model(
                 prompt, temperature=0.0, read_timeout=self.VERIFY_READ_TIMEOUT,
             )

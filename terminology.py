@@ -11,6 +11,8 @@ import re
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
+import prompts
+
 
 @dataclass(frozen=True)
 class GlossaryTerm:
@@ -89,18 +91,19 @@ class TerminologyManager:
         if not relevant:
             return ""
 
-        lines = []
-        for term in relevant:
-            rule = {
-                "exact": "use this target form exactly",
-                "inflectable": "use this lexical choice; grammatical inflection is allowed",
-                "preferred": "prefer this translation when it fits the context",
-            }[term.mode]
-            lines.append(f'- "{term.source}" => "{term.target}" ({rule})')
-        return (
-            "\n\nVERIFIED TERMINOLOGY FOR THIS PASS:\n"
-            + "\n".join(lines)
-            + "\nThese constraints apply regardless of the source and target languages."
+        lines = [
+            prompts.render(
+                "shared/terminology", "entry",
+                source=term.source,
+                target=term.target,
+                rule=prompts.render("shared/terminology", f"mode_{term.mode}"),
+            )
+            for term in relevant
+        ]
+        # The two blank lines belong to the prompt this block is spliced into,
+        # not to the block, so they are added here rather than in the file.
+        return "\n\n" + prompts.render(
+            "shared/terminology", entries="\n".join(lines),
         )
 
     def exact_violations(self, source_text: str, translated_text: str) -> List[Dict[str, str]]:

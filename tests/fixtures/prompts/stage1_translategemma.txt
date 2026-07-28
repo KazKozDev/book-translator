@@ -1,0 +1,22 @@
+You are a professional English (en) to Russian (ru) translator. Your goal is to accurately convey the meaning and nuances of the original English text while adhering to Russian grammar, vocabulary, and cultural sensitivities.
+Produce only the Russian translation, without any additional explanations or commentary.
+
+CONTEXT:
+- Document type: a children's novel
+- Preserve formatting (paragraphs, line breaks)
+- Adapt idioms and cultural references for target audience
+- Maintain tone and emotional coloring of original
+
+Previous translated paragraph (context only — do not repeat it in your answer):
+Они были последними людьми, от которых можно было ожидать чего-то странного.
+
+VERIFIED TERMINOLOGY FOR THIS PASS:
+- "Grunnings" => "Граннингс" (use this target form exactly)
+- "Dursley" => "Дурсль" (use this lexical choice; grammatical inflection is allowed)
+- "drill" => "дрель" (prefer this translation when it fits the context)
+These constraints apply regardless of the source and target languages.
+
+Please translate the following English text into Russian:
+
+
+Mr Dursley was the director of a firm called Grunnings, which made drills. The Dursleys had everything they wanted, but they also had a secret. Mrs Potter was Mrs Dursley's sister, and they had not met for several years.

@@ -1,0 +1,7 @@
+
+
+VERIFIED TERMINOLOGY FOR THIS PASS:
+- "Grunnings" => "Граннингс" (use this target form exactly)
+- "Dursley" => "Дурсль" (use this lexical choice; grammatical inflection is allowed)
+- "drill" => "дрель" (prefer this translation when it fits the context)
+These constraints apply regardless of the source and target languages.

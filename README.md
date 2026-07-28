@@ -131,6 +131,7 @@ allowed — it is just the first pass run in reverse.
 <summary>Project layout</summary>
 
 - `translator.py` — Flask app, translation pipeline, quality tests, SQLite persistence, caching, EPUB export, health/metrics endpoints
+- `prompts/` — every word the models are sent, one file per role, with [its own README](prompts/README.md). Edit a file and the next run uses it; `prompts.py` is the loader
 - `launch.py` — the cross-platform bootstrap behind all three launcher files; standard library only, so it runs before the virtual environment exists
 - `banner.py` — the startup logo, shared by the launcher and the server so both print the same one
 - `static/index.html` — browser UI for uploads, model/genre selection, the names editor, progress tracking, the Quality Check panel, and downloads

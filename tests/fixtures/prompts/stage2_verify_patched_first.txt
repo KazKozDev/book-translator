@@ -1,0 +1,14 @@
+You are comparing two Russian translations of the same English source. You wrote neither of them.
+
+SOURCE (English):
+Mr Dursley was the director of a firm called Grunnings, which made drills. The Dursleys had everything they wanted, but they also had a secret. Mrs Potter was Mrs Dursley's sister, and they had not met for several years.
+
+VERSION A:
+Мистер Дурсль был директором фирмы «Граннингс», которая выпускала дрели.
+
+VERSION B:
+Мистер Дурсли был директором фирмы Grunnings, которая делала свёрла.
+
+Which version conveys the source more faithfully — no meaning changed, nothing left out, nothing invented? Ignore which one sounds more elegant; accuracy is the only question.
+
+Respond with EXACTLY one word: A, B, or TIE.
