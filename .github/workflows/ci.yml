@@ -54,6 +54,11 @@ jobs:
         run: python -m pytest tests -q
 
       - name: Check that the app imports and the banner renders
+        # The modules live in src/, which the server gets for free (Python puts
+        # a script's own directory on the path) and pytest gets from
+        # pyproject.toml. A bare `python -c` gets neither, so it is told here.
+        env:
+          PYTHONPATH: src
         run: python -c "import translator, banner; banner.print_terminal_banner()"
 
   lint:
