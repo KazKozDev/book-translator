@@ -16,6 +16,7 @@ import sys
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
 from functools import wraps
+from pathlib import Path
 
 try:
     import sacrebleu
@@ -50,10 +51,14 @@ from banner import TERMINAL_LOGO, print_terminal_banner  # noqa: E402,F401
 def is_translategemma(model_name: Optional[str]) -> bool:
     return 'translategemma' in (model_name or '').lower()
 
-# Folders setup
+# Folders setup. The runtime ones stay relative to the working directory —
+# uploads, exports, logs and the two databases belong to the checkout the app
+# was started from, not to the code. The front end is the exception: it ships
+# beside this module in src/, so it is found from __file__ and not from
+# wherever the process happens to be standing.
 UPLOAD_FOLDER = 'uploads'
 TRANSLATIONS_FOLDER = 'translations'
-STATIC_FOLDER = 'static'
+STATIC_FOLDER = str(Path(__file__).resolve().parent / 'static')
 DB_PATH = 'translations.db'
 CACHE_DB_PATH = 'cache.db'
 

@@ -54,7 +54,7 @@ the `Launch Book-Translator.*` files run.
   draft. If your change has a failure mode that produces no error message, pin
   it with a test.
 - Documentation updated when behaviour changes, in the README and in
-  `static/guide.html`, which is the in-app guide.
+  `src/static/guide.html`, which is the in-app guide.
 
 ## Reporting bugs
 

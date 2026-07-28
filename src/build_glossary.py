@@ -90,7 +90,7 @@ def _missing(package: str) -> RuntimeError:
     """
     return RuntimeError(
         f"{package} is missing from the interpreter running the app. Start it with "
-        "./Launch Book-Translator.command (or ./venv/bin/python translator.py) so it "
+        "./Launch Book-Translator.command (or ./venv/bin/python src/translator.py) so it "
         "runs inside the venv; if it already does, the venv is incomplete — run: "
         "./venv/bin/python -m pip install -r requirements.txt"
     )

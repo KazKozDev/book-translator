@@ -4,7 +4,7 @@
     {
       "name": "book-translator",
       "runtimeExecutable": "python3",
-      "runtimeArgs": ["translator.py"],
+      "runtimeArgs": ["src/translator.py"],
       "port": 5001
     }
   ]

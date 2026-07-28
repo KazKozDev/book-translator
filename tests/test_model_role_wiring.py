@@ -100,8 +100,8 @@ def test_constructing_a_model_helper_does_not_overwrite_the_active_run(monkeypat
 def test_translation_default_matches_settings_when_no_preference_is_saved():
     """The two pages must not default Translation to different models."""
     project_root = Path(__file__).resolve().parents[1]
-    settings_page = (project_root / 'static' / 'settings.html').read_text(encoding='utf-8')
-    main_page = (project_root / 'static' / 'index.html').read_text(encoding='utf-8')
+    settings_page = (project_root / 'src' / 'static' / 'settings.html').read_text(encoding='utf-8')
+    main_page = (project_root / 'src' / 'static' / 'index.html').read_text(encoding='utf-8')
 
     assert "const PREFERRED_MODEL = 'translategemma:12b';" in settings_page
     assert "const PREFERRED_MODEL = 'translategemma:12b';" in main_page
@@ -241,9 +241,9 @@ def test_prepare_runs_both_of_its_passes_on_one_model_by_default(tmp_path, monke
 
 
 def test_the_settings_page_offers_one_choice_for_glossary_preparation():
-    settings_page = (Path(__file__).resolve().parents[1] / 'static' / 'settings.html').read_text(
+    settings_page = (Path(__file__).resolve().parents[1] / 'src' / 'static' / 'settings.html').read_text(
         encoding='utf-8')
-    main_page = (Path(__file__).resolve().parents[1] / 'static' / 'index.html').read_text(
+    main_page = (Path(__file__).resolve().parents[1] / 'src' / 'static' / 'index.html').read_text(
         encoding='utf-8')
 
     assert 'Glossary preparation' in settings_page

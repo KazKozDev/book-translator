@@ -11,9 +11,11 @@
 # the copy nobody updates.
 
 [tool.pytest.ini_options]
-# The modules live at the repository root rather than in a package directory,
-# so the root has to be importable for `import translator` to resolve.
-pythonpath = ["."]
+# The modules live in src/, which is where the server also finds them: it is
+# started as `python src/translator.py`, and Python puts a script's own
+# directory on the path. This line is the same arrangement for the tests, so
+# `import translator` means the same module in both.
+pythonpath = ["src"]
 testpaths = ["tests"]
 
 [tool.ruff]

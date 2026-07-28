@@ -23,12 +23,16 @@ import webbrowser
 from pathlib import Path
 from typing import Any, NoReturn
 
-# Standard library only, like everything else this file touches before the
-# virtual environment exists — banner.py imports nothing else either.
-from banner import print_terminal_banner
-
-
 PROJECT_DIR = Path(__file__).resolve().parent
+SRC_DIR = PROJECT_DIR / "src"
+# The launcher stays at the root, where a person looking for how to start this
+# thing will find it, so it has to put src/ on the path itself before importing
+# anything from there. Standard library only, like everything else this file
+# touches before the virtual environment exists — banner.py imports nothing
+# else either.
+sys.path.insert(0, str(SRC_DIR))
+from banner import print_terminal_banner  # noqa: E402
+
 VENV_DIR = PROJECT_DIR / "venv"
 IS_WINDOWS = platform.system() == "Windows"
 PYTHON = VENV_DIR / ("Scripts/python.exe" if IS_WINDOWS else "bin/python")
@@ -298,7 +302,9 @@ def start_translator() -> None:
     # This launcher prints the banner itself, at the top where it belongs, so
     # the server is told not to print it a second time.
     env["TOLMACH_BANNER_PRINTED"] = "1"
-    server = subprocess.Popen([str(PYTHON), "translator.py"], cwd=PROJECT_DIR, env=env)
+    server = subprocess.Popen(
+        [str(PYTHON), str(SRC_DIR / "translator.py")], cwd=PROJECT_DIR, env=env,
+    )
     for _ in range(30):
         # The child's own health is asked about first. A 200 on this port only
         # proves something is serving it, not that it is the process just
@@ -306,7 +312,7 @@ def start_translator() -> None:
         # immediately, this loop reported Ready, and the browser opened onto
         # the old process while the new one had already died on a bind error.
         if server.poll() is not None:
-            fail(f"translator.py exited before opening the interface. If port {PORT} is "
+            fail(f"The server exited before opening the interface. If port {PORT} is "
                  "held by an older server, stop it and launch again.")
         if port_ready():
             url = f"http://127.0.0.1:{PORT}/?launched={int(time.time())}"
@@ -319,7 +325,7 @@ def start_translator() -> None:
             return
         time.sleep(0.5)
     server.terminate()
-    fail(f"translator.py did not open port {PORT}.")
+    fail(f"The server did not open port {PORT}.")
 
 
 def main() -> None:

@@ -29,7 +29,7 @@ Runs offline · No API keys · Open source
 
    ```bash
    pip install -r requirements.txt
-   python translator.py
+   python src/translator.py
    ```
 
 3. Open [http://localhost:5001](http://localhost:5001), pick source/target language and a model, upload a `.txt` or `.epub` file with **→ 1 UPLOAD**, open the **Glossary** panel and press **→ PREPARE**, then press **→ 2 START**. Download the result once refinement finishes.
@@ -57,7 +57,7 @@ upload → prepare: NER + recurring-entity clustering → names → split into c
        → cache (SQLite) → quality check → download / EPUB export
 ```
 
-Flask serves the UI (`static/index.html`) and a small JSON API; every stage calls your local Ollama server. Chunk translations are cached in `cache.db` so re-running or resuming a job doesn't retranslate work already done, and job metadata/history live in `translations.db`.
+Flask serves the UI (`src/static/index.html`) and a small JSON API; every stage calls your local Ollama server. Chunk translations are cached in `cache.db` so re-running or resuming a job doesn't retranslate work already done, and job metadata/history live in `translations.db`.
 
 ## Quality Check
 
@@ -125,17 +125,18 @@ allowed — it is just the first pass run in reverse.
 - The verifier is its own role in Settings and wants a model clearly larger than the one doing the refining. Point both at the same model and it grades its own edits: it answers from the order the two versions appear in, the two orderings disagree, and the pass rejects nearly every patch while looking like it ran. Measured on one chapter with `gemma4:12b` reviewing — same model verifying: two major mistranslations found, both patched, verdict `patched/draft`, output byte-identical to the draft; `qwen3.6:27b-mlx` verifying: same two fixes, verdict `patched/patched`, kept.
 - Named-entity consistency matches on the stem so inflected forms count, which means it cannot tell two renderings apart when they differ only in the ending (Дурсль vs Дурсли). Such pairs are listed as needing a human eye rather than reported as clean.
 - Translation quality hasn't been measured against a benchmark.
-- The backend is a single Flask module (`translator.py`). `pytest tests/` (from `requirements-dev.txt`) covers the parts that need no model: proper-noun harvesting, span validation and patching, and the document-level checks.
+- The backend is a Flask module (`src/translator.py`) with the quality tests, terminology, EPUB export, caching and logging in modules beside it. `pytest tests/` (from `requirements-dev.txt`) covers the parts that need no model: proper-noun harvesting, span validation and patching, and the document-level checks.
 
 <details>
 <summary>Project layout</summary>
 
-- `translator.py` — Flask app, translation pipeline, quality tests, SQLite persistence, caching, EPUB export, health/metrics endpoints
-- `prompts/` — every word the models are sent, one file per role, with [its own README](prompts/README.md). Edit a file and the next run uses it; `prompts.py` is the loader
+- `src/` — everything the application is made of. The root holds only what a person or a tool looks for there: the readme and the community files, the launchers, the dependency lists, and the directories a run writes into
+- `src/translator.py` — Flask app, translation pipeline, SQLite persistence, health/metrics endpoints
+- `src/quality_tests.py`, `src/terminology.py`, `src/epub_io.py`, `src/translation_cache.py`, `src/monitoring.py` — the quality tests, the glossary rules, the EPUB writer, the chunk cache, and the logging
+- `src/prompts/` — every word the models are sent, one file per role, with [its own README](src/prompts/README.md). Edit a file and the next run uses it; `src/prompts.py` is the loader
+- `src/static/index.html` — browser UI for uploads, model/genre selection, the names editor, progress tracking, the Quality Check panel, and downloads
+- `src/static/logs.html` — the live log console, opened from the Log link like any other page
 - `launch.py` — the cross-platform bootstrap behind all three launcher files; standard library only, so it runs before the virtual environment exists
-- `banner.py` — the startup logo, shared by the launcher and the server so both print the same one
-- `static/index.html` — browser UI for uploads, model/genre selection, the names editor, progress tracking, the Quality Check panel, and downloads
-- `static/logs.html` — the live log console, opened from the Log link like any other page
 - `tests/` — the model-free half of the pipeline: `pip install -r requirements-dev.txt && python -m pytest tests/`
 - `uploads/`, `translations/`, `logs/` — runtime directories for uploaded files, exported output, and rotating logs. Loading a document rolls the logs over, so `logs/*.log` is the current book and `logs/*.log.1` the one before it; the Log page streams them live
 - `cache.db` — cached chunk translations; `translations.db` — job history and status
