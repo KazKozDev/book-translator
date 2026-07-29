@@ -48,7 +48,7 @@ Everything after the upload is translated one ~1200-character chunk at a time. P
 
 **Translate** produces the draft, with the agreed renderings in the context of each chunk.
 
-**Refine** does not rewrite the draft. It reports errors as located spans with a category and severity, Python applies the replacements and copies every other character through unchanged, and a second model has to agree the patch is more faithful to the source — twice, with the two versions swapped — before it is kept. Style-only and minor subjective findings are reported but never applied. A draft/final diff of a few percent is the expected result; a rewriting pass produced 20% and lost meaning doing it.
+**Refine** does not rewrite the draft. It reports errors as located spans with a category and severity, Python applies the replacements and copies every other character through unchanged, and a second model checks the patch against the source twice with the versions swapped. A consistent patched/patched verdict keeps it. A tie or a vote that follows position A/B gets one position-free check of the concrete replacements instead of an automatic veto. Style-only and minor subjective findings are reported but never applied. A draft/final diff of a few percent is the expected result; a rewriting pass produced 20% and lost meaning doing it.
 
 ## How it works
 
@@ -120,9 +120,9 @@ allowed — it is just the first pass run in reverse.
 
 - Input is `.txt` or `.epub` — no PDF or DOCX import. Output can be downloaded as `.txt` or exported as EPUB.
 - Translation speed is bounded by your local model and hardware — a full book can take hours, not minutes.
-- Refinement now costs three model calls per changed chunk (estimate, then two verification comparisons) instead of one rewrite, so it is slower than the old pass — and often correctly decides to change nothing.
+- Refinement costs three model calls per changed chunk (estimate, then two verification comparisons), plus one neutral edit check only when those comparisons tie or expose position bias. It is slower than the old rewrite pass — and often correctly decides to change nothing.
 - The refinement verifier is a local quantised model asked to compare two translations. It is a real gate, not a reliable one: on a measured run it accepted an edit that replaced a correct reading with a wrong one, and on the same text at a different temperature it rejected it. Treat a kept patch as "not obviously worse", not as "verified".
-- The verifier is its own role in Settings and wants a model clearly larger than the one doing the refining. Point both at the same model and it grades its own edits: it answers from the order the two versions appear in, the two orderings disagree, and the pass rejects nearly every patch while looking like it ran. Measured on one chapter with `gemma4:12b` reviewing — same model verifying: two major mistranslations found, both patched, verdict `patched/draft`, output byte-identical to the draft; `qwen3.6:27b-mlx` verifying: same two fixes, verdict `patched/patched`, kept.
+- The verifier is its own role in Settings and wants a model clearly larger than the one doing the refining. Point both at the same model and it grades its own edits: its vote may follow the order of the versions instead of their content. Stage 2 now labels that as position bias and retries once without A/B ordering, but the fallback is a guardrail rather than a substitute for an independent verifier.
 - Named-entity consistency matches on the stem so inflected forms count, which means it cannot tell two renderings apart when they differ only in the ending (Дурсль vs Дурсли). Such pairs are listed as needing a human eye rather than reported as clean.
 - Translation quality hasn't been measured against a benchmark.
 - The backend is a Flask module (`src/translator.py`) with the quality tests, terminology, EPUB export, caching and logging in modules beside it. `pytest tests/` (from `requirements-dev.txt`) covers the parts that need no model: proper-noun harvesting, span validation and patching, and the document-level checks.

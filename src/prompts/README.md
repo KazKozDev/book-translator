@@ -21,6 +21,7 @@ the program here, and a changed prompt is a changed translation.
 | `stage1_translate/translategemma.md` | Stage 1 — the draft translation in the shape TranslateGemma's model card documents | `BookTranslator._stage1_prompt_translategemma` |
 | `stage2_refine/estimate.md` | Stage 2a — report the errors in a draft, as spans, without rewriting it | `BookTranslator._estimate_prompt` |
 | `stage2_refine/verify.md` | Stage 2c — did the patch improve accuracy? Asked twice, versions swapped | `BookTranslator.stage2_verify` |
+| `stage2_refine/verify_edits.md` | Stage 2c fallback — resolve a tie or position-biased vote by checking the concrete replacements without ordered versions | `BookTranslator.stage2_verify_edits` |
 | `quality/pairwise_editor.md` | Stage 3 — draft vs final, on accuracy and readability separately | `QualityTests.eval_llm_judge_stage2` |
 | `quality/adequacy_fluency.md` | Stage 3 — score one translation 1–5 on adequacy and fluency | `QualityTests._adequacy_fluency_prompt` |
 | `shared/terminology.md` | The verified-glossary block spliced into Stage 1 and Stage 2 | `TerminologyManager.prompt_context` |

@@ -196,6 +196,24 @@ def stage2_verify_draft_first() -> str:
     return _verify_prompts()[1]
 
 
+def stage2_verify_edits() -> str:
+    return _recorded(
+        _translator(),
+        lambda translator: translator.stage2_verify_edits(
+            SOURCE,
+            DRAFT,
+            [{
+                'span': 'свёрла',
+                'replacement': 'дрели',
+                'type': 'mistranslation',
+                'severity': 'major',
+            }],
+            'en',
+            'ru',
+        ),
+    )[0]
+
+
 # --------------------------------------------------------------------------
 # Stage 3: quality tests
 # --------------------------------------------------------------------------
@@ -261,6 +279,7 @@ CASES = {
     'stage2_estimate_bare': stage2_estimate_bare,
     'stage2_verify_patched_first': stage2_verify_patched_first,
     'stage2_verify_draft_first': stage2_verify_draft_first,
+    'stage2_verify_edits': stage2_verify_edits,
     'quality_pairwise_editor': quality_pairwise_editor,
     'quality_adequacy_fluency': quality_adequacy_fluency,
     'quality_candidate_judge': quality_candidate_judge,

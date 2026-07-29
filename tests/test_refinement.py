@@ -210,21 +210,66 @@ def test_the_verdict_is_asked_of_the_verifier_model_not_the_reviewer(monkeypatch
     }
 
 
-def test_a_verdict_that_flips_with_the_order_rejects_the_patch(monkeypatch):
+def test_position_bias_is_named_and_neutral_rejection_keeps_the_draft(monkeypatch):
     """Answering 'A' both times is position bias, not agreement — and it is
     what a model asked to grade its own edit does. The draft is kept, and the
     details say who said so."""
     translator = BookTranslator(model_name='reviewer:12b')
 
     text, _, details, calls = _refine(
-        translator, monkeypatch, [_reported('mistranslation'), 'A', 'A'],
+        translator, monkeypatch, [_reported('mistranslation'), 'A', 'A', 'REJECT'],
     )
 
     assert text == DRAFT
     assert details['verified']['verdicts'] == ['patched', 'draft']
+    assert details['verified']['position_bias_detected'] is True
+    assert details['verified']['neutral_check'] == 'rejected'
     assert details['verified']['accepted'] is False
     # No separate verifier chosen: every call went to the reviewing model.
     assert {call['model'] for call in calls} == {'reviewer:12b'}
+
+
+def test_position_biased_vote_can_be_resolved_without_ordered_versions(monkeypatch):
+    translator = BookTranslator(model_name='reviewer:12b', verifier_model='verifier:27b')
+
+    text, _, details, calls = _refine(
+        translator, monkeypatch, [_reported('mistranslation'), 'A', 'A', 'ACCEPT'],
+    )
+
+    assert text.endswith('которая делала дрели.')
+    assert details['verified']['position_bias_detected'] is True
+    assert details['verified']['neutral_check'] == 'accepted'
+    assert details['verified']['accepted'] is True
+    assert 'VERSION A' not in calls[-1]['prompt']
+    assert '"свёрла" => "дрели"' in calls[-1]['prompt']
+
+
+def test_tie_uses_the_neutral_edit_check_instead_of_becoming_an_automatic_veto(
+    monkeypatch,
+):
+    translator = BookTranslator(model_name='reviewer:12b', verifier_model='verifier:27b')
+
+    text, _, details, _ = _refine(
+        translator, monkeypatch, [_reported('mistranslation'), 'TIE', 'TIE', 'ACCEPT'],
+    )
+
+    assert text != DRAFT
+    assert details['verified']['tie_detected'] is True
+    assert details['verified']['neutral_check'] == 'accepted'
+
+
+def test_draft_winning_both_orders_is_rejected_without_a_fallback_call(monkeypatch):
+    translator = BookTranslator(model_name='reviewer:12b', verifier_model='verifier:27b')
+
+    text, _, details, calls = _refine(
+        translator, monkeypatch, [_reported('mistranslation'), 'B', 'A'],
+    )
+
+    assert text == DRAFT
+    assert details['verified']['verdicts'] == ['draft', 'draft']
+    assert details['verified']['accepted'] is False
+    assert 'neutral_check' not in details['verified']
+    assert len(calls) == 3
 
 
 def test_a_verifier_that_never_answers_is_recorded_as_unavailable(monkeypatch):
@@ -294,7 +339,13 @@ def test_the_chunk_log_line_distinguishes_the_three_ways_nothing_changes():
     vetoed = BookTranslator._describe_stage2_chunk(
         {
             'errors_found': 2, 'errors_actionable': 2, 'errors_applied': 2,
-            'verified': {'verdicts': ['patched', 'draft'], 'accepted': False, 'model': 'verifier:27b'},
+            'verified': {
+                'verdicts': ['patched', 'draft'],
+                'accepted': False,
+                'model': 'verifier:27b',
+                'position_bias_detected': True,
+                'neutral_check': 'rejected',
+            },
         },
         warning=None, changed=False,
     )
@@ -305,6 +356,21 @@ def test_the_chunk_log_line_distinguishes_the_three_ways_nothing_changes():
     )
 
     assert 'verifier not needed' in clean
-    assert 'verifier verifier:27b voted patched/draft → rejected' in vetoed
+    assert 'verifier verifier:27b voted patched/draft' in vetoed
+    assert 'position bias detected' in vetoed
+    assert 'neutral edit check rejected → rejected' in vetoed
     assert 'review pass gave no answer' in timed_out
     assert clean != timed_out
+
+
+def test_stage2_cache_key_changes_when_only_the_verifier_changes():
+    first = BookTranslator(
+        model_name='reviewer:12b', verifier_model='verifier-a:27b',
+    )._stage2_cache_model('same-glossary')
+    second = BookTranslator(
+        model_name='reviewer:12b', verifier_model='verifier-b:27b',
+    )._stage2_cache_model('same-glossary')
+
+    assert first != second
+    assert 'verifier-a:27b' in first
+    assert 'verifier-b:27b' in second

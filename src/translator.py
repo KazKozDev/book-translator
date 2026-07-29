@@ -13,6 +13,7 @@ import threading
 import signal
 import re
 import sys
+from io import BytesIO
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
 from functools import wraps
@@ -132,7 +133,9 @@ def is_run_active(translation_id: int) -> bool:
 #   v3: style-only and minor subjective errors reported but no longer applied
 #   v4: omission/addition patches skip the verifier, which now runs on its own
 #       model rather than on the one that wrote the draft
-STAGE2_PIPELINE_VERSION = 'v4'
+#   v5: tie/position-biased votes get a position-free edit check, and the
+#       verifier identity is part of the cache key
+STAGE2_PIPELINE_VERSION = 'v5'
 
 
 # Error handling setup
@@ -345,10 +348,9 @@ class BookTranslator(QualityTests):
         # Who rules on whether a Stage 2 patch is an improvement. Defaults to
         # this same model, which is the arrangement that made the refinement
         # pass a no-op: a model grading its own edit is not a check, and the
-        # A/B verdict it gives flips with the order the two versions are shown
-        # in, so "must win both orderings" was effectively a coin toss the
-        # patch had to win twice. Set this to a model clearly larger than the
-        # reviewer and the double-blind vote starts measuring accuracy again.
+        # A/B verdict it gives flips with the order the two versions are shown.
+        # That is now detected and sent through a position-free edit check,
+        # but an independent, capable verifier is still the reliable setup.
         self.verifier_model = verifier_model or model_name
         self.api_url = "http://localhost:11434/api/generate"
         self.chunk_size = chunk_size
@@ -1585,6 +1587,7 @@ class BookTranslator(QualityTests):
             used_terms = set()
             final_violation_count = 0
             errors_found = errors_applied = patches_rejected = 0
+            position_biases = neutral_checks = 0
             # "Nothing changed" has three different causes — a clean draft, a
             # vetoed patch, a review call that never answered — and they used
             # to look identical from outside. Counted separately, and reported
@@ -1649,9 +1652,8 @@ class BookTranslator(QualityTests):
                     draft_violations = self.terminology.exact_violations(
                         original_chunk, draft_chunk
                     )
-                    stage2_cache_model = (
-                        f"{self.model_name}_stage2{STAGE2_PIPELINE_VERSION}"
-                        f"_glossary_{glossary_fingerprint}"
+                    stage2_cache_model = self._stage2_cache_model(
+                        glossary_fingerprint
                     )
                     # Check cache
                     cached_result = cache.get_cached_translation(
@@ -1684,6 +1686,16 @@ class BookTranslator(QualityTests):
                         verified = stage2_details.get('verified')
                         if isinstance(verified, dict) and not verified.get('accepted'):
                             patches_rejected += 1
+                        if (
+                            isinstance(verified, dict)
+                            and verified.get('position_bias_detected')
+                        ):
+                            position_biases += 1
+                        if (
+                            isinstance(verified, dict)
+                            and verified.get('neutral_check')
+                        ):
+                            neutral_checks += 1
                         chunks_reviewed += 1
                         if stage2_warning:
                             review_failures += 1
@@ -1768,6 +1780,8 @@ class BookTranslator(QualityTests):
                             'errors_found': errors_found,
                             'errors_applied': errors_applied,
                             'patches_rejected': patches_rejected,
+                            'position_biases': position_biases,
+                            'neutral_checks': neutral_checks,
                             'chunks_reviewed': chunks_reviewed,
                             'chunks_changed': chunks_changed,
                             'review_failures': review_failures,
@@ -1830,6 +1844,8 @@ class BookTranslator(QualityTests):
                     'errors_found': errors_found,
                     'errors_applied': errors_applied,
                     'patches_rejected': patches_rejected,
+                    'position_biases': position_biases,
+                    'neutral_checks': neutral_checks,
                     'chunks_reviewed': chunks_reviewed,
                     'chunks_changed': chunks_changed,
                     'review_failures': review_failures,
@@ -1840,9 +1856,11 @@ class BookTranslator(QualityTests):
             logger.translation_logger.info(
                 "Stage 2 finished for translation %s: %s of %s reviewed chunk(s) "
                 "changed, %s error(s) found, %s patched, %s patch(es) vetoed by "
-                "verifier %s, %s review call(s) gave no answer",
+                "verifier %s, %s position bias event(s), %s neutral edit "
+                "check(s), %s review call(s) gave no answer",
                 translation_id, chunks_changed, chunks_reviewed, errors_found,
-                errors_applied, patches_rejected, self.verifier_model, review_failures,
+                errors_applied, patches_rejected, self.verifier_model,
+                position_biases, neutral_checks, review_failures,
             )
 
         except GeneratorExit:
@@ -2468,6 +2486,7 @@ class BookTranslator(QualityTests):
     def stage2_verify(
         self, original_text: str, before: str, after: str,
         source_lang: str, target_lang: str,
+        applied_errors: Optional[List[Dict]] = None,
     ) -> Tuple[bool, Dict]:
         """STAGE 2c: did the patch actually improve the translation?
 
@@ -2475,17 +2494,17 @@ class BookTranslator(QualityTests):
         which version reads better, which is the question that let the old
         pass congratulate itself while drifting from the original. Asked
         twice with the two versions swapped, because a single ordering
-        measures position bias as much as quality; the patch is kept only if
-        it wins both times.
+        measures position bias as much as quality. A patch that wins both is
+        kept; a tie or a vote that follows A/B position gets one final check
+        phrased only as concrete replacements, with no ordered versions.
 
         Runs on ``self.verifier``, which is a separate model whenever one was
         chosen. Both halves of the vote on the model that produced the edit is
         self-assessment, and on a quantised 12B it answers by position rather
-        than by content, so the two orderings disagree and every patch is
-        vetoed. The strict rule stays: it is the only thing standing between
-        this pass and its old habit of trading meaning for polish. What
-        changes is that a model big enough to be consistent is the one
-        applying it.
+        than by content, so the two orderings disagree. That disagreement is
+        evidence of position bias, not evidence that the draft is better, and
+        now routes to the position-free edit check instead of an automatic
+        veto.
         """
         source_name = LANG_NAMES.get(source_lang, source_lang)
         target_name = LANG_NAMES.get(target_lang, target_lang)
@@ -2518,11 +2537,84 @@ class BookTranslator(QualityTests):
                 verdicts.append('tie')
 
         accepted = verdicts == ['patched', 'patched']
-        return accepted, {
+        position_bias_detected = verdicts in (
+            ['patched', 'draft'],
+            ['draft', 'patched'],
+        )
+        tie_detected = 'tie' in verdicts
+        neutral_check = None
+        if position_bias_detected or tie_detected:
+            neutral_check = self.stage2_verify_edits(
+                original_text=original_text,
+                draft_translation=before,
+                applied_errors=applied_errors or [],
+                source_lang=source_lang,
+                target_lang=target_lang,
+            )
+            accepted = neutral_check == 'accepted'
+
+        details = {
             'verdicts': verdicts,
             'accepted': accepted,
             'model': verifier.model_name,
         }
+        if position_bias_detected:
+            details['position_bias_detected'] = True
+        if tie_detected:
+            details['tie_detected'] = True
+        if neutral_check:
+            details['neutral_check'] = neutral_check
+        return accepted, details
+
+    def stage2_verify_edits(
+        self,
+        original_text: str,
+        draft_translation: str,
+        applied_errors: List[Dict],
+        source_lang: str,
+        target_lang: str,
+    ) -> str:
+        """Resolve an inconclusive A/B vote without showing ordered versions.
+
+        A model that always chooses VERSION A produces opposite content
+        verdicts when the versions are swapped. Asking about the concrete
+        replacements instead removes that position from the decision. The
+        whole patch still has to pass: one rejected or uncertain edit keeps
+        the draft.
+        """
+        source_name = LANG_NAMES.get(source_lang, source_lang)
+        target_name = LANG_NAMES.get(target_lang, target_lang)
+        edits = '\n'.join(
+            '{}. [{}] {} => {}'.format(
+                index,
+                error.get('type') or 'other',
+                json.dumps(error.get('span') or '', ensure_ascii=False),
+                json.dumps(error.get('replacement') or '', ensure_ascii=False),
+            )
+            for index, error in enumerate(applied_errors, 1)
+        )
+        if not edits:
+            return 'unavailable'
+
+        prompt = prompts.render(
+            'stage2_refine/verify_edits',
+            source_name=source_name,
+            target_name=target_name,
+            original_text=original_text,
+            draft_translation=draft_translation,
+            edits=edits,
+        )
+        raw = self.verifier._call_model(
+            prompt, temperature=0.0, read_timeout=self.VERIFY_READ_TIMEOUT,
+        )
+        if raw is None:
+            return 'unavailable'
+        verdict = raw.strip().upper()
+        if verdict == 'ACCEPT':
+            return 'accepted'
+        if verdict == 'REJECT':
+            return 'rejected'
+        return 'unavailable'
 
     @staticmethod
     def _describe_stage2_chunk(
@@ -2547,11 +2639,25 @@ class BookTranslator(QualityTests):
         elif verified == 'skipped_objective':
             parts.append('verifier skipped — every fix checkable against the source')
         elif isinstance(verified, dict):
-            parts.append('verifier {} voted {} → {}'.format(
+            vote = 'verifier {} voted {}'.format(
                 verified.get('model') or 'unknown',
                 '/'.join(verified.get('verdicts') or ['no verdict']),
-                'accepted' if verified.get('accepted') else 'rejected',
-            ))
+            )
+            if verified.get('position_bias_detected'):
+                parts.extend([vote, 'position bias detected'])
+            elif verified.get('tie_detected'):
+                parts.extend([vote, 'tie detected'])
+            else:
+                parts.append('{} → {}'.format(
+                    vote,
+                    'accepted' if verified.get('accepted') else 'rejected',
+                ))
+            neutral_check = verified.get('neutral_check')
+            if neutral_check:
+                parts.append('neutral edit check {} → {}'.format(
+                    neutral_check,
+                    'accepted' if verified.get('accepted') else 'rejected',
+                ))
         else:
             parts.append('verifier not needed')
         parts.append('text changed' if changed else 'draft kept')
@@ -2622,11 +2728,20 @@ class BookTranslator(QualityTests):
 
         accepted, verdict = self.stage2_verify(
             original_text, draft_translation, patched, source_lang, target_lang,
+            applied_errors=applied,
         )
         details['verified'] = verdict
         if not accepted:
             return draft_translation, None, details
         return patched, None, details
+
+    def _stage2_cache_model(self, glossary_fingerprint: str) -> str:
+        """Every model-dependent input that can change a Stage 2 result."""
+        return (
+            f"{self.model_name}_verifier_{self.verifier_model}"
+            f"_stage2{STAGE2_PIPELINE_VERSION}"
+            f"_glossary_{glossary_fingerprint}"
+        )
 
 
     def get_installed_models(self) -> List[Dict]:
@@ -3827,8 +3942,9 @@ def refine(translation_id):
 
     {"verifier_model": "..."} chooses who rules on the patches. It is a
     separate role because the reviewing model grading its own edits is not a
-    check: its A/B verdict follows the order the versions are shown in, the
-    two orderings disagree, and every patch is then vetoed.
+    check: its A/B verdict often follows the order the versions are shown in.
+    Stage 2 detects that disagreement and retries without ordered versions,
+    but an independent verifier remains the supported setup.
     """
     payload = request.get_json(silent=True) or {}
     override_model = (payload.get('model') or '').strip()
@@ -4365,24 +4481,18 @@ def download_translation(translation_id):
                 author=book_author or 'Unknown Author',
             )
             download_name = f"translated_{os.path.splitext(filename)[0]}.epub"
-            download_path = os.path.join(TRANSLATIONS_FOLDER, download_name)
-            with open(download_path, 'wb') as f:
-                f.write(epub_bytes)
             return send_file(
-                download_path,
+                BytesIO(epub_bytes),
                 as_attachment=True,
                 download_name=download_name,
                 mimetype='application/epub+zip',
             )
 
-        download_path = os.path.join(TRANSLATIONS_FOLDER, f'translated_{filename}')
-        with open(download_path, 'w', encoding='utf-8') as f:
-            f.write(translated_text)
-
         return send_file(
-            download_path,
+            BytesIO((translated_text or '').encode('utf-8')),
             as_attachment=True,
-            download_name=f'translated_{filename}'
+            download_name=f'translated_{filename}',
+            mimetype='text/plain; charset=utf-8',
         )
 
 
@@ -4405,17 +4515,13 @@ def export_epub():
         # anywhere in the book produced an EPUB no reader would open.
         epub_bytes = build_epub_from_chapters([text], title=title, author=author)
 
-        epub_filename = f'translation_{uuid.uuid4()}.epub'
-        epub_path = os.path.join(TRANSLATIONS_FOLDER, epub_filename)
-        with open(epub_path, 'wb') as f:
-            f.write(epub_bytes)
+        download_name = f'{title.replace(" ", "_")}.epub'
+        logger.app_logger.info("EPUB created for download: %s", download_name)
 
-        logger.app_logger.info(f"EPUB created: {epub_filename}")
-        
         return send_file(
-            epub_path,
+            BytesIO(epub_bytes),
             as_attachment=True,
-            download_name=f'{title.replace(" ", "_")}.epub',
+            download_name=download_name,
             mimetype='application/epub+zip'
         )
         

@@ -1,0 +1,14 @@
+You are validating concrete edits to a translation into Russian from a source in English. You wrote neither the draft nor the edits. There are no ordered versions to choose between.
+
+SOURCE (English):
+Mr Dursley was the director of a firm called Grunnings, which made drills. The Dursleys had everything they wanted, but they also had a secret. Mrs Potter was Mrs Dursley's sister, and they had not met for several years.
+
+CURRENT TRANSLATION (Russian):
+Мистер Дурсли был директором фирмы Grunnings, которая делала свёрла.
+
+PROPOSED EDITS:
+1. [mistranslation] "свёрла" => "дрели"
+
+Respond ACCEPT only if every proposed replacement fixes a real meaning or grammar error, fits its exact location, and introduces no loss, addition, or change of meaning. If any edit is merely stylistic, unnecessary, wrong, or uncertain, respond REJECT.
+
+Respond with EXACTLY one word: ACCEPT or REJECT.

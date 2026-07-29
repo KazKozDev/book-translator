@@ -498,9 +498,13 @@
         .review-signals:empty { display: none; }
         .review-signal { min-width: 0; padding: 12px 14px 12px 0; border-bottom: 1px solid var(--line-soft); color: var(--muted); font-size: .76rem; line-height: 1.5; }
         .review-signal:nth-child(even) { padding-left: 14px; border-left: 1px solid var(--line-soft); }
-        .review-signal strong { display: block; margin-bottom: 4px; color: var(--ink); font-size: .7rem; letter-spacing: .05em; text-transform: uppercase; }
+        .review-signal-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; margin-bottom: 4px; }
+        .review-signal strong { display: block; margin: 0; color: var(--ink); font-size: .7rem; letter-spacing: .05em; text-transform: uppercase; }
         .review-signal.is-major strong, .review-signal.is-warning strong { color: #b91c1c; }
         .review-signal-detail { display: block; margin-top: 3px; color: var(--ink); overflow-wrap: anywhere; }
+        .review-signal-apply { flex: 0 0 auto; min-height: 24px; padding: 2px 8px; border: 1px solid var(--line); border-radius: 5px; background: transparent; color: var(--muted); font: inherit; font-size: .68rem; font-weight: 600; line-height: 1.2; cursor: pointer; }
+        .review-signal-apply:hover { border-color: var(--accent); color: var(--accent-dark); }
+        .review-signal-apply:disabled { border-color: var(--line-soft); color: var(--faint); cursor: not-allowed; }
         .review-final-label { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 9px; color: var(--ink); font-size: .74rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
         .review-final-label span { color: var(--faint); font-size: .68rem; font-weight: 500; letter-spacing: 0; text-transform: none; }
         .review-final-text { display: block; width: 100%; min-height: 210px; padding: 15px 16px; border: 1px solid var(--line); border-radius: 6px; background: var(--paper); color: var(--ink); font: inherit; font-size: .87rem; line-height: 1.7; resize: vertical; }
@@ -692,6 +696,9 @@
         .theme-dark .review-readonly { background: #1d1f24; }
         .theme-dark .review-readonly:first-child .review-readonly-text { color: #9195a1; }
         .theme-dark .review-chunk-row:hover { background: rgba(134, 164, 189, .08); }
+        .theme-dark .review-signal-apply:not(:disabled) { border-color: var(--muted); background: var(--paper); color: var(--ink); }
+        .theme-dark .review-signal-apply:not(:disabled):hover { border-color: var(--accent); color: var(--accent); }
+        .theme-dark .review-signal-apply:disabled { border-color: var(--line-soft); background: transparent; color: var(--faint); }
         .theme-dark .review-chunk-state { color: #d5a54d; }
         .theme-dark .review-status.is-dirty { color: #d5a54d; }
         .theme-dark .review-status.is-error,
@@ -1167,6 +1174,7 @@
                                 </label>
                                 <textarea class="review-final-text" id="reviewFinalText" spellcheck="true"></textarea>
                                 <div class="review-actions">
+                                    <button type="button" class="review-action" id="reviewApplyAllBtn" aria-label="Apply all proposed fixes to Final" disabled>Apply proposed fixes</button>
                                     <button type="button" class="review-action is-primary" id="reviewSaveBtn" disabled>Save final</button>
                                     <label class="sr-only" for="reviewAlternativeCount">Number of alternatives</label>
                                     <select class="review-count" id="reviewAlternativeCount">
@@ -1245,6 +1253,8 @@
         let reviewIsDirty = false;
         let reviewIsSaving = false;
         let reviewIsGenerating = false;
+        let reviewIsApplyingFixes = false;
+        let reviewAppliedIssueIndexes = new Set();
         let reviewLoadToken = 0;
         const ACTIVE_TRANSLATION_KEY = 'activeTranslationId';
 
@@ -1700,18 +1710,52 @@
             status.className = `review-action-status${tone ? ` ${tone}` : ''}`;
         }
 
+        function reviewIssueReplacement(issue, currentText) {
+            if (!issue || typeof issue.span !== 'string' || typeof issue.replacement !== 'string') {
+                return null;
+            }
+            const span = issue.span;
+            const replacement = issue.replacement;
+            if (!span.trim() || !replacement.trim() || span === replacement) return null;
+            const position = currentText.indexOf(span);
+            if (position < 0) return null;
+            return {
+                text: currentText.slice(0, position) + replacement + currentText.slice(position + span.length),
+                position,
+                replacementLength: replacement.length,
+            };
+        }
+
+        function reviewIssueCanApply(issue, currentText, issueIndex) {
+            return !reviewAppliedIssueIndexes.has(Number(issueIndex))
+                && reviewIssueReplacement(issue, currentText) !== null;
+        }
+
         function syncReviewControls() {
             const chunk = currentReviewChunk();
             const hasChunk = !!chunk;
             const textarea = document.getElementById('reviewFinalText');
+            const applyAllButton = document.getElementById('reviewApplyAllBtn');
             const saveButton = document.getElementById('reviewSaveBtn');
             const generateButton = document.getElementById('reviewGenerateBtn');
             const countSelect = document.getElementById('reviewAlternativeCount');
+            const applyBlocked = !hasChunk || reviewIsSaving || reviewIsGenerating;
+            const currentText = textarea.value;
+            const issues = Array.isArray(chunk?.issues) ? chunk.issues : [];
+            const hasApplicableIssue = issues.some((issue, index) =>
+                reviewIssueCanApply(issue, currentText, index)
+            );
 
             textarea.disabled = !hasChunk || reviewIsSaving;
+            applyAllButton.disabled = applyBlocked || !hasApplicableIssue;
             saveButton.disabled = !hasChunk || !reviewIsDirty || reviewIsSaving || reviewIsGenerating;
             generateButton.disabled = !hasChunk || reviewIsDirty || reviewIsSaving || reviewIsGenerating;
             countSelect.disabled = !hasChunk || reviewIsDirty || reviewIsSaving || reviewIsGenerating;
+            document.querySelectorAll('.review-signal-apply').forEach(button => {
+                const issueIndex = Number(button.dataset.issueIndex);
+                button.disabled = applyBlocked
+                    || !reviewIssueCanApply(issues[issueIndex], currentText, issueIndex);
+            });
             document.querySelectorAll('.review-use-btn').forEach(button => {
                 button.disabled = reviewIsDirty || reviewIsSaving || reviewIsGenerating;
             });
@@ -1725,6 +1769,7 @@
             reviewIsDirty = false;
             reviewIsSaving = false;
             reviewIsGenerating = false;
+            reviewAppliedIssueIndexes = new Set();
             document.getElementById('reviewDesk').hidden = true;
             document.getElementById('reviewDeskBody').hidden = false;
             document.getElementById('reviewCollapseBtn').setAttribute('aria-expanded', 'true');
@@ -1807,12 +1852,26 @@
             });
         }
 
-        function appendReviewSignal(container, title, lines, className = '') {
+        function appendReviewSignal(container, title, lines, className = '', action = null) {
             const signal = document.createElement('div');
             signal.className = `review-signal${className ? ` ${className}` : ''}`;
+            const headingRow = document.createElement('div');
+            headingRow.className = 'review-signal-head';
             const heading = document.createElement('strong');
             heading.textContent = title;
-            signal.appendChild(heading);
+            headingRow.appendChild(heading);
+            if (action) {
+                const applyButton = document.createElement('button');
+                applyButton.type = 'button';
+                applyButton.className = 'review-signal-apply';
+                applyButton.dataset.issueIndex = String(action.issueIndex);
+                applyButton.textContent = 'Apply';
+                applyButton.setAttribute('aria-label', `Apply proposed fix ${Number(action.issueIndex) + 1}`);
+                applyButton.title = `Apply “${action.span}” → “${action.replacement}”`;
+                applyButton.addEventListener('click', () => applyReviewIssue(action.issueIndex));
+                headingRow.appendChild(applyButton);
+            }
+            signal.appendChild(headingRow);
             lines.filter(Boolean).forEach(line => {
                 const detail = document.createElement('span');
                 detail.className = 'review-signal-detail';
@@ -1842,9 +1901,14 @@
                 appendReviewSignal(container, 'Warning', [String(chunk.warning)], 'is-warning');
             }
 
-            (chunk.issues || []).forEach(issue => {
+            (chunk.issues || []).forEach((issue, issueIndex) => {
                 const severity = issue.severity ? String(issue.severity) : 'unspecified';
                 const type = issue.type ? String(issue.type).replaceAll('_', ' ') : 'issue';
+                const hasProposedEdit = typeof issue.span === 'string'
+                    && typeof issue.replacement === 'string'
+                    && !!issue.span.trim()
+                    && !!issue.replacement.trim()
+                    && issue.span !== issue.replacement;
                 appendReviewSignal(
                     container,
                     `${severity} · ${type}`,
@@ -1852,7 +1916,14 @@
                         issue.span ? `Original: ${issue.span}` : '',
                         issue.replacement ? `Proposed: ${issue.replacement}` : '',
                     ],
-                    severity.toLowerCase() === 'major' || severity.toLowerCase() === 'critical' ? 'is-major' : ''
+                    severity.toLowerCase() === 'major' || severity.toLowerCase() === 'critical' ? 'is-major' : '',
+                    hasProposedEdit
+                        ? {
+                            issueIndex,
+                            span: issue.span,
+                            replacement: issue.replacement,
+                        }
+                        : null
                 );
             });
 
@@ -1964,6 +2035,7 @@
             document.getElementById('reviewDraft').textContent = chunk.draft || '';
             document.getElementById('reviewFinalText').value = chunk.final || '';
             reviewIsDirty = false;
+            reviewAppliedIssueIndexes = new Set();
             setReviewEditorStatus(chunk.review_status === 'resolved' ? 'Resolved · saved' : 'Open · saved', 'is-saved');
             setReviewActionStatus('');
             renderReviewSignals(chunk);
@@ -2064,6 +2136,60 @@
             if (invalidated) notes.push(`${invalidated} quality result${invalidated === 1 ? '' : 's'} cleared`);
             if (violations) notes.push(`${violations} terminology warning${violations === 1 ? '' : 's'}`);
             return notes.join(' · ');
+        }
+
+        function commitReviewAppliedText(nextText, appliedIndexes) {
+            const textarea = document.getElementById('reviewFinalText');
+            if (nextText === textarea.value || !appliedIndexes.length) return false;
+            appliedIndexes.forEach(index => reviewAppliedIssueIndexes.add(Number(index)));
+            textarea.value = nextText;
+            reviewIsApplyingFixes = true;
+            try {
+                textarea.dispatchEvent(new Event('input', { bubbles: true }));
+            } finally {
+                reviewIsApplyingFixes = false;
+            }
+            const count = appliedIndexes.length;
+            setReviewActionStatus(
+                `${count} proposed fix${count === 1 ? '' : 'es'} applied to Final · Save final to keep ${count === 1 ? 'it' : 'them'}.`
+            );
+            return true;
+        }
+
+        function applyReviewIssue(issueIndex) {
+            const chunk = currentReviewChunk();
+            if (!chunk || reviewIsSaving || reviewIsGenerating) return;
+            const issues = Array.isArray(chunk.issues) ? chunk.issues : [];
+            const textarea = document.getElementById('reviewFinalText');
+            const index = Number(issueIndex);
+            const edit = reviewIssueCanApply(issues[index], textarea.value, index)
+                ? reviewIssueReplacement(issues[index], textarea.value)
+                : null;
+            if (!edit) {
+                setReviewActionStatus('This proposed fix is no longer applicable.');
+                syncReviewControls();
+                return;
+            }
+            commitReviewAppliedText(edit.text, [index]);
+        }
+
+        function applyAllReviewIssues() {
+            const chunk = currentReviewChunk();
+            if (!chunk || reviewIsSaving || reviewIsGenerating) return;
+            const issues = Array.isArray(chunk.issues) ? chunk.issues : [];
+            let nextText = document.getElementById('reviewFinalText').value;
+            const appliedIndexes = [];
+            issues.forEach((issue, index) => {
+                if (reviewAppliedIssueIndexes.has(index)) return;
+                const edit = reviewIssueReplacement(issue, nextText);
+                if (!edit) return;
+                nextText = edit.text;
+                appliedIndexes.push(index);
+            });
+            if (!commitReviewAppliedText(nextText, appliedIndexes)) {
+                setReviewActionStatus('No proposed fixes can be applied to the current Final text.');
+                syncReviewControls();
+            }
         }
 
         async function saveReviewChunk({ candidateId = null } = {}) {
@@ -2601,6 +2727,7 @@
             document.getElementById('reviewFinalText').addEventListener('input', (event) => {
                 const chunk = currentReviewChunk();
                 if (!chunk) return;
+                if (!reviewIsApplyingFixes) reviewAppliedIssueIndexes = new Set();
                 reviewIsDirty = event.target.value !== (chunk.final || '');
                 setReviewEditorStatus(
                     reviewIsDirty
@@ -2630,6 +2757,7 @@
                     if (next) selectReviewChunk(next.index, { focusEditor: true });
                 }
             });
+            document.getElementById('reviewApplyAllBtn').addEventListener('click', applyAllReviewIssues);
             document.getElementById('reviewSaveBtn').addEventListener('click', () => saveReviewChunk());
             document.getElementById('reviewGenerateBtn').addEventListener('click', generateReviewAlternatives);
             document.getElementById('reviewAlternativeCount').addEventListener('change', (event) => {
@@ -3319,6 +3447,8 @@
             const found = Number(refinement.errors_found || 0);
             const applied = Number(refinement.errors_applied || 0);
             const rejected = Number(refinement.patches_rejected || 0);
+            const positionBiases = Number(refinement.position_biases || 0);
+            const neutralChecks = Number(refinement.neutral_checks || 0);
             const failures = Number(refinement.review_failures || 0);
             const reviewed = Number(refinement.chunks_reviewed || 0);
             const changed = Number(refinement.chunks_changed || 0);
@@ -3331,6 +3461,8 @@
 
             const notes = [];
             if (rejected) notes.push(`${rejected} patch(es) vetoed by the verifier`);
+            if (positionBiases) notes.push(`${positionBiases} position bias event(s) detected`);
+            if (neutralChecks) notes.push(`${neutralChecks} neutral edit check(s) run`);
             if (failures) notes.push(`${failures} review call(s) returned nothing (timeout or non-JSON answer)`);
             if (refinement.verifier_model && refinement.review_model === refinement.verifier_model) {
                 notes.push(`Verifier is the refinement model (${refinement.verifier_model}) — it is grading its own edits. Pick a larger Verifier in Settings.`);
@@ -3730,7 +3862,8 @@
                 });
                 
                 if (!response.ok) {
-                    throw new Error('Failed to create EPUB');
+                    const errorData = await response.json().catch(() => ({}));
+                    throw new Error(errorData.error || `Server returned HTTP ${response.status}`);
                 }
                 
                 // Download the EPUB file
