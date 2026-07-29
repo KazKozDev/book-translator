@@ -218,6 +218,15 @@ def quality_adequacy_fluency() -> str:
     return QualityTests._adequacy_fluency_prompt('English', 'Russian', SOURCE, DRAFT)
 
 
+def quality_candidate_judge() -> str:
+    return _recorded(
+        _translator(),
+        lambda translator: translator.judge_translation_candidates(
+            SOURCE, [DRAFT, FINAL], 'en', 'ru',
+        ),
+    )[0]
+
+
 # --------------------------------------------------------------------------
 # Shared blocks
 # --------------------------------------------------------------------------
@@ -226,7 +235,21 @@ def shared_terminology_context() -> str:
     return TERMINOLOGY_CONTEXT
 
 
+def manual_glossary_verification() -> str:
+    entities = '\n'.join(
+        f'{term.source} => {term.target} | {term.mode}'
+        for term in GLOSSARY.terms
+    )
+    return prompts.render(
+        'manual/glossary_verification',
+        source_language='English',
+        target_language='Russian',
+        entities=entities,
+    )
+
+
 CASES = {
+    'manual_glossary_verification': manual_glossary_verification,
     'stage0_rendering_from_candidates': stage0_rendering_from_candidates,
     'stage0_rendering_from_excerpt': stage0_rendering_from_excerpt,
     'stage0_cluster_adjudication': stage0_cluster_adjudication,
@@ -240,13 +263,16 @@ CASES = {
     'stage2_verify_draft_first': stage2_verify_draft_first,
     'quality_pairwise_editor': quality_pairwise_editor,
     'quality_adequacy_fluency': quality_adequacy_fluency,
+    'quality_candidate_judge': quality_candidate_judge,
     'shared_terminology_context': shared_terminology_context,
 }
 
 
 @pytest.mark.parametrize('name', sorted(CASES))
 def test_prompt_matches_the_golden_it_was_captured_from(name):
-    golden = (GOLDEN_DIR / f'{name}.txt').read_text(encoding='utf-8')
+    # Prompt files are stripped of trailing blank lines by the loader. Treat
+    # the filesystem's conventional final newline the same way in fixtures.
+    golden = (GOLDEN_DIR / f'{name}.txt').read_text(encoding='utf-8').removesuffix('\n')
     assert CASES[name]() == golden
 
 

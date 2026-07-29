@@ -118,6 +118,19 @@
         .row.level-CONT .time, .row.level-CONT .tag { visibility: hidden; }
         .row.level-MARK { padding-top: 8px; padding-bottom: 8px; }
         .row.level-MARK .msg { color: var(--mark); }
+        /* The first event of every fresh stream is the terminal banner. It is
+           deliberately an event, not copied markup, so the Terminal and Log
+           page always use the same artwork from banner.py. */
+        .row.level-BANNER {
+            display: block; margin: 8px 16px 14px; padding: 14px 16px;
+            border: 1px solid var(--line); border-left: 3px solid var(--accent);
+            border-radius: 7px; background: var(--paper); color: var(--accent);
+            overflow-x: auto; white-space: pre;
+        }
+        .row.level-BANNER .msg {
+            display: block; min-width: max-content; font-weight: 700;
+            text-align: center;
+        }
 
         /* Then meaning. A translation run is stages, chunks and verdicts; the
            rest is bookkeeping and should stay quiet. */
@@ -328,7 +341,8 @@
                 row.classList.add('hit');
                 markMatches(message, needle);
             }
-            row.append(time, tag, message);
+            if (entry.level === 'BANNER') row.append(message);
+            else row.append(time, tag, message);
             return row;
         }
 

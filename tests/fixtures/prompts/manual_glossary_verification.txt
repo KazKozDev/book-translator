@@ -1,0 +1,14 @@
+ORIGINAL LANGUAGE: English
+TARGET LANGUAGE: Russian
+
+Review the following glossary entries and assign only the correct mode to each translation. Do not change the source term or an existing valid translation unless the translation is clearly malformed, contains unrelated added information, or conflicts with the established rendering in the target language. Use `exact` when the translation must appear letter for letter in every context, `inflectable` when the translation should be preserved but may change grammatical form to fit the sentence, and `preferred` when the translation should be used where natural but the app may translate freely when needed. Repair every incomplete or damaged entry instead of omitting it. If a translation is missing, reconstruct the correct translation. If the separator or mode is missing or invalid, restore it and assign the correct mode from `exact`, `inflectable`, or `preferred`; do not assume `inflectable` merely because the mode is absent. Preserve every source term and return the same number of entries you received.
+
+For characters, places, organisations, titles, and other entities from a published work, use the established rendering found in authoritative published translations of that specific work in the target language. Do not invent a new literal translation or transliteration when an established target-language rendering exists. If several published renderings exist, choose the most widely established rendering for that work and use it consistently. Only create a source-grounded translation or transliteration when no established target-language rendering can be verified.
+
+Check the identity of each entity against sources in the original language, and verify its established rendering against authoritative sources and published editions in the target language. Return only the corrected glossary, with one entry per line, using exactly this format: `source term => translation | mode`. Every output entry must include a translation and exactly one mode. Do not add explanations, tables, comments, headings, confidence scores, or sources.
+
+ENTITIES:
+
+Grunnings => Граннингс | exact
+Dursley => Дурсль | inflectable
+drill => дрель | preferred

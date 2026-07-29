@@ -22,13 +22,13 @@
            no moment where the icon and the colours disagree. */
         .theme-toggle::before { content:'\2600\FE0F'; }:root.theme-dark .theme-toggle::before { content:'\1F319'; }
         .page-head { padding:18px 0 8px; }.eyebrow { color:var(--faint); font-size:.74rem; font-weight:700; letter-spacing:.08em; text-transform:uppercase; }.page-head h1 { margin:10px 0 0; font-size:1.7rem; font-weight:700; letter-spacing:-.01em; }.page-head p { margin-top:10px; color:var(--muted); font-size:.92rem; line-height:1.65; max-width:640px; }
-        .card { margin-top:26px; padding:26px 28px; border:1px solid var(--line); border-radius:12px; background:var(--paper); }.card h2 { font-size:1.05rem; }.card > p { margin-top:7px; color:var(--muted); font-size:.86rem; line-height:1.55; }
+        .card { margin-top:26px; padding:26px 28px; border:1px solid var(--line); border-radius:12px; background:var(--paper); }.card h2 { font-size:1.05rem; }.card > p { margin-top:7px; color:var(--muted); font-size:.86rem; line-height:1.55; }.card > p a { color:var(--accent); text-decoration:none; }.card > p a:hover { text-decoration:underline; }
         .section-kicker, .role-heading { color:var(--faint); font-size:.72rem; font-weight:700; letter-spacing:.08em; text-transform:uppercase; }
-        .form-group { margin-top:22px; }.role-heading { display:block; }.form-group select { width:100%; margin-top:8px; padding:11px 12px; border:1px solid var(--line); border-radius:6px; background:var(--paper); color:var(--ink); font:inherit; appearance:none; -webkit-appearance:none; background-image:none; cursor:pointer; }.form-group select:focus { outline:2px solid color-mix(in srgb, var(--accent) 40%, transparent); border-color:var(--accent); }
+        .form-group { margin-top:22px; }.role-heading { display:block; }.form-group select, .form-group input { width:100%; margin-top:8px; padding:11px 12px; border:1px solid var(--line); border-radius:6px; background:var(--paper); color:var(--ink); font:inherit; }.form-group select { appearance:none; -webkit-appearance:none; background-image:none; cursor:pointer; }.form-group select, .form-group select option, .form-group input { font-family:ui-monospace,"SFMono-Regular","SF Mono",Menlo,Monaco,Consolas,"Liberation Mono",monospace; font-size:.80rem; font-weight:500; letter-spacing:.01em; text-transform:none; }.form-group select:focus, .form-group input:focus { outline:2px solid color-mix(in srgb, var(--accent) 40%, transparent); border-color:var(--accent); }.form-group input::placeholder { color:var(--faint); font-weight:400; }
         .hint { margin-top:7px; color:var(--muted); font-size:.8rem; line-height:1.5; }.warning { color:var(--warning); font-weight:600; }.actions { display:flex; align-items:center; gap:14px; margin-top:28px; }.save-action { border:0; padding:0; background:transparent; color:var(--accent); font:inherit; font-size:.8rem; font-weight:700; letter-spacing:.08em; text-transform:uppercase; cursor:pointer; }.save-action:hover { color:var(--accent-dark); text-decoration:underline; }.save-action:disabled { color:var(--faint); cursor:not-allowed; text-decoration:none; }.saved { color:var(--muted); font-size:.82rem; }
-        .footer-note { margin-top:52px; padding-top:22px; border-top:1px solid var(--line); color:var(--faint); font-size:.78rem; line-height:1.6; }.footer-note strong { display:block; margin-bottom:10px; color:var(--muted); }.footer-note p + p { margin-top:0; }
-        .neural-list { margin-top:18px; border-top:1px solid var(--line); }.neural-row { display:flex; flex-direction:column; gap:5px; padding:15px 0; border-bottom:1px solid var(--line); }.neural-name { font-size:.88rem; font-weight:700; }.neural-role { margin-top:4px; color:var(--muted); font-size:.8rem; line-height:1.45; }.neural-role code { padding:1px 5px; border-radius:4px; background:var(--soft); font-size:.95em; }.neural-role a { color:var(--accent); text-decoration:none; }.neural-role a:hover { text-decoration:underline; }.neural-kind { order:-1; color:var(--faint); font-size:.72rem; font-weight:700; letter-spacing:.06em; text-transform:uppercase; }
-        .settings-columns { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:22px; align-items:start; }.settings-columns .card { min-width:0; }
+        .footer-note { margin-top:52px; padding-top:22px; border-top:1px solid var(--line); color:var(--faint); font-size:.70rem; line-height:1.6; }.footer-note strong { display:block; margin-bottom:10px; color:inherit; font-weight:400; }.footer-note p + p { margin-top:0; }.footer-note a { color:var(--muted); text-decoration:none; }.footer-note a:hover { text-decoration:underline; }
+        .neural-list { margin-top:18px; border-top:1px solid var(--line); }.neural-row { display:flex; flex-direction:column; gap:5px; padding:15px 0; border-bottom:1px solid var(--line); }.neural-row:last-child { border-bottom:none; }.neural-name { font-size:.92rem; font-weight:700; }.neural-role { margin-top:4px; color:var(--muted); font-size:.8rem; line-height:1.45; }.neural-role code { padding:1px 5px; border-radius:4px; background:var(--soft); font-size:.95em; }.neural-role a { color:var(--accent); text-decoration:none; }.neural-role a:hover { text-decoration:underline; }.neural-kind { order:-1; color:var(--faint); font-size:.72rem; font-weight:700; letter-spacing:.06em; text-transform:uppercase; }
+        .settings-columns { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:22px; align-items:start; }.settings-columns .card { min-width:0; }.settings-stack { min-width:0; }.settings-stack .card + .card { margin-top:22px; }.frontier-model { margin-top:8px; color:var(--ink); font-family:ui-monospace,"SFMono-Regular","SF Mono",Menlo,Monaco,Consolas,"Liberation Mono",monospace; font-size:.8rem; }.key-availability { margin-top:7px; color:var(--accent); font-size:.78rem; line-height:1.5; }
         @media (max-width:980px) { .settings-columns { grid-template-columns:1fr; } }
         @media (max-width:1180px) { .container { padding:0 16px 32px; } }
         @media (max-width:640px) { .app-topbar { align-items:flex-start; flex-direction:column; gap:12px; }.local-status { flex-wrap:wrap; }.card { padding:20px; } }
@@ -50,40 +50,61 @@
             <div class="page-head">
                 <div class="eyebrow">Settings</div>
                 <h1>Choose a model for each role</h1>
-                <p>Tolmach keeps translation, refinement, glossary preparation and quality checks separate, so every stage can use the local model best suited to it.</p>
+                <p>Tolmach separates glossary preparation, translation, editing, verification, and quality checks into distinct LLM roles. Configure them on the left; the built-in neural components on the right.</p>
             </div>
             <div class="settings-columns">
             <section class="card">
                 <div class="section-kicker">LLMs</div>
-                <p>Keep every role independent: the judge does not grade its own output, and a translation-only model is never used for instruction or editing.</p>
-                <div class="form-group"><label class="role-heading" for="translationModel">Translation</label><select id="translationModel" disabled><option>Loading models…</option></select><p class="hint" id="translationHint">Used only for Start.</p></div>
-                <div class="form-group"><label class="role-heading" for="refinementModel">Refinement</label><select id="refinementModel" disabled><option>Loading models…</option></select><p class="hint">Used only for Continue, the editing pass after the draft is ready.</p></div>
-                <div class="form-group"><label class="role-heading" for="verifierModel">Verifier</label><select id="verifierModel" disabled><option>Loading models…</option></select><p class="hint" id="verifierHint">Rules on every edit Refinement proposes: it sees the source and both versions, twice with the order swapped, and the edit is kept only if it wins both times. <strong>Pick a model clearly larger than Refinement.</strong> A model grading its own edits answers by which version came first rather than by what it says, the two orderings then disagree, and every fix is thrown away — the pass looks like it ran and changes nothing.</p></div>
-                <div class="form-group"><label class="role-heading" for="generalInstructModel">Glossary preparation</label><select id="generalInstructModel" disabled><option>Loading models…</option></select><p class="hint">Used only for Prepare, for both of its passes: ruling on identity — whether two source forms name one entity and which the clustering got wrong — and then proposing the target-language rendering and the enforcement mode for each name. <strong>Prefer a small model here.</strong> Prepare's whole wall clock is the rendering pass, one call per batch of eight names, and rendering a name is recall rather than reasoning: given the same prompt and the same eight names, a 9B answered ten times faster than a 35B and got exactly the same ones right, both missing the traditional renderings of well-known titles. The identity pass agreed with the large model too, and picked the more useful entry — the bare surname, which also covers the full name. Read the proposal before Start whichever model wrote it; that is where a wrong rendering is meant to be caught.</p></div>
-                <div class="form-group"><label class="role-heading" for="judgeModel">Judge</label><select id="judgeModel" disabled><option>Loading models…</option></select><p class="hint">Used for LLM judge and the backtranslation diagnostic. Translation-only TranslateGemma models are excluded.</p></div>
+                <p>Tolmach loads these lists automatically from your local Ollama server.<br>To add a model, pull it in <a href="https://ollama.com" target="_blank" rel="noopener noreferrer">Ollama</a> and reload this page; Tolmach will add it to the lists. A separate model choice is saved for each role.</p>
+                <div class="form-group"><label class="role-heading" for="generalInstructModel">Glossary preparation</label><select id="generalInstructModel" disabled><option>Loading models…</option></select><p class="hint">Runs during Prepare: reads the source and builds the proposed glossary. Choose a small, fast general instruct model because Prepare makes many short calls. If only one general instruct model is installed, or your computer cannot run several models, you may reuse it for Refinement and Judge; separate models make later checks more independent. A weak choice creates more missing or incorrect suggestions, so you spend more time reviewing before Start.</p></div>
+                <div class="form-group"><label class="role-heading" for="translationModel">Translation</label><select id="translationModel" disabled><option>Loading models…</option></select><p class="hint" id="translationHint">Runs during the Start stage and produces the first draft — the single biggest factor in the final result. TranslateGemma is built only for translation and has its own native prompt format, which Tolmach uses here; do not select it for any other role. TranslateGemma comes in 4B, 12B, and 27B: for book translation, choose 12B or 27B and avoid the smallest 4B. Other model families — even those specialised for translation — may require code changes to support their prompt templates. If you use a general model instead, choose a different model for Judge.</p></div>
+                <div class="form-group"><label class="role-heading" for="refinementModel">Refinement</label><select id="refinementModel" disabled><option>Loading models…</option></select><p class="hint">Runs during the Continue stage after the first draft and rewrites it. Its accepted edits become the final text, so choose a capable general instruct model with strong editing and instruction-following ability. It may share the general instruct model used for Glossary preparation and Judge when hardware or installed-model limits require reuse, but Verifier must still be different. A weak choice either changes too little or replaces good wording with worse text.</p></div>
+                <div class="form-group"><label class="role-heading" for="verifierModel">Verifier</label><select id="verifierModel" disabled><option>Loading models…</option></select><p class="hint" id="verifierHint">Runs during the Verify stage after Refinement and accepts or rejects every proposed edit before it is kept. Choose a model different from Refinement, ideally with more parameters than the Refinement model. A model reviewing its own edits tends to approve almost all of them, allowing bad edits through.</p></div>
+                <div class="form-group"><label class="role-heading" for="judgeModel">Judge</label><select id="judgeModel" disabled><option>Loading models…</option></select><p class="hint">Runs during the Quality Check stage after the final translation is ready. It produces LLM scores and backtranslation diagnostics but does not edit the translation. Choose a capable general instruct model different from the Translation model, and never TranslateGemma because it is translation-only and uses its native translation prompt. It may share the general instruct model used for Glossary preparation or Refinement if necessary, as long as it remains different from Translation. A weak or near-identical Judge can miss errors and make the quality report unreliable.</p></div>
                 <div class="actions"><button type="button" class="save-action" id="saveSettings" disabled>Save setup</button><span class="saved" id="saveStatus" aria-live="polite"></span></div>
             </section>
+            <div class="settings-stack">
             <section class="card">
                 <div class="section-kicker">Neural models</div>
-                <p>These models are chosen by the application for their specific task, not from the Ollama list. They install with the app, and each downloads its weights the first time the feature that needs it is used.</p>
+                <p>Built-in components selected by Tolmach, not Ollama roles you choose. GLiNER and BGE-M3 run automatically during Prepare; LaBSE, XLM-R language detection, and COMET-Kiwi run only when you start their individual Quality Check tests. Weights download from Hugging Face on first use, so the first run needs internet access and enough disk space.</p>
                 <div class="neural-list">
-                    <div class="neural-row"><div><div class="neural-name">GLiNER multilingual NER</div><p class="neural-role">Finds candidate names and entities during Prepare. <a href="https://huggingface.co/urchade/gliner_multi-v2.1" target="_blank" rel="noopener">Model page on Hugging Face</a>.</p></div><span class="neural-kind">Entity recognition</span></div>
-                    <div class="neural-row"><div><div class="neural-name">BGE-M3</div><p class="neural-role">Groups the mentions GLiNER found, so one character or place becomes one glossary entry. <a href="https://huggingface.co/BAAI/bge-m3" target="_blank" rel="noopener">Model page on Hugging Face</a>.</p></div><span class="neural-kind">Embedding</span></div>
-                    <div class="neural-row"><div><div class="neural-name">LaBSE</div><p class="neural-role">Checks document-wide source/final semantic alignment. <a href="https://huggingface.co/sentence-transformers/LaBSE" target="_blank" rel="noopener">Model page on Hugging Face</a>.</p></div><span class="neural-kind">Alignment</span></div>
-                    <div class="neural-row"><div><div class="neural-name">XLM-RoBERTa language detection</div><p class="neural-role">Flags final chunks that came back in the wrong language, or were never translated at all. <a href="https://huggingface.co/papluca/xlm-roberta-base-language-detection" target="_blank" rel="noopener">Model page on Hugging Face</a>.</p></div><span class="neural-kind">Language ID</span></div>
-                    <div class="neural-row"><div><div class="neural-name">COMET-Kiwi</div><p class="neural-role">Reference-free quality estimate for draft and final translation. The only one that is not automatic: the repository is gated, so request access, then run <code>huggingface-cli login</code> (or set <code>HF_TOKEN</code>) before the first run. <a href="https://huggingface.co/Unbabel/wmt22-cometkiwi-da" target="_blank" rel="noopener">Model page on Hugging Face</a>.</p></div><span class="neural-kind">Quality estimate</span></div>
+                    <div class="neural-row"><div><div class="neural-name">GLiNER multilingual NER</div><p class="neural-role">Runs automatically during Prepare. It scans the source for candidate people, places, organisations, objects, and titles; Tolmach combines them with its deterministic text scan before building the glossary proposal. Its weights download and cache on first use. <a href="https://huggingface.co/urchade/gliner_multi-v2.1" target="_blank" rel="noopener">Model page on Hugging Face</a>.</p></div><span class="neural-kind">Entity recognition</span></div>
+                    <div class="neural-row"><div><div class="neural-name">BGE-M3</div><p class="neural-role">Runs automatically after entity collection during Prepare. It compares candidate wording and context for evidence that variants name the same person or place; the configured instruct model resolves uncertain identities. Its weights download and cache on first use. <a href="https://huggingface.co/BAAI/bge-m3" target="_blank" rel="noopener">Model page on Hugging Face</a>.</p></div><span class="neural-kind">Embedding</span></div>
+                    <div class="neural-row"><div><div class="neural-name">LaBSE</div><p class="neural-role">Runs only when you start the LaBSE alignment Quality Check after Continue. It compares every aligned source/final chunk pair and flags passages where meaning may have drifted. The result is diagnostic: it does not edit the translation or block export. Its weights download and cache on first use. <a href="https://huggingface.co/sentence-transformers/LaBSE" target="_blank" rel="noopener">Model page on Hugging Face</a>.</p></div><span class="neural-kind">Alignment</span></div>
+                    <div class="neural-row"><div><div class="neural-name">XLM-RoBERTa language detection</div><p class="neural-role">Runs only when you start the Target-language segments / language-ID Quality Check after Continue. It flags confident wrong-language or untranslated final segments. The result is diagnostic: it does not fix text or block export. Its weights download and cache on first use. <a href="https://huggingface.co/papluca/xlm-roberta-base-language-detection" target="_blank" rel="noopener">Model page on Hugging Face</a>.</p></div><span class="neural-kind">Language ID</span></div>
+                    <div class="neural-row"><div><div class="neural-name">COMET-Kiwi</div><p class="neural-role">Runs only when you start a COMET-Kiwi Quality Check. It estimates translation quality without a reference translation; separate tests score the Start draft and Continue result. Its score is diagnostic and does not edit or block export. The checkpoint is gated and multi-gigabyte: request access on Hugging Face, then run <code>huggingface-cli login</code> or set <code>HF_TOKEN</code>; there is no in-app login. It downloads on first test use. <a href="https://huggingface.co/Unbabel/wmt22-cometkiwi-da" target="_blank" rel="noopener">Model page on Hugging Face</a>.</p></div><span class="neural-kind">Quality estimate</span></div>
                 </div>
             </section>
+            <section class="card" aria-labelledby="frontierSettingsTitle">
+                <div class="section-kicker">Frontier verification</div>
+                <h2 id="frontierSettingsTitle">Glossary API</h2>
+                <p>Used only by <strong>Verify automatically</strong> in the Glossary. The selected provider receives the glossary and language pair, then checks established book renderings with web search. Tolmach shows every proposed change before anything is applied.</p>
+                <div class="form-group">
+                    <label class="role-heading" for="frontierProvider">Provider</label>
+                    <select id="frontierProvider" disabled><option value="">Loading providers…</option></select>
+                    <p class="frontier-model" id="frontierModel">—</p>
+                    <p class="hint">Web search and model tokens may be billed by the provider.</p>
+                </div>
+                <div class="form-group">
+                    <label class="role-heading" for="frontierApiKey">API key</label>
+                    <input id="frontierApiKey" type="password" autocomplete="new-password" spellcheck="false" placeholder="Paste the selected provider key">
+                    <p class="key-availability" id="frontierKeyAvailability"></p>
+                    <p class="hint">The key stays only in this browser tab's session storage and is never written to Tolmach databases or logs. Leave it empty when a server environment key is available.</p>
+                </div>
+                <div class="actions"><button type="button" class="save-action" id="saveFrontier" disabled>Save API setup</button><span class="saved" id="frontierSaveStatus" aria-live="polite"></span></div>
+            </section>
+            </div>
             </div>
         </main>
         <footer class="footer-note">
             <strong>Disclaimer</strong>
-            <p>Tolmach is open-source software released under the MIT License. Tolmach does not claim ownership of your source texts or of any outputs generated by the software.</p>
-            <p>You are solely responsible for ensuring that you have the legal right to use, translate, edit, publish, or otherwise process the source text, and for complying with all applicable local laws and regulations, including copyright and intellectual-property laws.</p>
+            <p>Tolmach Book Translator is open-source software released under the MIT License. Tolmach does not claim ownership of your source texts or of any generated output.</p>
+            <p>You are solely responsible for ensuring that you have the legal right to use, translate, edit, and publish the source text, and for complying with all applicable copyright and intellectual-property laws.</p>
             <div class="footer-note-compact">
-                <p>Proofreading and editorial review are strongly recommended before any publication or commercial use.</p>
-                <p>For commercial use, you are additionally responsible for reviewing and complying with the licenses of all models, neural components, and third-party dependencies used together with Tolmach.</p>
-                <p>Tolmach is provided "as is", without warranties of any kind. The authors and contributors accept no liability for any use of the software or its output.</p>
+                <p>You are also responsible for reviewing and complying with the licenses, terms of service, and usage restrictions of all models and third-party dependencies (including commercial APIs), as well as any limitations on the use of generated output. Tolmach does not verify or guarantee compliance with any third-party terms.</p>
+                <p>Machine translation may contain errors, omissions, or fabricated content — proofreading before publication is strongly recommended. Text is processed locally by default; if you configure remote models, your source text may be sent to those providers under their own terms.</p>
+                <p>Tolmach is provided “as is”, without warranties of any kind. The author (KazKozDev) and contributors accept no liability for any use of the software or its output. Tolmach is not affiliated with or endorsed by the providers of any third-party models; all trademarks belong to their respective owners.</p>
+                <p>Source code: <a href="https://github.com/KazKozDev/book-translator" target="_blank" rel="noopener noreferrer">https://github.com/KazKozDev/book-translator</a></p>
             </div>
         </footer>
     </div>
@@ -98,12 +119,20 @@
         const hint = document.getElementById('translationHint');
         const save = document.getElementById('saveSettings');
         const status = document.getElementById('saveStatus');
+        const frontierProvider = document.getElementById('frontierProvider');
+        const frontierApiKey = document.getElementById('frontierApiKey');
+        const frontierModel = document.getElementById('frontierModel');
+        const frontierKeyAvailability = document.getElementById('frontierKeyAvailability');
+        const saveFrontier = document.getElementById('saveFrontier');
+        const frontierSaveStatus = document.getElementById('frontierSaveStatus');
+        let frontierProviders = [];
+        let previousFrontierProvider = '';
         // The parameter count comes from Ollama. It is shown because the
         // instruct roles are where size shows, and picking the large model out
         // of a list of forty tags is otherwise guesswork.
         const modelLabel = model => model.parameter_size ? `${model.name} — ${model.parameter_size}` : model.name;
         const optionsFor = models => models.map(model => `<option value="${model.name}">${modelLabel(model)}</option>`).join('');
-        function updateTranslationHint() { hint.innerHTML = isTranslateGemma(translationModel.value) ? '<span class="warning">TranslateGemma is supported here:</span> it is used only for the first translation pass.' : 'Used only for Start.'; }
+        function updateTranslationHint() { hint.innerHTML = 'Runs during the Start stage and produces the first draft — the single biggest factor in the final result. TranslateGemma is built only for translation and has its own native prompt format, which Tolmach uses here; do not select it for any other role. TranslateGemma comes in 4B, 12B, and 27B: for book translation, choose 12B or 27B and avoid the smallest 4B. Other model families — even those specialised for translation — may require code changes to support their prompt templates. If you use a general model instead, choose a different model for Judge.'; }
         // Refinement and Verifier landing on the same model is the exact
         // configuration that made the pass a no-op, and it is also the default
         // one, so it is called out on the page rather than left in a log.
@@ -112,7 +141,7 @@
         function updateVerifierHint() {
             const clash = verifierModel.value && verifierModel.value === refinementModel.value;
             verifierHint.innerHTML = clash
-                ? '<span class="warning">Same model as Refinement:</span> it will be grading its own edits, and almost every fix will be rejected. ' + verifierHintText
+                ? '<span class="warning">Same model as Refinement:</span> it will grade its own edits and reject most of them. ' + verifierHintText
                 : verifierHintText;
         }
         async function loadModels() {
@@ -146,6 +175,64 @@
             }
         }
         save.addEventListener('click', () => { localStorage.setItem('translationModel', translationModel.value); localStorage.setItem('refinementModel', refinementModel.value); localStorage.setItem('verifierModel', verifierModel.value); localStorage.removeItem('entityModel'); localStorage.setItem('generalInstructModel', generalInstructModel.value); localStorage.setItem('judgeModel', judgeModel.value); status.textContent = 'Saved. Return to the app when ready.'; });
+        const frontierKeyName = provider => `frontierApiKey:${provider}`;
+        function loadFrontierProviderDetails() {
+            const provider = frontierProviders.find(item => item.id === frontierProvider.value);
+            if (!provider) {
+                frontierModel.textContent = '—';
+                frontierKeyAvailability.textContent = '';
+                return;
+            }
+            frontierModel.textContent = provider.model;
+            frontierKeyAvailability.textContent = provider.environment_key_available
+                ? 'A server environment key is available for this provider.'
+                : '';
+            frontierApiKey.value = sessionStorage.getItem(frontierKeyName(provider.id)) || '';
+            previousFrontierProvider = provider.id;
+            frontierSaveStatus.textContent = '';
+        }
+        async function loadFrontierProviders() {
+            try {
+                const response = await fetch('/frontier-providers', { cache: 'no-store' });
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                const data = await response.json();
+                frontierProviders = data.providers || [];
+                if (!frontierProviders.length) throw new Error('No providers available');
+                frontierProvider.innerHTML = frontierProviders
+                    .map(provider => `<option value="${provider.id}">${provider.label}</option>`)
+                    .join('');
+                const savedProvider = localStorage.getItem('frontierProvider');
+                frontierProvider.value = frontierProviders.some(item => item.id === savedProvider)
+                    ? savedProvider
+                    : frontierProviders[0].id;
+                frontierProvider.disabled = false;
+                saveFrontier.disabled = false;
+                loadFrontierProviderDetails();
+            } catch (error) {
+                frontierProvider.innerHTML = `<option value="">Could not load providers: ${error.message}</option>`;
+                frontierApiKey.disabled = true;
+                frontierSaveStatus.textContent = 'Reload Tolmach and try again.';
+            }
+        }
+        frontierProvider.addEventListener('change', () => {
+            if (previousFrontierProvider && frontierApiKey.value.trim()) {
+                sessionStorage.setItem(
+                    frontierKeyName(previousFrontierProvider),
+                    frontierApiKey.value.trim(),
+                );
+            }
+            loadFrontierProviderDetails();
+        });
+        saveFrontier.addEventListener('click', () => {
+            const provider = frontierProvider.value;
+            localStorage.setItem('frontierProvider', provider);
+            if (frontierApiKey.value.trim()) {
+                sessionStorage.setItem(frontierKeyName(provider), frontierApiKey.value.trim());
+            } else {
+                sessionStorage.removeItem(frontierKeyName(provider));
+            }
+            frontierSaveStatus.textContent = 'Saved for this browser session.';
+        });
         translationModel.addEventListener('change', updateTranslationHint);
         verifierModel.addEventListener('change', updateVerifierHint);
         refinementModel.addEventListener('change', updateVerifierHint);
@@ -154,6 +241,7 @@
         themeToggle.addEventListener('click', () => { const dark = !document.documentElement.classList.contains('theme-dark'); document.documentElement.classList.toggle('theme-dark', dark); localStorage.setItem('theme', dark ? 'dark' : 'light'); describeThemeToggle(); });
         describeThemeToggle();
         loadModels();
+        loadFrontierProviders();
     </script>
 </body>
 </html>

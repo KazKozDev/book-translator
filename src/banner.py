@@ -44,7 +44,14 @@ def print_terminal_banner(force: bool = False) -> None:
     if not force and os.environ.get('TOLMACH_BANNER_PRINTED'):
         return
 
-    use_color = sys.stdout.isatty() and not os.environ.get('NO_COLOR')
+    # The macOS .command entry point is explicitly visual: it opens a Terminal
+    # window whose first job is to show this identity. Some parent apps export
+    # NO_COLOR globally, which used to turn only that launcher logo white.
+    # Other entry points still honour NO_COLOR as usual.
+    force_color = os.environ.get('TOLMACH_FORCE_BANNER_COLOR') == '1'
+    use_color = sys.stdout.isatty() and (
+        force_color or not os.environ.get('NO_COLOR')
+    )
     accent = _ACCENT if use_color else ''
     cream = _CREAM if use_color else ''
     reset = _RESET if use_color else ''

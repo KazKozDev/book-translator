@@ -31,6 +31,11 @@ app = Flask(__name__)
 CORS(app)
 
 import prompts  # noqa: E402
+from frontier_glossary import (  # noqa: E402
+    FrontierGlossaryError,
+    provider_catalog,
+    verify_glossary,
+)
 from languages import LANG_NAMES  # noqa: E402
 
 # TranslateGemma (Gemma 3 based, 4B/12B/27B) is a translation-only model: it
@@ -45,7 +50,7 @@ TRANSLATEGEMMA_TEMPERATURE = 0.3  # A dedicated MT model wants near-greedy decod
 # TERMINAL_LOGO is re-exported, not used here: test_the_banner_has_one_source
 # asserts both entry points resolve to the same object, so linters calling it
 # an unused import are wrong.
-from banner import TERMINAL_LOGO, print_terminal_banner  # noqa: E402,F401
+from banner import SUBTITLE, TERMINAL_LOGO, print_terminal_banner  # noqa: E402,F401
 
 
 def is_translategemma(model_name: Optional[str]) -> bool:
@@ -223,6 +228,23 @@ def init_db():
                 UNIQUE (translation_id, test_name),
                 FOREIGN KEY (translation_id) REFERENCES translations (id)
             );
+
+            CREATE TABLE IF NOT EXISTS chunk_reviews (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                translation_id INTEGER NOT NULL,
+                chunk_index INTEGER NOT NULL,
+                review_details TEXT,
+                warning TEXT,
+                alternatives TEXT,
+                judge_model TEXT,
+                review_status TEXT NOT NULL DEFAULT 'open',
+                resolution_kind TEXT,
+                selected_candidate TEXT,
+                revision INTEGER NOT NULL DEFAULT 0,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE (translation_id, chunk_index),
+                FOREIGN KEY (translation_id) REFERENCES translations (id)
+            );
         ''')
 
         # translations existed before source_format/translated_chapters/book_title/book_author
@@ -248,8 +270,53 @@ def init_db():
         # history as well as from the new-table schema above.
         if 'doc_summary' in existing_columns:
             conn.execute('ALTER TABLE translations DROP COLUMN doc_summary')
+        review_columns = {
+            row[1] for row in conn.execute('PRAGMA table_info(chunk_reviews)')
+        }
+        if 'revision' not in review_columns:
+            conn.execute(
+                'ALTER TABLE chunk_reviews ADD COLUMN revision INTEGER NOT NULL DEFAULT 0'
+            )
 
 init_db()
+
+
+def save_chunk_review(
+    translation_id: int,
+    chunk_index: int,
+    *,
+    details: Optional[Dict] = None,
+    warning: Optional[str] = None,
+):
+    """Persist what Stage 2 found for one chunk.
+
+    The final text already lives in ``translations.final_chunks``. This table
+    holds only the editorial evidence around it, so the review desk can show
+    the exact reported spans without duplicating the book text.
+    """
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.execute(
+            '''
+            INSERT INTO chunk_reviews (
+                translation_id, chunk_index, review_details, warning,
+                review_status, updated_at
+            ) VALUES (?, ?, ?, ?, 'open', CURRENT_TIMESTAMP)
+            ON CONFLICT (translation_id, chunk_index) DO UPDATE SET
+                review_details = excluded.review_details,
+                warning = excluded.warning,
+                review_status = 'open',
+                resolution_kind = NULL,
+                selected_candidate = NULL,
+                revision = chunk_reviews.revision + 1,
+                updated_at = CURRENT_TIMESTAMP
+            ''',
+            (
+                translation_id,
+                chunk_index,
+                json.dumps(details or {}, ensure_ascii=False),
+                warning,
+            ),
+        )
 
 
 from quality_tests import QualityTests  # noqa: E402
@@ -1594,6 +1661,12 @@ class BookTranslator(QualityTests):
                     stage2_details = {}
                     if cached_result:
                         final_translation = cached_result['translated_text']
+                        stage2_details = {
+                            'cache_hit': True,
+                            'evidence_available': False,
+                            'review_not_replayed': True,
+                            'issues': [],
+                        }
                         logger.translation_logger.info(f"Cache hit for stage 2 chunk {i}")
                     else:
                         logger.translation_logger.info(f"Stage 2 reviewing chunk {i}/{total_chunks}")
@@ -1651,6 +1724,14 @@ class BookTranslator(QualityTests):
                         original_chunk, final_translation
                     )
                     final_violation_count += len(terminology_violations)
+                    stage2_details['exact_replacements'] = exact_replacements
+                    stage2_details['terminology_violations'] = terminology_violations
+                    save_chunk_review(
+                        translation_id,
+                        i - 1,
+                        details=stage2_details,
+                        warning=stage2_warning,
+                    )
 
                     progress = (i / total_chunks) * 100
                     with sqlite3.connect(DB_PATH) as conn:
@@ -2070,6 +2151,103 @@ class BookTranslator(QualityTests):
             logger.api_logger.error(f"Stage 1 error: {e}")
             return text, f'Model request failed ({e}) — kept the original text untranslated for this chunk.'
 
+    def generate_translation_candidate(
+        self,
+        text: str,
+        source_lang: str,
+        target_lang: str,
+        *,
+        previous_chunk: str = "",
+        genre: str = "unknown",
+        terminology_context: str = "",
+        temperature: float = 0.6,
+    ) -> Tuple[Optional[str], Optional[str]]:
+        """Generate one deliberately non-cached candidate for the review desk.
+
+        This is opt-in and chunk-scoped. It reuses the exact Stage 1 prompt
+        contract, but accepts a caller-selected sampling temperature so two
+        requested alternatives are capable of being genuinely different.
+        """
+        source_name = LANG_NAMES.get(source_lang, source_lang)
+        target_name = LANG_NAMES.get(target_lang, target_lang)
+        if is_translategemma(self.model_name):
+            prompt = self._stage1_prompt_translategemma(
+                text, source_lang, target_lang, source_name, target_name,
+                previous_chunk, genre, terminology_context,
+            )
+        else:
+            prompt = self._stage1_prompt_default(
+                text, source_name, target_name, previous_chunk, genre,
+                terminology_context,
+            )
+        translated = self._call_model(
+            prompt, temperature=temperature, read_timeout=300,
+        )
+        if translated:
+            return translated, None
+        return None, 'The translation model returned no candidate.'
+
+    @staticmethod
+    def _parse_json_object(raw: Optional[str]) -> Dict:
+        """Read the first JSON object from a possibly prose-wrapped reply."""
+        if not raw:
+            return {}
+        raw = raw.strip()
+        try:
+            parsed = json.loads(raw)
+            return parsed if isinstance(parsed, dict) else {}
+        except (TypeError, ValueError):
+            pass
+        decoder = json.JSONDecoder()
+        for start, character in enumerate(raw):
+            if character != '{':
+                continue
+            try:
+                parsed, _ = decoder.raw_decode(raw[start:])
+            except ValueError:
+                continue
+            if isinstance(parsed, dict):
+                return parsed
+        return {}
+
+    def judge_translation_candidates(
+        self,
+        original_text: str,
+        candidates: List[str],
+        source_lang: str,
+        target_lang: str,
+    ) -> Tuple[Optional[int], Optional[str], Optional[str]]:
+        """Ask an independent model to rank candidates for one chunk.
+
+        Returns a zero-based candidate index, its short reason, and an error.
+        An unusable verdict is exposed as an error; it never becomes a made-up
+        recommendation.
+        """
+        source_name = LANG_NAMES.get(source_lang, source_lang)
+        target_name = LANG_NAMES.get(target_lang, target_lang)
+        candidate_text = '\n\n'.join(
+            f'CANDIDATE {index}\n{text}'
+            for index, text in enumerate(candidates, 1)
+        )
+        prompt = prompts.render(
+            'quality/candidate_judge',
+            source_name=source_name,
+            target_name=target_name,
+            original_text=original_text,
+            candidates=candidate_text,
+            candidate_count=len(candidates),
+        )
+        raw = self._call_model(prompt, temperature=0.0, read_timeout=600)
+        verdict = self._parse_json_object(raw)
+        try:
+            best = int(verdict.get('best')) - 1
+        except (TypeError, ValueError):
+            best = -1
+        if best not in range(len(candidates)):
+            return None, None, 'The judge returned no usable ranking.'
+        reason = str(verdict.get('reason') or '').strip() or None
+        return best, reason, None
+
     # ------------------------------------------------------------------
     # Stage 2: refinement, as estimate -> patch -> verify.
     #
@@ -2408,9 +2586,16 @@ class BookTranslator(QualityTests):
         )
         actionable = [error for error in errors if self.is_actionable_error(error)]
         details: Dict = {
+            'evidence_available': True,
             'errors_found': len(errors),
             'errors_actionable': len(actionable),
             'errors_applied': 0,
+            # Keep the actual located spans, not just aggregate counts. The
+            # review desk needs to explain why a chunk was flagged and let a
+            # human decide whether the proposed replacement is right.
+            'issues': errors,
+            'actionable_issues': actionable,
+            'applied_issues': [],
             'verified': None,
             'by_severity': dict(Counter(error['severity'] for error in errors)),
             'by_type': dict(Counter(error['type'] for error in errors)),
@@ -2422,6 +2607,7 @@ class BookTranslator(QualityTests):
 
         patched, applied = self.stage2_patch(draft_translation, actionable)
         details['errors_applied'] = len(applied)
+        details['applied_issues'] = applied
         if not applied or patched == draft_translation:
             return draft_translation, None, details
 
@@ -2506,6 +2692,10 @@ def check_ollama():
     # stopped, so a user can clear old or failed translations.
     exempt_endpoints = {
         'health_check', 'serve_frontend', 'serve_static', 'delete_translation',
+        'get_translation', 'get_translations', 'get_review_chunks',
+        'update_review_chunk', 'download_translation',
+        'get_glossary_verification_prompt', 'get_frontier_providers',
+        'verify_glossary_with_frontier',
         # The log console is most wanted precisely when the pipeline is
         # failing, and "Ollama is down" is one of the things it exists to show.
         'stream_logs', 'reset_logs', 'rotate_logs',
@@ -2530,6 +2720,127 @@ def serve_frontend():
 @app.route('/<path:path>')
 def serve_static(path):
     return send_from_directory(STATIC_FOLDER, path)
+
+
+@app.route('/glossary-verification-prompt', methods=['POST'])
+@with_error_handling
+def get_glossary_verification_prompt():
+    """Build the manual frontier-model prompt from the visible glossary.
+
+    This route deliberately does not call a model. The user gets the complete
+    prompt in the clipboard and can choose any frontier model outside Tolmach.
+    """
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict) or not isinstance(data.get('glossary'), str):
+        return jsonify({'error': 'Glossary text is required'}), 400
+
+    source_code = data.get('sourceLanguage')
+    target_code = data.get('targetLanguage')
+    if not isinstance(source_code, str) or not isinstance(target_code, str):
+        return jsonify({'error': 'Source and target languages are required'}), 400
+    source_language = LANG_NAMES.get(source_code, source_code).strip()
+    target_language = LANG_NAMES.get(target_code, target_code).strip()
+    if not source_language or not target_language:
+        return jsonify({'error': 'Source and target languages are required'}), 400
+
+    entities = '\n'.join(
+        line.strip()
+        for line in data['glossary'].splitlines()
+        if line.strip() and not line.lstrip().startswith('#')
+    )
+    if not entities:
+        return jsonify({'error': 'Add at least one glossary entry first'}), 400
+
+    return jsonify({
+        'prompt': _render_glossary_verification_prompt(
+            source_language,
+            target_language,
+            entities,
+        ),
+    })
+
+
+def _render_glossary_verification_prompt(
+    source_language: str,
+    target_language: str,
+    entities: str,
+) -> str:
+    return prompts.render(
+        'manual/glossary_verification',
+        source_language=source_language,
+        target_language=target_language,
+        entities=entities,
+    )
+
+
+@app.route('/frontier-providers', methods=['GET'])
+def get_frontier_providers():
+    response = jsonify({'providers': provider_catalog()})
+    response.headers['Cache-Control'] = 'no-store'
+    return response
+
+
+@app.route('/verify-glossary-frontier', methods=['POST'])
+def verify_glossary_with_frontier():
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({'error': 'Verification request is required'}), 400
+
+    glossary = data.get('glossary')
+    source_code = data.get('sourceLanguage')
+    target_code = data.get('targetLanguage')
+    provider = data.get('provider')
+    submitted_key = data.get('apiKey')
+    if not isinstance(glossary, str) or not glossary.strip():
+        return jsonify({'error': 'Add at least one glossary entry first'}), 400
+    if not isinstance(source_code, str) or not isinstance(target_code, str):
+        return jsonify({'error': 'Source and target languages are required'}), 400
+    if not isinstance(provider, str):
+        return jsonify({'error': 'Choose a frontier provider in Settings'}), 400
+    if submitted_key is not None and not isinstance(submitted_key, str):
+        return jsonify({'error': 'API key must be text'}), 400
+
+    source_language = LANG_NAMES.get(source_code, source_code).strip()
+    target_language = LANG_NAMES.get(target_code, target_code).strip()
+    if not source_language or not target_language:
+        return jsonify({'error': 'Source and target languages are required'}), 400
+    entities = '\n'.join(
+        line.strip()
+        for line in glossary.splitlines()
+        if line.strip() and not line.lstrip().startswith('#')
+    )
+    prompt = _render_glossary_verification_prompt(
+        source_language,
+        target_language,
+        entities,
+    )
+    try:
+        result = verify_glossary(
+            provider,
+            prompt,
+            glossary,
+            submitted_key,
+        )
+    except FrontierGlossaryError as error:
+        return jsonify({'error': str(error)}), error.status_code
+    except Exception:
+        logger.app_logger.error(
+            'Unexpected frontier glossary verification error\n'
+            + traceback.format_exc()
+        )
+        return jsonify({'error': 'Frontier verification failed unexpectedly'}), 502
+
+    response = jsonify({
+        'glossary': result.glossary,
+        'provider': result.provider,
+        'provider_label': result.provider_label,
+        'model': result.model,
+        'changes': result.changes,
+        'searched': result.searched,
+    })
+    response.headers['Cache-Control'] = 'no-store'
+    return response
+
 
 @app.route('/models', methods=['GET'])
 @with_error_handling
@@ -2592,6 +2903,584 @@ def get_translation(translation_id):
         }
         return jsonify(data)
 
+
+def _json_list(value) -> List:
+    if not value:
+        return []
+    try:
+        parsed = json.loads(value)
+    except (TypeError, ValueError):
+        return []
+    return parsed if isinstance(parsed, list) else []
+
+
+def _translated_chapters_from_chunks(
+    final_chunks: List[str], chunk_chapter_map: List[int],
+) -> List[str]:
+    """Rebuild chapter text from the same aligned map Stage 1 created."""
+    if not final_chunks:
+        return []
+    chapter_map = (
+        chunk_chapter_map
+        if len(chunk_chapter_map) == len(final_chunks)
+        else [0] * len(final_chunks)
+    )
+    chapters: List[str] = []
+    buffer: List[str] = []
+    current_chapter = chapter_map[0] if chapter_map else 0
+    for chunk, chapter_index in zip(final_chunks, chapter_map):
+        if chapter_index != current_chapter:
+            chapters.append('\n\n'.join(buffer))
+            buffer = []
+            current_chapter = chapter_index
+        buffer.append(chunk)
+    chapters.append('\n\n'.join(buffer))
+    return chapters
+
+
+def _evaluation_signals_by_chunk(conn, translation_id: int) -> Dict[int, List[Dict]]:
+    """Extract only quality findings that identify an exact aligned chunk."""
+    signals: Dict[int, List[Dict]] = {}
+
+    def add(chunk_number, test, label, detail=None):
+        try:
+            index = int(chunk_number) - 1
+        except (TypeError, ValueError):
+            return
+        if index < 0:
+            return
+        item = {'test': test, 'label': label}
+        if detail is not None:
+            item['detail'] = detail
+        signals.setdefault(index, []).append(item)
+
+    rows = conn.execute(
+        '''SELECT test_name, details FROM evaluation_results
+           WHERE translation_id = ? AND flagged = 1''',
+        (translation_id,),
+    ).fetchall()
+    for row in rows:
+        try:
+            details = json.loads(row['details']) if row['details'] else {}
+        except (TypeError, ValueError):
+            details = {}
+        test = row['test_name']
+        if test == 'chunk_coverage':
+            for chunk_number in details.get('empty_final_chunks') or []:
+                add(chunk_number, test, 'Final translation is empty')
+        elif test == 'labse_alignment':
+            for finding in details.get('drift_flags') or []:
+                add(
+                    finding.get('chunk'), test, 'Semantic-alignment outlier',
+                    {'similarity': finding.get('similarity')},
+                )
+        elif test == 'language_id':
+            for finding in details.get('wrong_language_segments') or []:
+                add(
+                    finding.get('chunk'), test, 'Wrong target language detected',
+                    {
+                        'detected': finding.get('detected'),
+                        'confidence': finding.get('confidence'),
+                    },
+                )
+    return signals
+
+
+def _review_chunks_payload(conn, translation_row) -> Dict:
+    original_chunks = _json_list(translation_row['original_chunks'])
+    draft_chunks = _json_list(translation_row['draft_chunks'])
+    final_chunks = _json_list(translation_row['final_chunks'])
+    if not final_chunks and translation_row['translated_text']:
+        final_chunks = (translation_row['translated_text'] or '').split('\n\n')
+
+    review_rows = {
+        row['chunk_index']: row
+        for row in conn.execute(
+            'SELECT * FROM chunk_reviews WHERE translation_id = ?',
+            (translation_row['id'],),
+        ).fetchall()
+    }
+    evaluation_signals = _evaluation_signals_by_chunk(
+        conn, translation_row['id'],
+    )
+    term_rows = conn.execute(
+        '''SELECT source_term, target_term, enforcement_mode
+           FROM translation_terms WHERE translation_id = ?''',
+        (translation_row['id'],),
+    ).fetchall()
+    terminology = TerminologyManager([
+        GlossaryTerm(
+            source=row['source_term'],
+            target=row['target_term'],
+            mode=row['enforcement_mode'],
+        )
+        for row in term_rows
+    ])
+
+    chunks = []
+    for index, source in enumerate(original_chunks):
+        draft = draft_chunks[index] if index < len(draft_chunks) else ''
+        final = final_chunks[index] if index < len(final_chunks) else ''
+        stored = review_rows.get(index)
+        try:
+            details = (
+                json.loads(stored['review_details'])
+                if stored and stored['review_details'] else {}
+            )
+        except (TypeError, ValueError):
+            details = {}
+        try:
+            alternatives = (
+                json.loads(stored['alternatives'])
+                if stored and stored['alternatives'] else None
+            )
+        except (TypeError, ValueError):
+            alternatives = None
+
+        issues = details.get('issues') if isinstance(details.get('issues'), list) else []
+        signals = list(evaluation_signals.get(index, []))
+        warning = stored['warning'] if stored else None
+        evidence_available = details.get('evidence_available')
+        if evidence_available is False:
+            signals.append({
+                'test': 'stage2_review',
+                'label': 'Review evidence is unavailable for this cached result',
+            })
+        if source.strip() and not final.strip():
+            signals.append({
+                'test': 'chunk_coverage',
+                'label': 'Final translation is empty',
+            })
+        if (
+            source.strip()
+            and translation_row['source_lang'] != translation_row['target_lang']
+            and final.strip() == source.strip()
+        ):
+            signals.append({
+                'test': 'untranslated',
+                'label': 'Final text is identical to the source',
+            })
+        for violation in terminology.exact_violations(source, final):
+            signals.append({
+                'test': 'terminology',
+                'label': 'Required glossary rendering is missing',
+                'detail': violation,
+            })
+        verified = details.get('verified')
+        if isinstance(verified, dict) and not verified.get('accepted'):
+            signals.append({
+                'test': 'stage2_verifier',
+                'label': 'Refinement patch was rejected by the verifier',
+                'detail': verified,
+            })
+
+        problematic = bool(issues or signals or warning)
+        review_status = (
+            stored['review_status'] if stored
+            else ('open' if problematic else 'not_needed')
+        )
+        chunks.append({
+            'index': index,
+            'number': index + 1,
+            'source': source,
+            'draft': draft,
+            'final': final,
+            'issues': issues,
+            'signals': signals,
+            'warning': warning,
+            'evidence_available': evidence_available,
+            'problematic': problematic,
+            'review_status': review_status,
+            'resolution_kind': stored['resolution_kind'] if stored else None,
+            'selected_candidate': stored['selected_candidate'] if stored else None,
+            'revision': stored['revision'] if stored else 0,
+            'alternatives': alternatives,
+        })
+
+    return {
+        'translation_id': translation_row['id'],
+        'status': translation_row['status'],
+        'total_chunks': len(chunks),
+        'problematic_count': sum(1 for chunk in chunks if chunk['problematic']),
+        'open_count': sum(
+            1 for chunk in chunks
+            if chunk['problematic'] and chunk['review_status'] != 'resolved'
+        ),
+        'chunks': chunks,
+    }
+
+
+@app.route('/translations/<int:translation_id>/review-chunks', methods=['GET'])
+@with_error_handling
+def get_review_chunks(translation_id):
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.row_factory = sqlite3.Row
+        row = conn.execute(
+            'SELECT * FROM translations WHERE id = ?', (translation_id,),
+        ).fetchone()
+        if not row:
+            return jsonify({'error': 'Translation not found'}), 404
+        if not row['original_chunks'] or not row['draft_chunks']:
+            return jsonify({
+                'error': 'No aligned chunks yet — run Start first',
+            }), 400
+        return jsonify(_review_chunks_payload(conn, row))
+
+
+@app.route(
+    '/translations/<int:translation_id>/review-chunks/<int:chunk_index>',
+    methods=['PATCH'],
+)
+@with_error_handling
+def update_review_chunk(translation_id, chunk_index):
+    """Make one human- or candidate-selected chunk canonical for export."""
+    payload = request.get_json(silent=True) or {}
+    requested_text = payload.get('text')
+    candidate_id = str(payload.get('candidate_id') or '').strip() or None
+    expected_revision = payload.get('expected_revision')
+    if expected_revision is not None:
+        try:
+            expected_revision = int(expected_revision)
+        except (TypeError, ValueError):
+            return jsonify({'error': 'expected_revision must be an integer'}), 400
+    if requested_text is not None and not isinstance(requested_text, str):
+        return jsonify({'error': 'text must be a string'}), 400
+
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.row_factory = sqlite3.Row
+        row = conn.execute(
+            'SELECT * FROM translations WHERE id = ?', (translation_id,),
+        ).fetchone()
+        if not row:
+            return jsonify({'error': 'Translation not found'}), 404
+        if is_run_active(translation_id):
+            return jsonify({
+                'error': 'This translation is still running. Wait for it to finish before editing.',
+            }), 409
+        original_chunks = _json_list(row['original_chunks'])
+        final_chunks = _json_list(row['final_chunks'])
+        if not final_chunks:
+            return jsonify({
+                'error': 'Run Continue first — there is no final translation to edit',
+            }), 400
+        if chunk_index < 0 or chunk_index >= len(original_chunks):
+            return jsonify({'error': 'Chunk index is out of range'}), 404
+        if len(final_chunks) < len(original_chunks):
+            final_chunks.extend([''] * (len(original_chunks) - len(final_chunks)))
+        review_state = conn.execute(
+            '''SELECT revision FROM chunk_reviews
+               WHERE translation_id = ? AND chunk_index = ?''',
+            (translation_id, chunk_index),
+        ).fetchone()
+        current_revision = review_state['revision'] if review_state else 0
+        if (
+            expected_revision is not None
+            and expected_revision != current_revision
+        ):
+            return jsonify({
+                'error': 'This chunk changed in another window. Reload it before saving.',
+                'current_revision': current_revision,
+            }), 409
+
+        resolution_kind = 'manual'
+        if candidate_id:
+            review = conn.execute(
+                '''SELECT alternatives FROM chunk_reviews
+                   WHERE translation_id = ? AND chunk_index = ?''',
+                (translation_id, chunk_index),
+            ).fetchone()
+            alternatives = {}
+            if review and review['alternatives']:
+                try:
+                    alternatives = json.loads(review['alternatives'])
+                except (TypeError, ValueError):
+                    alternatives = {}
+            selected = next(
+                (
+                    option for option in alternatives.get('options') or []
+                    if option.get('id') == candidate_id
+                ),
+                None,
+            )
+            if not selected:
+                return jsonify({'error': 'Candidate not found for this chunk'}), 404
+            requested_text = selected.get('text')
+            resolution_kind = (
+                'kept_current' if selected.get('kind') == 'current'
+                else 'candidate'
+            )
+
+        if requested_text is None:
+            return jsonify({'error': 'Provide text or candidate_id'}), 400
+        requested_text = requested_text.strip()
+        if original_chunks[chunk_index].strip() and not requested_text:
+            return jsonify({'error': 'A non-empty source chunk cannot have an empty final translation'}), 400
+
+        final_chunks[chunk_index] = requested_text
+        translated_text = '\n\n'.join(final_chunks)
+        translated_chapters = row['translated_chapters']
+        if row['source_format'] == 'epub':
+            chapter_map = _json_list(row['chunk_chapter_map'])
+            translated_chapters = json.dumps(
+                _translated_chapters_from_chunks(final_chunks, chapter_map),
+                ensure_ascii=False,
+            )
+
+        stage2_tests = sorted(STAGE2_TESTS)
+        placeholders = ','.join('?' for _ in stage2_tests)
+        invalidated = conn.execute(
+            f'''SELECT COUNT(*) FROM evaluation_results
+                WHERE translation_id = ? AND test_name IN ({placeholders})''',
+            (translation_id, *stage2_tests),
+        ).fetchone()[0]
+        conn.execute(
+            '''UPDATE translations
+               SET final_chunks = ?, translated_text = ?,
+                   translated_chapters = ?, updated_at = CURRENT_TIMESTAMP
+               WHERE id = ?''',
+            (
+                json.dumps(final_chunks, ensure_ascii=False),
+                translated_text,
+                translated_chapters,
+                translation_id,
+            ),
+        )
+        conn.execute(
+            '''
+            INSERT INTO chunk_reviews (
+                translation_id, chunk_index, review_status, resolution_kind,
+                selected_candidate, revision, updated_at
+            ) VALUES (?, ?, 'resolved', ?, ?, 1, CURRENT_TIMESTAMP)
+            ON CONFLICT (translation_id, chunk_index) DO UPDATE SET
+                review_status = 'resolved',
+                resolution_kind = excluded.resolution_kind,
+                selected_candidate = excluded.selected_candidate,
+                revision = chunk_reviews.revision + 1,
+                updated_at = CURRENT_TIMESTAMP
+            ''',
+            (translation_id, chunk_index, resolution_kind, candidate_id),
+        )
+        # Stage 2 quality results were computed over the old canonical final.
+        # Draft-only Stage 1 checks remain valid.
+        conn.execute(
+            f'''DELETE FROM evaluation_results
+                WHERE translation_id = ? AND test_name IN ({placeholders})''',
+            (translation_id, *stage2_tests),
+        )
+
+        term_rows = conn.execute(
+            '''SELECT source_term, target_term, enforcement_mode
+               FROM translation_terms WHERE translation_id = ?''',
+            (translation_id,),
+        ).fetchall()
+        terminology = TerminologyManager([
+            GlossaryTerm(
+                source=term['source_term'],
+                target=term['target_term'],
+                mode=term['enforcement_mode'],
+            )
+            for term in term_rows
+        ])
+        violations = terminology.exact_violations(
+            original_chunks[chunk_index], requested_text,
+        )
+
+    logger.translation_logger.info(
+        'Review desk saved chunk %s for translation %s (%s); invalidated %s quality result(s)',
+        chunk_index + 1, translation_id, resolution_kind, invalidated,
+    )
+    return jsonify({
+        'status': 'saved',
+        'translation_id': translation_id,
+        'chunk_index': chunk_index,
+        'text': requested_text,
+        'resolution_kind': resolution_kind,
+        'invalidated_quality_results': invalidated,
+        'terminology_violations': violations,
+        'revision': current_revision + 1,
+    })
+
+
+@app.route(
+    '/translations/<int:translation_id>/review-chunks/<int:chunk_index>/alternatives',
+    methods=['POST'],
+)
+@with_error_handling
+def generate_review_chunk_alternatives(translation_id, chunk_index):
+    """Generate alternatives for this chunk only, never for the whole book."""
+    payload = request.get_json(silent=True) or {}
+    try:
+        count = int(payload.get('count', 2))
+    except (TypeError, ValueError):
+        return jsonify({'error': 'count must be 2 or 3'}), 400
+    if count not in (2, 3):
+        return jsonify({'error': 'count must be 2 or 3'}), 400
+
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.row_factory = sqlite3.Row
+        row = conn.execute(
+            'SELECT * FROM translations WHERE id = ?', (translation_id,),
+        ).fetchone()
+        if not row:
+            return jsonify({'error': 'Translation not found'}), 404
+        original_chunks = _json_list(row['original_chunks'])
+        draft_chunks = _json_list(row['draft_chunks'])
+        final_chunks = _json_list(row['final_chunks'])
+        if not final_chunks:
+            return jsonify({
+                'error': 'Run Continue first — alternatives compare against the final translation',
+            }), 400
+        if chunk_index < 0 or chunk_index >= len(original_chunks):
+            return jsonify({'error': 'Chunk index is out of range'}), 404
+        term_rows = conn.execute(
+            '''SELECT source_term, target_term, enforcement_mode
+               FROM translation_terms WHERE translation_id = ?''',
+            (translation_id,),
+        ).fetchall()
+
+    candidate_model = str(payload.get('model') or row['model']).strip()
+    judge_model = str(payload.get('judge_model') or '').strip()
+    if not candidate_model:
+        return jsonify({'error': 'A translation model is required'}), 400
+    if judge_model and judge_model.casefold() == candidate_model.casefold():
+        return jsonify({
+            'error': 'The judge must be independent from the model generating the candidates',
+        }), 400
+    if judge_model and is_translategemma(judge_model):
+        return jsonify({
+            'error': 'TranslateGemma is translation-only and cannot judge candidates',
+        }), 400
+
+    terminology = TerminologyManager([
+        GlossaryTerm(
+            source=term['source_term'],
+            target=term['target_term'],
+            mode=term['enforcement_mode'],
+        )
+        for term in term_rows
+    ])
+    source = original_chunks[chunk_index]
+    current = final_chunks[chunk_index] if chunk_index < len(final_chunks) else ''
+    draft = draft_chunks[chunk_index] if chunk_index < len(draft_chunks) else ''
+    previous = final_chunks[chunk_index - 1] if chunk_index > 0 else ''
+    translator = BookTranslator(model_name=candidate_model)
+    translator.terminology = terminology
+    context = terminology.prompt_context(source)
+    temperatures = (
+        [0.25, 0.35, 0.45, 0.55, 0.65, 0.75]
+        if is_translategemma(candidate_model)
+        else [0.45, 0.60, 0.75, 0.90, 1.00, 1.10]
+    )
+    generated: List[str] = []
+    seen = {text.strip() for text in (current, draft) if text and text.strip()}
+    call_errors: List[str] = []
+    for temperature in temperatures:
+        if len(generated) >= count:
+            break
+        candidate, warning = translator.generate_translation_candidate(
+            source,
+            row['source_lang'],
+            row['target_lang'],
+            previous_chunk=previous,
+            genre=row['genre'],
+            terminology_context=context,
+            temperature=temperature,
+        )
+        if warning:
+            call_errors.append(warning)
+            continue
+        candidate, _ = terminology.enforce_exact_source_forms(candidate or '')
+        candidate = candidate.strip()
+        if not candidate or candidate in seen:
+            continue
+        seen.add(candidate)
+        generated.append(candidate)
+
+    if not generated:
+        return jsonify({
+            'error': 'The translation model did not produce a distinct candidate',
+            'details': call_errors[:3],
+        }), 502
+
+    generated_at = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
+    options = [{
+        'id': 'current',
+        'kind': 'current',
+        'label': 'Current final',
+        'text': current,
+        'generation_model': row['model'],
+        'created_at': generated_at,
+    }]
+    options.extend({
+        'id': f'candidate-{index}',
+        'kind': 'generated',
+        'label': f'Candidate {index}',
+        'text': text,
+        'generation_model': candidate_model,
+        'created_at': generated_at,
+    } for index, text in enumerate(generated, 1))
+
+    recommended_id = judge_reason = judge_error = None
+    if judge_model:
+        judge = BookTranslator(model_name=judge_model)
+        best, judge_reason, judge_error = judge.judge_translation_candidates(
+            source,
+            [option['text'] for option in options],
+            row['source_lang'],
+            row['target_lang'],
+        )
+        if best is not None:
+            recommended_id = options[best]['id']
+
+    result = {
+        'translation_id': translation_id,
+        'chunk_index': chunk_index,
+        'requested_count': count,
+        'generated_count': len(generated),
+        'generated_model': candidate_model,
+        'judge_model': judge_model or None,
+        'recommended_id': recommended_id,
+        'judge_reason': judge_reason,
+        'judge_error': judge_error,
+        'warning': (
+            f'Only {len(generated)} distinct candidate(s) were produced.'
+            if len(generated) < count else None
+        ),
+        'options': options,
+    }
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.execute(
+            '''
+            INSERT INTO chunk_reviews (
+                translation_id, chunk_index, alternatives, judge_model,
+                review_status, revision, updated_at
+            ) VALUES (?, ?, ?, ?, 'open', 1, CURRENT_TIMESTAMP)
+            ON CONFLICT (translation_id, chunk_index) DO UPDATE SET
+                alternatives = excluded.alternatives,
+                judge_model = excluded.judge_model,
+                revision = chunk_reviews.revision + 1,
+                updated_at = CURRENT_TIMESTAMP
+            ''',
+            (
+                translation_id,
+                chunk_index,
+                json.dumps(result, ensure_ascii=False),
+                judge_model or None,
+            ),
+        )
+        result['revision'] = conn.execute(
+            '''SELECT revision FROM chunk_reviews
+               WHERE translation_id = ? AND chunk_index = ?''',
+            (translation_id, chunk_index),
+        ).fetchone()[0]
+    logger.translation_logger.info(
+        'Review desk generated %s/%s alternative(s) for translation %s chunk %s with %s; judge: %s',
+        len(generated), count, translation_id, chunk_index + 1,
+        candidate_model, judge_model or 'manual choice',
+    )
+    return jsonify(result)
+
+
 @app.route('/translations/<int:translation_id>', methods=['DELETE'])
 @with_error_handling
 def delete_translation(translation_id):
@@ -2606,6 +3495,7 @@ def delete_translation(translation_id):
         # Delete children explicitly: SQLite foreign keys are not enabled for
         # every connection, so relying on the schema alone leaves orphan rows.
         conn.execute('DELETE FROM chunks WHERE translation_id = ?', (translation_id,))
+        conn.execute('DELETE FROM chunk_reviews WHERE translation_id = ?', (translation_id,))
         conn.execute('DELETE FROM translation_terms WHERE translation_id = ?', (translation_id,))
         conn.execute('DELETE FROM evaluation_results WHERE translation_id = ?', (translation_id,))
         conn.execute('DELETE FROM translations WHERE id = ?', (translation_id,))
@@ -3057,6 +3947,10 @@ LOG_STREAM_BACKLOG_BYTES = 256 * 1024
 # A comment frame often enough that an idle stream is not mistaken for a dead
 # one, by the browser or by the person watching it.
 LOG_STREAM_KEEPALIVE_SECONDS = 15
+# The Log page receives the same banner as the Terminal.  Keep its artwork in
+# banner.py: launch.py and this direct entry point already rely on that module
+# being the single source of truth.
+LOG_CONSOLE_BANNER = f'{TERMINAL_LOGO}\n\n{SUBTITLE}'
 # "2026-07-27 07:42:27,388 - translation_logger - INFO - Stage 2 …". Lines that
 # do not match are continuations — a logged prompt is many lines long — and are
 # passed through attached to whatever came before them.
@@ -3232,6 +4126,11 @@ def stream_logs():
             for source, filename in LOG_STREAM_SOURCES.items()
         ]
         try:
+            # This is a view marker, not a line written into any file. It must
+            # precede the backlog so a newly opened Log page starts with the
+            # Tolmach identity even when it is following an existing run.
+            if not since:
+                yield f"data: {json.dumps({'source': 'console', 'level': 'BANNER', 'time': '', 'message': LOG_CONSOLE_BANNER}, ensure_ascii=False)}\n\n"
             history = [entry for tail in tails for entry in tail.backlog(backlog_lines)]
             # The timestamp format sorts chronologically as text, which is what
             # lets three separately written files be interleaved correctly.

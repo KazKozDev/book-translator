@@ -357,8 +357,26 @@
         .glossary-group textarea::placeholder { color: var(--faint); opacity: .55; }
         .form-hint { margin-top: 12px; color: var(--faint); font-size: .74rem; line-height: 1.6; }
         .form-hint code { padding: 1px 5px; border-radius: 4px; background: #f3f4f6; color: var(--muted); font-size: .95em; }
-        .glossary-status { flex: none; margin: 0; padding: 0 18px 18px; color: var(--muted); font-size: .74rem; line-height: 1.6; min-height: 1.1em; }
+        .glossary-status { display: flex; flex: none; align-items: baseline; flex-wrap: wrap; gap: 5px 12px; margin: 0; padding: 0 18px 18px; color: var(--muted); font-size: .74rem; line-height: 1.6; min-height: 1.1em; }
         .glossary-status.has-errors { color: #b91c1c; }
+        .glossary-prompt-action { padding: 0; border: none; border-bottom: 1px solid transparent; background: transparent; color: var(--accent); font: inherit; font-weight: 600; cursor: pointer; }
+        .glossary-prompt-action:hover { border-bottom-color: currentColor; color: var(--accent-dark); }
+        .glossary-prompt-action:disabled { color: var(--faint); cursor: wait; }
+        .frontier-review { flex:none; margin:0 18px 18px; padding:14px 0 0; border-top:1px solid var(--line); }
+        .frontier-review[hidden] { display:none; }
+        .frontier-review-head { display:flex; align-items:baseline; justify-content:space-between; gap:12px; }
+        .frontier-review-head strong { color:var(--ink); font-size:.74rem; letter-spacing:.08em; text-transform:uppercase; }
+        .frontier-review-meta { color:var(--faint); font-size:.68rem; text-align:right; }
+        .frontier-review-summary { margin:8px 0 10px; color:var(--muted); font-size:.74rem; line-height:1.5; }
+        .frontier-change-list { max-height:190px; overflow-y:auto; border-top:1px solid var(--line-soft); scrollbar-width:thin; }
+        .frontier-change { padding:10px 0; border-bottom:1px solid var(--line-soft); }
+        .frontier-change-source { color:var(--ink); font-size:.74rem; font-weight:700; }
+        .frontier-change-value { margin-top:4px; color:var(--muted); font-family:ui-monospace,"SFMono-Regular","SF Mono",Menlo,Monaco,Consolas,"Liberation Mono",monospace; font-size:.68rem; line-height:1.45; overflow-wrap:anywhere; }
+        .frontier-change-value.is-after { color:var(--accent-dark); }
+        .frontier-review-actions { display:flex; align-items:center; flex-wrap:wrap; gap:14px; margin-top:12px; }
+        .frontier-review-actions .glossary-prompt-action { font-size:.74rem; }
+        .copy-toast { position: fixed; z-index: 50; right: 24px; bottom: 24px; max-width: min(420px, calc(100vw - 32px)); padding: 12px 16px; border: 1px solid var(--line); border-radius: 8px; background: var(--ink); color: var(--paper); font-size: .8rem; line-height: 1.45; box-shadow: 0 12px 30px rgba(0, 0, 0, .16); }
+        .copy-toast[hidden] { display: none; }
         .glossary-guide { display: flex; flex-direction: column; border-left: 1px solid var(--line); }
         .glossary-guide .eyebrow { margin: -10px 0 10px; }
         .glossary-guide h2 { margin: 4px 0 0; color: var(--ink); font-family: inherit; font-size: 1.2rem; font-weight: 700; letter-spacing: -.01em; }
@@ -412,9 +430,11 @@
         .text-panel-content.is-placeholder { color: var(--faint); opacity: .55; }
 
         .deck-bar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; padding: 12px 2px 0; }
-        .footer-note { margin-top: 52px; padding-top: 22px; border-top: 1px solid var(--line); color: var(--faint); font-size: .78rem; line-height: 1.6; }
-        .footer-note strong { display: block; margin-bottom: 10px; color: var(--muted); }
+        .footer-note { margin-top: 52px; padding-top: 22px; border-top: 1px solid var(--line); color: var(--faint); font-size: .70rem; line-height: 1.6; }
+        .footer-note strong { display: block; margin-bottom: 10px; color: inherit; font-weight: 400; }
         .footer-note p + p { margin-top: 0; }
+        .footer-note a { color: var(--muted); text-decoration: none; }
+        .footer-note a:hover { text-decoration: underline; }
         .deck-status-group { display: flex; align-items: center; gap: 12px; }
         .deck-status { color: var(--muted); font-size: .78rem; }
         .deck-status-group .header-action { font-size: .78rem; font-weight: 600; }
@@ -423,6 +443,91 @@
         .btn-export:hover { border-color: #d1d5db; background: #f9fafb; box-shadow: none; transform: none; }
         .btn-export:disabled { border-color: var(--line-soft); background: transparent; color: var(--faint); cursor: not-allowed; }
         .btn-export:disabled:hover { border-color: var(--line-soft); background: transparent; }
+
+        /* Review desk: one compact navigator beside a text-first editor.
+           It spans the page below the document deck so hundreds of chunks can
+           be reviewed without squeezing the existing three-panel workspace. */
+        .review-desk { margin-top: 34px; padding-top: 24px; border-top: 1px solid var(--line); }
+        .review-desk[hidden], .review-desk-body[hidden], .review-alternatives[hidden] { display: none; }
+        .review-desk-header { display: flex; align-items: flex-end; justify-content: space-between; gap: 22px; margin-bottom: 14px; }
+        .review-heading { min-width: 170px; }
+        .review-heading h2 { margin: 5px 0 0; color: var(--ink); font-size: 1.15rem; font-weight: 700; letter-spacing: -.01em; }
+        .review-summary { flex: 1 1 auto; margin: 0; color: var(--muted); font-size: .78rem; }
+        .review-header-controls { display: flex; align-items: center; justify-content: flex-end; gap: 18px; }
+        .review-filter { display: flex; gap: 12px; margin: 0; padding: 0; border: 0; }
+        .review-filter button { padding: 4px 0; border: none; border-bottom: 1px solid transparent; background: transparent; color: var(--muted); font: inherit; font-size: .78rem; cursor: pointer; }
+        .review-filter button:hover { color: var(--ink); }
+        .review-filter button[aria-pressed="true"] { border-bottom-color: var(--accent); color: var(--ink); font-weight: 600; }
+        .review-collapse { color: var(--muted); font-size: .78rem; font-weight: 500; letter-spacing: 0; }
+
+        .review-workbench { display: grid; grid-template-columns: 272px minmax(0, 1fr); min-height: 560px; border: 1px solid var(--line); border-radius: 10px; background: var(--paper); overflow: hidden; }
+        .review-nav { min-width: 0; border-right: 1px solid var(--line); background: #f1f2f4; }
+        .review-nav-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 14px 16px; border-bottom: 1px solid var(--line); }
+        .review-nav-head strong { color: var(--ink); font-size: .74rem; letter-spacing: .08em; text-transform: uppercase; }
+        .review-nav-head span { color: var(--faint); font-size: .7rem; }
+        .review-chunk-list { max-height: 680px; overflow-y: auto; scrollbar-color: #dfe1e5 transparent; scrollbar-width: thin; }
+        .review-chunk-list::-webkit-scrollbar { width: 5px; }
+        .review-chunk-list::-webkit-scrollbar-thumb { background: #dfe1e5; border-radius: 3px; }
+        .review-chunk-row { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto; width: 100%; gap: 4px 10px; padding: 12px 14px 12px 17px; border: none; border-bottom: 1px solid var(--line-soft); background: transparent; color: var(--ink); font: inherit; text-align: left; cursor: pointer; }
+        .review-chunk-row::before { content: ''; position: absolute; inset: 0 auto 0 0; width: 3px; background: transparent; }
+        .review-chunk-row:hover { background: rgba(91, 124, 153, .06); }
+        .review-chunk-row[aria-selected="true"] { background: var(--paper); }
+        .review-chunk-row[aria-selected="true"]::before { background: var(--accent); }
+        .review-chunk-name { overflow: hidden; font-size: .82rem; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+        .review-chunk-reason { grid-column: 1; overflow: hidden; color: var(--muted); font-size: .72rem; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
+        .review-chunk-state { grid-column: 2; grid-row: 1 / span 2; align-self: center; color: #a16207; font-size: .68rem; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
+        .review-chunk-state.is-resolved { color: var(--accent); }
+        .review-empty { padding: 24px 16px; color: var(--muted); font-size: .78rem; line-height: 1.55; }
+
+        .review-editor { min-width: 0; background: var(--paper); }
+        .review-editor-head { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; min-height: 46px; padding: 14px 20px; border-bottom: 1px solid var(--line); }
+        .review-editor-head .eyebrow { color: var(--ink); }
+        .review-status { min-height: 1em; color: var(--muted); font-size: .74rem; text-align: right; }
+        .review-status.is-dirty { color: #a16207; font-weight: 600; }
+        .review-status.is-error { color: #b91c1c; font-weight: 600; }
+        .review-status.is-saved { color: var(--accent); font-weight: 600; }
+        .review-editor-content { padding: 0 20px 24px; }
+        .review-readonly-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); margin: 0 -20px; border-bottom: 1px solid var(--line); }
+        .review-readonly { min-width: 0; background: #f8f9fa; }
+        .review-readonly:first-child { background: #f1f2f4; border-right: 1px solid var(--line); }
+        .review-section-label { display: block; margin: 0; padding: 12px 18px; border-bottom: 1px solid var(--line); color: var(--faint); font-size: .7rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+        .review-readonly-text { min-height: 150px; max-height: 280px; padding: 16px 18px; overflow-y: auto; color: var(--muted); font-size: .83rem; line-height: 1.7; white-space: pre-wrap; }
+        .review-readonly:first-child .review-readonly-text { color: #4b5563; }
+        .review-final-section { padding-top: 20px; }
+        .review-signals { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); margin-bottom: 18px; border-top: 1px solid var(--line); }
+        .review-signals:empty { display: none; }
+        .review-signal { min-width: 0; padding: 12px 14px 12px 0; border-bottom: 1px solid var(--line-soft); color: var(--muted); font-size: .76rem; line-height: 1.5; }
+        .review-signal:nth-child(even) { padding-left: 14px; border-left: 1px solid var(--line-soft); }
+        .review-signal strong { display: block; margin-bottom: 4px; color: var(--ink); font-size: .7rem; letter-spacing: .05em; text-transform: uppercase; }
+        .review-signal.is-major strong, .review-signal.is-warning strong { color: #b91c1c; }
+        .review-signal-detail { display: block; margin-top: 3px; color: var(--ink); overflow-wrap: anywhere; }
+        .review-final-label { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 9px; color: var(--ink); font-size: .74rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+        .review-final-label span { color: var(--faint); font-size: .68rem; font-weight: 500; letter-spacing: 0; text-transform: none; }
+        .review-final-text { display: block; width: 100%; min-height: 210px; padding: 15px 16px; border: 1px solid var(--line); border-radius: 6px; background: var(--paper); color: var(--ink); font: inherit; font-size: .87rem; line-height: 1.7; resize: vertical; }
+        .review-final-text:focus { outline: 2px solid rgba(91, 124, 153, .22); outline-offset: 1px; border-color: var(--accent); }
+        .review-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 9px; margin-top: 12px; }
+        .review-action { min-height: 34px; padding: 7px 12px; border: 1px solid var(--line); border-radius: 6px; background: var(--paper); color: var(--ink); font: inherit; font-size: .78rem; font-weight: 600; cursor: pointer; }
+        .review-action:hover { border-color: var(--accent); color: var(--accent-dark); }
+        .review-action.is-primary { border-color: var(--accent); background: var(--accent); color: #fff; }
+        .review-action.is-primary:hover { border-color: var(--accent-dark); background: var(--accent-dark); color: #fff; }
+        .review-action:disabled { border-color: var(--line-soft); background: transparent; color: var(--faint); cursor: not-allowed; }
+        .review-count { min-height: 34px; padding: 6px 24px 6px 8px; border: 1px solid var(--line); border-radius: 6px; background-color: var(--paper); color: var(--ink); font: inherit; font-size: .78rem; cursor: pointer; }
+        .review-action-status { flex: 1 1 210px; min-height: 1em; color: var(--muted); font-size: .72rem; text-align: right; }
+        .review-action-status.is-error { color: #b91c1c; }
+
+        .review-alternatives { margin-top: 24px; padding-top: 18px; border-top: 1px solid var(--line); }
+        .review-alternatives-head { display: flex; align-items: baseline; justify-content: space-between; gap: 18px; margin-bottom: 10px; }
+        .review-alternatives-head h3 { margin: 0; color: var(--ink); font-size: .78rem; letter-spacing: .08em; text-transform: uppercase; }
+        .review-judge-state { color: var(--muted); font-size: .72rem; text-align: right; }
+        .review-judge-state.is-error { color: #b91c1c; }
+        .review-option { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px 18px; padding: 14px 0; border-bottom: 1px solid var(--line-soft); }
+        .review-option:last-child { border-bottom: none; }
+        .review-option-title { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px; color: var(--ink); font-size: .78rem; font-weight: 700; }
+        .review-recommendation { color: var(--accent); font-size: .68rem; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }
+        .review-option-text { grid-column: 1; color: var(--ink); font-size: .83rem; line-height: 1.65; white-space: pre-wrap; }
+        .review-option .review-action { grid-column: 2; grid-row: 1 / span 2; align-self: start; }
+        .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+        .review-desk button:focus-visible, .review-desk select:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 
         /* Job rail */
         .eyebrow { color: var(--faint); font-size: .74rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
@@ -446,7 +551,7 @@
         .rail-value.value-wrap { flex: 1 1 auto; overflow: visible; min-width: 0; max-width: none; white-space: normal; text-overflow: clip; }
         .rail-row:has(> .value-wrap) .rail-label { flex: none; }
 
-        /* Tests panel: one row per test with its own Run button, result note below.
+        /* Tests panel: one row per test with its own arrow action, result note below.
            test-run-btn reuses .header-action (the Start/Continue look) so it doesn't
            introduce a second button style. */
         .test-row { padding: 11px 0; border-bottom: 1px solid var(--line-soft); }
@@ -493,6 +598,7 @@
         .status-error { background: #fef2f2; color: #b91c1c; }
         .btn-small { padding: 6px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--paper); color: var(--ink); font-size: .76rem; }
         .btn-small:hover { border-color: #d1d5db; background: #f9fafb; }
+        .btn-small:disabled { border-color: var(--line-soft); background: transparent; color: var(--faint); cursor: not-allowed; }
         .btn-delete { border-color: var(--line); background: transparent; color: var(--muted); }
         .btn-delete:hover { border-color: #fca5a5; background: #fef2f2; color: #b91c1c; }
 
@@ -506,9 +612,15 @@
             .glossary-row { width: 100%; }
             .more-panel { flex: 1 1 100%; width: 100%; }
             .glossary-mark { display: none; }
+            .review-workbench { grid-template-columns: 248px minmax(0, 1fr); }
         }
         @media (max-width: 820px) {
             .toolbar .form-group { flex: 1 1 160px; }
+            .review-desk-header { align-items: flex-start; flex-wrap: wrap; }
+            .review-summary { order: 3; flex-basis: 100%; }
+            .review-workbench { grid-template-columns: 1fr; }
+            .review-nav { border-right: none; border-bottom: 1px solid var(--line); }
+            .review-chunk-list { max-height: 228px; }
         }
         @media (max-width: 720px) {
             .glossary-row { display: block; }
@@ -520,6 +632,9 @@
             .text-panel { border-left: none; border-top: 1px solid var(--line); }
             .text-panel:first-child { border-top: none; }
             .text-panel-content { height: 220px; flex: none; }
+            .review-readonly-grid, .review-signals { grid-template-columns: 1fr; }
+            .review-readonly:first-child { border-right: none; border-bottom: 1px solid var(--line); }
+            .review-signal:nth-child(even) { padding-left: 0; border-left: none; }
         }
         @media (max-width: 480px) {
             .container { padding: 0 12px 28px; }
@@ -530,6 +645,16 @@
             .toolbar .form-group, .btn-more { min-width: 0; }
             .glossary-guide { padding: 18px; }
             .guide-mode { grid-template-columns: minmax(82px, .72fr) minmax(0, 1.6fr); gap: 8px; }
+            .review-desk { margin-top: 26px; padding-top: 20px; }
+            .review-heading { min-width: 0; }
+            .review-header-controls { width: 100%; justify-content: space-between; gap: 12px; }
+            .review-workbench { min-height: 0; border-radius: 8px; }
+            .review-editor-head, .review-editor-content { padding-left: 14px; padding-right: 14px; }
+            .review-readonly-grid { margin-left: -14px; margin-right: -14px; }
+            .review-actions { align-items: stretch; }
+            .review-action-status { flex-basis: 100%; text-align: left; }
+            .review-option { grid-template-columns: 1fr; }
+            .review-option .review-action { grid-column: 1; grid-row: auto; justify-self: start; }
         }
 
         /* Dark theme — applied via the .theme-dark class, set by JS from the
@@ -559,9 +684,22 @@
         .theme-dark .status-error { background: rgba(248, 113, 113, .14); color: #f87171; }
         .theme-dark .rail-value.has-violations { color: #f87171; }
         .theme-dark .glossary-status.has-errors { color: #f87171; }
+        .theme-dark .copy-toast { background: #eceef0; color: #17181c; }
         .theme-dark .btn-export:hover, .theme-dark .btn-small:hover { background: #24262c; }
         .theme-dark .btn-delete:hover { background: rgba(248, 113, 113, .1); color: #f87171; border-color: #f87171; }
         .theme-dark .text-panel-content.dragover { background-color: #24262c; }
+        .theme-dark .review-nav, .theme-dark .review-readonly:first-child { background: #1a1b1f; }
+        .theme-dark .review-readonly { background: #1d1f24; }
+        .theme-dark .review-readonly:first-child .review-readonly-text { color: #9195a1; }
+        .theme-dark .review-chunk-row:hover { background: rgba(134, 164, 189, .08); }
+        .theme-dark .review-chunk-state { color: #d5a54d; }
+        .theme-dark .review-status.is-dirty { color: #d5a54d; }
+        .theme-dark .review-status.is-error,
+        .theme-dark .review-action-status.is-error,
+        .theme-dark .review-judge-state.is-error,
+        .theme-dark .review-signal.is-major strong,
+        .theme-dark .review-signal.is-warning strong { color: #f87171; }
+        .theme-dark .review-action.is-primary { color: #17181c; }
     </style>
     <script>
         // Applied before the body paints, so there's no flash of the wrong theme.
@@ -663,7 +801,23 @@
                     </h3>
                     <div class="form-group glossary-group">
                         <textarea id="glossary" aria-label="Glossary" spellcheck="false" placeholder="Use: source =&gt; target | mode"></textarea>
-                        <p class="glossary-status" id="glossaryStatus"></p>
+                        <div class="glossary-status" id="glossaryStatus">
+                            <span id="glossaryStatusText" aria-live="polite"></span>
+                            <button type="button" class="glossary-prompt-action" id="copyGlossaryPromptBtn" hidden>Copy frontier prompt</button>
+                            <button type="button" class="glossary-prompt-action" id="verifyGlossaryFrontierBtn" hidden>Verify automatically</button>
+                        </div>
+                        <section class="frontier-review" id="frontierReview" aria-labelledby="frontierReviewTitle" hidden>
+                            <div class="frontier-review-head">
+                                <strong id="frontierReviewTitle">Frontier verification</strong>
+                                <span class="frontier-review-meta" id="frontierReviewMeta"></span>
+                            </div>
+                            <p class="frontier-review-summary" id="frontierReviewSummary"></p>
+                            <div class="frontier-change-list" id="frontierChangeList"></div>
+                            <div class="frontier-review-actions">
+                                <button type="button" class="glossary-prompt-action" id="applyFrontierGlossary">Apply verified glossary</button>
+                                <button type="button" class="glossary-prompt-action" id="keepOriginalGlossary">Keep original</button>
+                            </div>
+                        </section>
                     </div>
                 </section>
 
@@ -685,6 +839,8 @@
                 <img class="glossary-mark" src="/static/assets/tolmach.png" alt="" aria-hidden="true">
             </div>
         </form>
+
+        <div class="copy-toast" id="copyToast" role="status" aria-live="polite" hidden></div>
 
         <div class="workspace">
         <section class="main-card">
@@ -780,7 +936,7 @@
                 <div class="test-row">
                     <div class="rail-row">
                         <span class="rail-label">Backtranslation chrF</span>
-                        <button type="button" class="header-action test-run-btn" data-test="backtranslation_chrf" data-stage="1" disabled>Run</button>
+                        <button type="button" class="header-action test-run-btn" data-test="backtranslation_chrf" data-stage="1" aria-label="Run test" title="Run test" disabled>→</button>
                     </div>
                     <p class="test-note" data-test-note="backtranslation_chrf"></p>
                 </div>
@@ -788,7 +944,7 @@
                 <div class="test-row">
                     <div class="rail-row">
                         <span class="rail-label">LLM judge</span>
-                        <button type="button" class="header-action test-run-btn" data-test="llm_judge_stage1" data-stage="1" disabled>Run</button>
+                        <button type="button" class="header-action test-run-btn" data-test="llm_judge_stage1" data-stage="1" aria-label="Run test" title="Run test" disabled>→</button>
                     </div>
                     <p class="test-note" data-test-note="llm_judge_stage1"></p>
                 </div>
@@ -796,7 +952,7 @@
                 <div class="test-row">
                     <div class="rail-row">
                         <span class="rail-label">COMET-Kiwi</span>
-                        <button type="button" class="header-action test-run-btn" data-test="comet_kiwi" data-stage="1" disabled>Run</button>
+                        <button type="button" class="header-action test-run-btn" data-test="comet_kiwi" data-stage="1" aria-label="Run test" title="Run test" disabled>→</button>
                     </div>
                     <p class="test-note" data-test-note="comet_kiwi"></p>
                 </div>
@@ -811,7 +967,7 @@
                 <div class="test-row">
                     <div class="rail-row">
                         <span class="rail-label">Named-entity consistency</span>
-                        <button type="button" class="header-action test-run-btn" data-test="entity_consistency" data-stage="2" disabled>Run</button>
+                        <button type="button" class="header-action test-run-btn" data-test="entity_consistency" data-stage="2" aria-label="Run test" title="Run test" disabled>→</button>
                     </div>
                     <p class="test-note" data-test-note="entity_consistency"></p>
                 </div>
@@ -819,7 +975,7 @@
                 <div class="test-row">
                     <div class="rail-row">
                         <span class="rail-label">Numbers and dates</span>
-                        <button type="button" class="header-action test-run-btn" data-test="numeric_preservation" data-stage="2" disabled>Run</button>
+                        <button type="button" class="header-action test-run-btn" data-test="numeric_preservation" data-stage="2" aria-label="Run test" title="Run test" disabled>→</button>
                     </div>
                     <p class="test-note" data-test-note="numeric_preservation"></p>
                 </div>
@@ -827,7 +983,7 @@
                 <div class="test-row">
                     <div class="rail-row">
                         <span class="rail-label">Chunk coverage</span>
-                        <button type="button" class="header-action test-run-btn" data-test="chunk_coverage" data-stage="2" disabled>Run</button>
+                        <button type="button" class="header-action test-run-btn" data-test="chunk_coverage" data-stage="2" aria-label="Run test" title="Run test" disabled>→</button>
                     </div>
                     <p class="test-note" data-test-note="chunk_coverage"></p>
                 </div>
@@ -835,7 +991,7 @@
                 <div class="test-row">
                     <div class="rail-row">
                         <span class="rail-label">Untranslated words</span>
-                        <button type="button" class="header-action test-run-btn" data-test="script_leakage" data-stage="2" disabled>Run</button>
+                        <button type="button" class="header-action test-run-btn" data-test="script_leakage" data-stage="2" aria-label="Run test" title="Run test" disabled>→</button>
                     </div>
                     <p class="test-note" data-test-note="script_leakage"></p>
                 </div>
@@ -843,7 +999,7 @@
                 <div class="test-row">
                     <div class="rail-row">
                         <span class="rail-label">Terminology delta</span>
-                        <button type="button" class="header-action test-run-btn" data-test="terminology_delta" data-stage="2" disabled>Run</button>
+                        <button type="button" class="header-action test-run-btn" data-test="terminology_delta" data-stage="2" aria-label="Run test" title="Run test" disabled>→</button>
                     </div>
                     <p class="test-note" data-test-note="terminology_delta"></p>
                 </div>
@@ -851,7 +1007,7 @@
                 <div class="test-row">
                     <div class="rail-row">
                         <span class="rail-label">Length ratio</span>
-                        <button type="button" class="header-action test-run-btn" data-test="length_ratio" data-stage="2" disabled>Run</button>
+                        <button type="button" class="header-action test-run-btn" data-test="length_ratio" data-stage="2" aria-label="Run test" title="Run test" disabled>→</button>
                     </div>
                     <p class="test-note" data-test-note="length_ratio"></p>
                 </div>
@@ -859,7 +1015,7 @@
                 <div class="test-row">
                     <div class="rail-row">
                         <span class="rail-label">Diff ratio</span>
-                        <button type="button" class="header-action test-run-btn" data-test="diff_ratio" data-stage="2" disabled>Run</button>
+                        <button type="button" class="header-action test-run-btn" data-test="diff_ratio" data-stage="2" aria-label="Run test" title="Run test" disabled>→</button>
                     </div>
                     <p class="test-note" data-test-note="diff_ratio"></p>
                 </div>
@@ -867,7 +1023,7 @@
                 <div class="test-row">
                     <div class="rail-row">
                         <span class="rail-label">Repetition ratio</span>
-                        <button type="button" class="header-action test-run-btn" data-test="ngram_repetition" data-stage="2" disabled>Run</button>
+                        <button type="button" class="header-action test-run-btn" data-test="ngram_repetition" data-stage="2" aria-label="Run test" title="Run test" disabled>→</button>
                     </div>
                     <p class="test-note" data-test-note="ngram_repetition"></p>
                 </div>
@@ -875,7 +1031,7 @@
                 <div class="test-row">
                     <div class="rail-row">
                         <span class="rail-label">LaBSE alignment</span>
-                        <button type="button" class="header-action test-run-btn" data-test="labse_alignment" data-stage="2" disabled>Run</button>
+                        <button type="button" class="header-action test-run-btn" data-test="labse_alignment" data-stage="2" aria-label="Run test" title="Run test" disabled>→</button>
                     </div>
                     <p class="test-note" data-test-note="labse_alignment"></p>
                 </div>
@@ -883,7 +1039,7 @@
                 <div class="test-row">
                     <div class="rail-row">
                         <span class="rail-label">Target-language segments</span>
-                        <button type="button" class="header-action test-run-btn" data-test="language_id" data-stage="2" disabled>Run</button>
+                        <button type="button" class="header-action test-run-btn" data-test="language_id" data-stage="2" aria-label="Run test" title="Run test" disabled>→</button>
                     </div>
                     <p class="test-note" data-test-note="language_id"></p>
                 </div>
@@ -891,7 +1047,7 @@
                 <div class="test-row">
                     <div class="rail-row">
                         <span class="rail-label">LLM judge — final</span>
-                        <button type="button" class="header-action test-run-btn" data-test="llm_judge_final" data-stage="2" disabled>Run</button>
+                        <button type="button" class="header-action test-run-btn" data-test="llm_judge_final" data-stage="2" aria-label="Run test" title="Run test" disabled>→</button>
                     </div>
                     <p class="test-note" data-test-note="llm_judge_final"></p>
                 </div>
@@ -899,7 +1055,7 @@
                 <div class="test-row">
                     <div class="rail-row">
                         <span class="rail-label">LLM judge — draft vs final</span>
-                        <button type="button" class="header-action test-run-btn" data-test="llm_judge_stage2" data-stage="2" disabled>Run</button>
+                        <button type="button" class="header-action test-run-btn" data-test="llm_judge_stage2" data-stage="2" aria-label="Run test" title="Run test" disabled>→</button>
                     </div>
                     <p class="test-note" data-test-note="llm_judge_stage2"></p>
                 </div>
@@ -907,7 +1063,7 @@
                 <div class="test-row">
                     <div class="rail-row">
                         <span class="rail-label">COMET-Kiwi — final</span>
-                        <button type="button" class="header-action test-run-btn" data-test="comet_kiwi_final" data-stage="2" disabled>Run</button>
+                        <button type="button" class="header-action test-run-btn" data-test="comet_kiwi_final" data-stage="2" aria-label="Run test" title="Run test" disabled>→</button>
                     </div>
                     <p class="test-note" data-test-note="comet_kiwi_final"></p>
                 </div>
@@ -960,6 +1116,81 @@
         </aside>
         </div>
 
+        <section class="review-desk" id="reviewDesk" aria-labelledby="reviewDeskTitle" hidden>
+            <header class="review-desk-header">
+                <div class="review-heading">
+                    <div class="eyebrow">Chunk review</div>
+                    <h2 id="reviewDeskTitle">Review desk</h2>
+                </div>
+                <p class="review-summary" id="reviewSummary">Loading review chunks…</p>
+                <div class="review-header-controls">
+                    <fieldset class="review-filter" aria-label="Filter review chunks">
+                        <button type="button" id="reviewNeedsFilter" aria-pressed="true">Needs review</button>
+                        <button type="button" id="reviewAllFilter" aria-pressed="false">All chunks</button>
+                    </fieldset>
+                    <button type="button" class="header-action review-collapse" id="reviewCollapseBtn" aria-expanded="true" aria-controls="reviewDeskBody">Collapse ↑</button>
+                </div>
+            </header>
+
+            <div class="review-desk-body" id="reviewDeskBody">
+                <div class="review-workbench">
+                    <nav class="review-nav" aria-label="Translation chunks">
+                        <div class="review-nav-head">
+                            <strong>Chunks</strong>
+                            <span id="reviewVisibleCount">—</span>
+                        </div>
+                        <div class="review-chunk-list" id="reviewChunkList" role="listbox" aria-label="Review chunks"></div>
+                    </nav>
+
+                    <article class="review-editor" aria-labelledby="reviewSelectedChunk">
+                        <header class="review-editor-head">
+                            <div class="eyebrow" id="reviewSelectedChunk">Select a chunk</div>
+                            <div class="review-status" id="reviewEditorStatus" role="status" aria-live="polite"></div>
+                        </header>
+                        <div class="review-editor-content" id="reviewEditorContent" hidden>
+                            <div class="review-readonly-grid">
+                                <section class="review-readonly" aria-labelledby="reviewSourceLabel">
+                                    <h3 class="review-section-label" id="reviewSourceLabel">Source</h3>
+                                    <div class="review-readonly-text" id="reviewSource"></div>
+                                </section>
+                                <section class="review-readonly" aria-labelledby="reviewDraftLabel">
+                                    <h3 class="review-section-label" id="reviewDraftLabel">Draft</h3>
+                                    <div class="review-readonly-text" id="reviewDraft"></div>
+                                </section>
+                            </div>
+
+                            <section class="review-final-section" aria-labelledby="reviewFinalLabel">
+                                <div class="review-signals" id="reviewSignals"></div>
+                                <label class="review-final-label" id="reviewFinalLabel" for="reviewFinalText">
+                                    Final
+                                    <span>⌘/Ctrl + S to save</span>
+                                </label>
+                                <textarea class="review-final-text" id="reviewFinalText" spellcheck="true"></textarea>
+                                <div class="review-actions">
+                                    <button type="button" class="review-action is-primary" id="reviewSaveBtn" disabled>Save final</button>
+                                    <label class="sr-only" for="reviewAlternativeCount">Number of alternatives</label>
+                                    <select class="review-count" id="reviewAlternativeCount">
+                                        <option value="2">2</option>
+                                        <option value="3">3</option>
+                                    </select>
+                                    <button type="button" class="review-action" id="reviewGenerateBtn">Generate 2 alternatives</button>
+                                    <span class="review-action-status" id="reviewActionStatus" role="status" aria-live="polite"></span>
+                                </div>
+                            </section>
+
+                            <section class="review-alternatives" id="reviewAlternatives" aria-labelledby="reviewAlternativesTitle" hidden>
+                                <div class="review-alternatives-head">
+                                    <h3 id="reviewAlternativesTitle">Translation options</h3>
+                                    <div class="review-judge-state" id="reviewJudgeState"></div>
+                                </div>
+                                <div id="reviewOptions"></div>
+                            </section>
+                        </div>
+                    </article>
+                </div>
+            </div>
+        </section>
+
         <section class="history-card" id="historyTab">
             <div class="history-card-header">
                 <div><div class="eyebrow">Archive</div><h2>Recent translations</h2></div>
@@ -972,12 +1203,13 @@
         </section>
         <footer class="footer-note">
             <strong>Disclaimer</strong>
-            <p>Tolmach is open-source software released under the MIT License. Tolmach does not claim ownership of your source texts or of any outputs generated by the software.</p>
-            <p>You are solely responsible for ensuring that you have the legal right to use, translate, edit, publish, or otherwise process the source text, and for complying with all applicable local laws and regulations, including copyright and intellectual-property laws.</p>
+            <p>Tolmach Book Translator is open-source software released under the MIT License. Tolmach does not claim ownership of your source texts or of any generated output.</p>
+            <p>You are solely responsible for ensuring that you have the legal right to use, translate, edit, and publish the source text, and for complying with all applicable copyright and intellectual-property laws.</p>
             <div class="footer-note-compact">
-                <p>Proofreading and editorial review are strongly recommended before any publication or commercial use.</p>
-                <p>For commercial use, you are additionally responsible for reviewing and complying with the licenses of all models, neural components, and third-party dependencies used together with Tolmach.</p>
-                <p>Tolmach is provided "as is", without warranties of any kind. The authors and contributors accept no liability for any use of the software or its output.</p>
+                <p>You are also responsible for reviewing and complying with the licenses, terms of service, and usage restrictions of all models and third-party dependencies (including commercial APIs), as well as any limitations on the use of generated output. Tolmach does not verify or guarantee compliance with any third-party terms.</p>
+                <p>Machine translation may contain errors, omissions, or fabricated content — proofreading before publication is strongly recommended. Text is processed locally by default; if you configure remote models, your source text may be sent to those providers under their own terms.</p>
+                <p>Tolmach is provided “as is”, without warranties of any kind. The author (KazKozDev) and contributors accept no liability for any use of the software or its output. Tolmach is not affiliated with or endorsed by the providers of any third-party models; all trademarks belong to their respective owners.</p>
+                <p>Source code: <a href="https://github.com/KazKozDev/book-translator" target="_blank" rel="noopener noreferrer">https://github.com/KazKozDev/book-translator</a></p>
             </div>
         </footer>
     </div>
@@ -1005,6 +1237,15 @@
         let translationStartTime = null;
         // Set once Start (Stage 1) finishes, so Continue knows which draft to refine.
         let currentTranslationId = null;
+        let canonicalSavedFinal = '';
+        let canonicalExportAvailable = false;
+        let reviewData = null;
+        let reviewFilter = 'needs';
+        let selectedReviewChunkIndex = null;
+        let reviewIsDirty = false;
+        let reviewIsSaving = false;
+        let reviewIsGenerating = false;
+        let reviewLoadToken = 0;
         const ACTIVE_TRANSLATION_KEY = 'activeTranslationId';
 
         function rememberActiveTranslation(id) {
@@ -1246,26 +1487,682 @@
         function updateGlossaryStatus() {
             const text = document.getElementById('glossary').value;
             const statusEl = document.getElementById('glossaryStatus');
+            const statusText = document.getElementById('glossaryStatusText');
+            const copyPromptBtn = document.getElementById('copyGlossaryPromptBtn');
+            const verifyFrontierBtn = document.getElementById('verifyGlossaryFrontierBtn');
             if (!text.trim()) {
-                statusEl.textContent = '';
+                statusText.textContent = '';
                 statusEl.classList.remove('has-errors');
+                copyPromptBtn.hidden = true;
+                verifyFrontierBtn.hidden = true;
                 return;
             }
             const { valid, invalid, firstError } = validateGlossaryText(text);
             if (invalid === 0) {
-                statusEl.textContent = `${valid} valid term${valid === 1 ? '' : 's'}`;
+                statusText.textContent = `${valid} valid term${valid === 1 ? '' : 's'}`;
                 statusEl.classList.remove('has-errors');
             } else {
-                statusEl.textContent = `${valid} valid · ${invalid} malformed — ${firstError}`;
+                statusText.textContent = `${valid} valid · ${invalid} malformed — ${firstError}`;
                 statusEl.classList.add('has-errors');
+            }
+            const hasEntries = text.split('\n').some(line => {
+                const trimmed = line.trim();
+                return trimmed && !trimmed.startsWith('#');
+            });
+            copyPromptBtn.hidden = !hasEntries;
+            verifyFrontierBtn.hidden = !hasEntries;
+        }
+
+        let copyToastTimer = null;
+
+        function showCopyToast(message) {
+            const toast = document.getElementById('copyToast');
+            toast.textContent = message;
+            toast.hidden = false;
+            clearTimeout(copyToastTimer);
+            copyToastTimer = setTimeout(() => {
+                toast.hidden = true;
+            }, 5000);
+        }
+
+        async function writeClipboardText(text) {
+            if (navigator.clipboard && window.isSecureContext) {
+                await navigator.clipboard.writeText(text);
+                return;
+            }
+            const helper = document.createElement('textarea');
+            helper.value = text;
+            helper.setAttribute('readonly', '');
+            helper.style.position = 'fixed';
+            helper.style.opacity = '0';
+            document.body.appendChild(helper);
+            helper.select();
+            const copied = document.execCommand('copy');
+            document.body.removeChild(helper);
+            if (!copied) throw new Error('Clipboard access was denied');
+        }
+
+        async function copyGlossaryVerificationPrompt() {
+            const button = document.getElementById('copyGlossaryPromptBtn');
+            button.disabled = true;
+            try {
+                const response = await fetch(`${API_URL}/glossary-verification-prompt`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        glossary: document.getElementById('glossary').value,
+                        sourceLanguage: document.getElementById('sourceLanguage').value,
+                        targetLanguage: document.getElementById('targetLanguage').value,
+                    }),
+                });
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok || !data.prompt) {
+                    throw new Error(data.error || 'Could not build the verification prompt');
+                }
+                await writeClipboardText(data.prompt);
+                showCopyToast('Verification prompt copied — paste it into any frontier model.');
+            } catch (error) {
+                console.error('Failed to copy glossary verification prompt:', error);
+                showCopyToast(error.message || 'Failed to copy the verification prompt.');
+            } finally {
+                button.disabled = false;
             }
         }
 
-        function setExportButtonsEnabled(enabled) {
+        let pendingFrontierGlossary = null;
+
+        function clearFrontierReview() {
+            pendingFrontierGlossary = null;
+            document.getElementById('frontierReview').hidden = true;
+            document.getElementById('frontierChangeList').innerHTML = '';
+        }
+
+        function showFrontierReview(data) {
+            pendingFrontierGlossary = data.glossary;
+            document.getElementById('frontierReviewMeta').textContent =
+                `${data.provider_label} · ${data.model} · web search used`;
+            const changes = data.changes || [];
+            document.getElementById('frontierReviewSummary').textContent = changes.length
+                ? `${changes.length} change${changes.length === 1 ? '' : 's'} proposed. Review them before applying.`
+                : 'No changes recommended. The current glossary passed verification.';
+            document.getElementById('frontierChangeList').innerHTML = changes.length
+                ? changes.map(change => `
+                    <div class="frontier-change">
+                        <div class="frontier-change-source">${escapeHtml(change.source)}</div>
+                        <div class="frontier-change-value">Before: ${escapeHtml(change.before)}</div>
+                        <div class="frontier-change-value is-after">After: ${escapeHtml(change.after)}</div>
+                    </div>
+                `).join('')
+                : '<div class="frontier-change"><div class="frontier-change-value is-after">Current entries already match the verified result.</div></div>';
+            document.getElementById('frontierReview').hidden = false;
+            document.getElementById('frontierReview').scrollIntoView({
+                behavior: 'smooth',
+                block: 'nearest',
+            });
+        }
+
+        async function verifyGlossaryAutomatically() {
+            const button = document.getElementById('verifyGlossaryFrontierBtn');
+            const provider = localStorage.getItem('frontierProvider') || 'openai';
+            const apiKey = sessionStorage.getItem(`frontierApiKey:${provider}`) || '';
+            const originalLabel = button.textContent;
+            button.disabled = true;
+            button.textContent = 'Checking…';
+            clearFrontierReview();
+            try {
+                const response = await fetch(`${API_URL}/verify-glossary-frontier`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        provider,
+                        apiKey,
+                        glossary: document.getElementById('glossary').value,
+                        sourceLanguage: document.getElementById('sourceLanguage').value,
+                        targetLanguage: document.getElementById('targetLanguage').value,
+                    }),
+                });
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok || !data.glossary) {
+                    throw new Error(data.error || 'Frontier verification failed');
+                }
+                showFrontierReview(data);
+                showCopyToast('Frontier verification finished — review changes before applying.');
+            } catch (error) {
+                console.error('Frontier glossary verification failed:', error);
+                showCopyToast(error.message || 'Frontier verification failed.');
+            } finally {
+                button.disabled = false;
+                button.textContent = originalLabel;
+            }
+        }
+
+        function applyFrontierGlossary() {
+            if (!pendingFrontierGlossary) return;
+            document.getElementById('glossary').value = pendingFrontierGlossary;
+            updateGlossaryStatus();
+            rememberWorkspaceField('glossary');
+            clearFrontierReview();
+            showCopyToast('Verified glossary applied.');
+        }
+
+        function syncExportButtons() {
+            const enabled = canonicalExportAvailable && !reviewIsDirty && !reviewIsSaving;
             document.querySelectorAll('#exportButtons .btn-export').forEach(btn => {
                 btn.disabled = !enabled;
-                btn.title = enabled ? '' : 'Available once a translation completes';
+                btn.title = enabled
+                    ? ''
+                    : reviewIsDirty
+                    ? 'Save or discard the chunk edit before exporting'
+                    : reviewIsSaving
+                    ? 'Wait for the chunk save to finish'
+                    : 'Available once a translation completes';
             });
+            document.querySelectorAll('.history-download-btn').forEach(btn => {
+                const isCurrent = Number(btn.dataset.translationId) === Number(currentTranslationId);
+                btn.disabled = isCurrent && !enabled;
+                btn.title = btn.disabled ? 'Save the active chunk edit before downloading' : '';
+            });
+        }
+
+        function setExportButtonsEnabled(enabled) {
+            canonicalExportAvailable = !!enabled;
+            syncExportButtons();
+        }
+
+        function currentReviewChunk() {
+            if (!reviewData || selectedReviewChunkIndex === null) return null;
+            return reviewData.chunks.find(chunk => reviewIndexEquals(chunk.index, selectedReviewChunkIndex)) || null;
+        }
+
+        function reviewIndexEquals(left, right) {
+            if (left === null || left === undefined || right === null || right === undefined) return false;
+            return Number(left) === Number(right);
+        }
+
+        function reviewChunksForCurrentFilter() {
+            if (!reviewData) return [];
+            if (reviewFilter === 'all') return reviewData.chunks;
+            return reviewData.chunks.filter(chunk =>
+                chunk.review_status !== 'resolved'
+                && (chunk.problematic || chunk.warning || (chunk.issues || []).length || (chunk.signals || []).length)
+            );
+        }
+
+        function setReviewEditorStatus(message, tone = '') {
+            const status = document.getElementById('reviewEditorStatus');
+            status.textContent = message || '';
+            status.className = `review-status${tone ? ` ${tone}` : ''}`;
+        }
+
+        function setReviewActionStatus(message, tone = '') {
+            const status = document.getElementById('reviewActionStatus');
+            status.textContent = message || '';
+            status.className = `review-action-status${tone ? ` ${tone}` : ''}`;
+        }
+
+        function syncReviewControls() {
+            const chunk = currentReviewChunk();
+            const hasChunk = !!chunk;
+            const textarea = document.getElementById('reviewFinalText');
+            const saveButton = document.getElementById('reviewSaveBtn');
+            const generateButton = document.getElementById('reviewGenerateBtn');
+            const countSelect = document.getElementById('reviewAlternativeCount');
+
+            textarea.disabled = !hasChunk || reviewIsSaving;
+            saveButton.disabled = !hasChunk || !reviewIsDirty || reviewIsSaving || reviewIsGenerating;
+            generateButton.disabled = !hasChunk || reviewIsDirty || reviewIsSaving || reviewIsGenerating;
+            countSelect.disabled = !hasChunk || reviewIsDirty || reviewIsSaving || reviewIsGenerating;
+            document.querySelectorAll('.review-use-btn').forEach(button => {
+                button.disabled = reviewIsDirty || reviewIsSaving || reviewIsGenerating;
+            });
+            syncExportButtons();
+        }
+
+        function resetReviewDesk() {
+            reviewLoadToken++;
+            reviewData = null;
+            selectedReviewChunkIndex = null;
+            reviewIsDirty = false;
+            reviewIsSaving = false;
+            reviewIsGenerating = false;
+            document.getElementById('reviewDesk').hidden = true;
+            document.getElementById('reviewDeskBody').hidden = false;
+            document.getElementById('reviewCollapseBtn').setAttribute('aria-expanded', 'true');
+            document.getElementById('reviewCollapseBtn').textContent = 'Collapse ↑';
+            document.getElementById('reviewSummary').textContent = '';
+            document.getElementById('reviewVisibleCount').textContent = '—';
+            document.getElementById('reviewChunkList').replaceChildren();
+            document.getElementById('reviewEditorContent').hidden = true;
+            document.getElementById('reviewAlternatives').hidden = true;
+            setReviewEditorStatus('');
+            setReviewActionStatus('');
+            syncExportButtons();
+        }
+
+        function showReviewLoading() {
+            const desk = document.getElementById('reviewDesk');
+            const list = document.getElementById('reviewChunkList');
+            desk.hidden = false;
+            document.getElementById('reviewSummary').textContent = 'Loading review chunks…';
+            document.getElementById('reviewVisibleCount').textContent = '—';
+            document.getElementById('reviewEditorContent').hidden = true;
+            list.replaceChildren();
+            const loading = document.createElement('p');
+            loading.className = 'review-empty';
+            loading.textContent = 'Loading chunk-level issues and saved revisions…';
+            list.appendChild(loading);
+            setReviewEditorStatus('Loading…');
+        }
+
+        function reviewChunkReason(chunk) {
+            const reasons = [];
+            const issueCount = (chunk.issues || []).length;
+            const signalCount = (chunk.signals || []).length;
+            if (issueCount) reasons.push(`${issueCount} issue${issueCount === 1 ? '' : 's'}`);
+            if (signalCount) reasons.push(`${signalCount} signal${signalCount === 1 ? '' : 's'}`);
+            if (chunk.warning) reasons.push('warning');
+            return reasons.length ? reasons.join(' · ') : 'No chunk-level flags';
+        }
+
+        function renderReviewChunkList() {
+            const list = document.getElementById('reviewChunkList');
+            const chunks = reviewChunksForCurrentFilter();
+            list.replaceChildren();
+            document.getElementById('reviewVisibleCount').textContent =
+                `${chunks.length} shown`;
+
+            if (!chunks.length) {
+                const empty = document.createElement('p');
+                empty.className = 'review-empty';
+                empty.textContent = reviewFilter === 'needs'
+                    ? 'No open chunks need review. Switch to All chunks to inspect resolved and unflagged text.'
+                    : 'No completed chunks are available.';
+                list.appendChild(empty);
+                return;
+            }
+
+            chunks.forEach(chunk => {
+                const row = document.createElement('button');
+                row.type = 'button';
+                row.className = 'review-chunk-row';
+                row.setAttribute('role', 'option');
+                row.setAttribute('aria-selected', String(reviewIndexEquals(chunk.index, selectedReviewChunkIndex)));
+                row.addEventListener('click', () => selectReviewChunk(chunk.index));
+
+                const name = document.createElement('span');
+                name.className = 'review-chunk-name';
+                name.textContent = `Chunk ${chunk.number ?? Number(chunk.index) + 1}`;
+
+                const reason = document.createElement('span');
+                reason.className = 'review-chunk-reason';
+                reason.textContent = reviewChunkReason(chunk);
+
+                const state = document.createElement('span');
+                const resolved = chunk.review_status === 'resolved';
+                state.className = `review-chunk-state${resolved ? ' is-resolved' : ''}`;
+                state.textContent = resolved ? 'Resolved' : 'Open';
+
+                row.append(name, reason, state);
+                list.appendChild(row);
+            });
+        }
+
+        function appendReviewSignal(container, title, lines, className = '') {
+            const signal = document.createElement('div');
+            signal.className = `review-signal${className ? ` ${className}` : ''}`;
+            const heading = document.createElement('strong');
+            heading.textContent = title;
+            signal.appendChild(heading);
+            lines.filter(Boolean).forEach(line => {
+                const detail = document.createElement('span');
+                detail.className = 'review-signal-detail';
+                detail.textContent = line;
+                signal.appendChild(detail);
+            });
+            container.appendChild(signal);
+        }
+
+        function formatReviewSignalDetail(detail) {
+            if (detail === null || detail === undefined || detail === '') return '';
+            if (typeof detail === 'string' || typeof detail === 'number' || typeof detail === 'boolean') {
+                return String(detail);
+            }
+            if (Array.isArray(detail)) return detail.map(item => String(item)).join(' · ');
+            return Object.entries(detail)
+                .filter(([, value]) => value !== null && value !== undefined && value !== '')
+                .map(([key, value]) => `${key.replaceAll('_', ' ')}: ${typeof value === 'object' ? JSON.stringify(value) : value}`)
+                .join(' · ');
+        }
+
+        function renderReviewSignals(chunk) {
+            const container = document.getElementById('reviewSignals');
+            container.replaceChildren();
+
+            if (chunk.warning) {
+                appendReviewSignal(container, 'Warning', [String(chunk.warning)], 'is-warning');
+            }
+
+            (chunk.issues || []).forEach(issue => {
+                const severity = issue.severity ? String(issue.severity) : 'unspecified';
+                const type = issue.type ? String(issue.type).replaceAll('_', ' ') : 'issue';
+                appendReviewSignal(
+                    container,
+                    `${severity} · ${type}`,
+                    [
+                        issue.span ? `Original: ${issue.span}` : '',
+                        issue.replacement ? `Proposed: ${issue.replacement}` : '',
+                    ],
+                    severity.toLowerCase() === 'major' || severity.toLowerCase() === 'critical' ? 'is-major' : ''
+                );
+            });
+
+            (chunk.signals || []).forEach(signal => {
+                const testName = signal.test ? String(signal.test).replaceAll('_', ' ') : 'quality signal';
+                appendReviewSignal(
+                    container,
+                    `Chunk signal · ${testName}`,
+                    [signal.label ? String(signal.label) : '', formatReviewSignalDetail(signal.detail)]
+                );
+            });
+        }
+
+        function renderReviewAlternatives(chunk) {
+            const section = document.getElementById('reviewAlternatives');
+            const optionsContainer = document.getElementById('reviewOptions');
+            const judgeState = document.getElementById('reviewJudgeState');
+            const payload = chunk.alternatives;
+            const options = Array.isArray(payload)
+                ? payload
+                : Array.isArray(payload?.options)
+                ? payload.options
+                : [];
+
+            optionsContainer.replaceChildren();
+            judgeState.textContent = '';
+            judgeState.className = 'review-judge-state';
+            if (!options.length) {
+                section.hidden = true;
+                return;
+            }
+
+            section.hidden = false;
+            const recommendedId = Array.isArray(payload) ? null : payload?.recommended_id;
+            const judgeReason = Array.isArray(payload) ? '' : payload?.judge_reason;
+            const judgeError = Array.isArray(payload) ? '' : payload?.judge_error;
+            const judgeModel = (Array.isArray(payload) ? '' : payload?.judge_model)
+                || document.getElementById('judgeModel').value;
+            const recommendedOption = options.find(option => option.id === recommendedId);
+
+            if (recommendedOption) {
+                judgeState.textContent = `Independent judge recommends ${recommendedOption.label || recommendedOption.id}${judgeReason ? ` — ${judgeReason}` : ''}`;
+            } else if (judgeError) {
+                judgeState.textContent = `No independent recommendation — ${judgeError}`;
+                judgeState.classList.add('is-error');
+            } else if (!judgeModel) {
+                judgeState.textContent = 'No independent recommendation — no judge model configured';
+            } else {
+                judgeState.textContent = 'No independent recommendation';
+            }
+
+            options.forEach(option => {
+                const optionEl = document.createElement('article');
+                optionEl.className = 'review-option';
+
+                const title = document.createElement('div');
+                title.className = 'review-option-title';
+                const label = document.createElement('span');
+                label.textContent = option.label || option.id || 'Alternative';
+                title.appendChild(label);
+                if (option.id && option.id === recommendedId) {
+                    const recommendation = document.createElement('span');
+                    recommendation.className = 'review-recommendation';
+                    recommendation.textContent = 'Independent recommendation';
+                    title.appendChild(recommendation);
+                }
+                if (option.generation_model) {
+                    const model = document.createElement('span');
+                    model.className = 'review-chunk-reason';
+                    model.textContent = option.generation_model;
+                    title.appendChild(model);
+                }
+
+                const text = document.createElement('div');
+                text.className = 'review-option-text';
+                text.textContent = option.text || '';
+
+                const useButton = document.createElement('button');
+                useButton.type = 'button';
+                useButton.className = 'review-action review-use-btn';
+                const isInUse = (option.text || '') === (chunk.final || '');
+                if (!isInUse && option.id) {
+                    useButton.textContent = 'Use this';
+                    useButton.addEventListener('click', () => saveReviewChunk({ candidateId: option.id }));
+                } else {
+                    useButton.textContent = 'In use';
+                    useButton.disabled = true;
+                }
+
+                optionEl.append(title, text, useButton);
+                optionsContainer.appendChild(optionEl);
+            });
+        }
+
+        function renderReviewEditor() {
+            const chunk = currentReviewChunk();
+            const content = document.getElementById('reviewEditorContent');
+            if (!chunk) {
+                content.hidden = true;
+                document.getElementById('reviewSelectedChunk').textContent = 'Select a chunk';
+                setReviewEditorStatus('');
+                return;
+            }
+
+            content.hidden = false;
+            document.getElementById('reviewSelectedChunk').textContent =
+                `Chunk ${chunk.number ?? Number(chunk.index) + 1}`;
+            document.getElementById('reviewSource').textContent = chunk.source || '';
+            document.getElementById('reviewDraft').textContent = chunk.draft || '';
+            document.getElementById('reviewFinalText').value = chunk.final || '';
+            reviewIsDirty = false;
+            setReviewEditorStatus(chunk.review_status === 'resolved' ? 'Resolved · saved' : 'Open · saved', 'is-saved');
+            setReviewActionStatus('');
+            renderReviewSignals(chunk);
+            renderReviewAlternatives(chunk);
+            syncReviewControls();
+        }
+
+        function renderReviewDesk() {
+            const chunks = Array.isArray(reviewData?.chunks) ? reviewData.chunks : [];
+            const openCount = Number.isFinite(Number(reviewData?.open_count))
+                ? Number(reviewData.open_count)
+                : chunks.filter(chunk => chunk.review_status !== 'resolved' && chunk.problematic).length;
+            const total = Number(reviewData?.total_chunks ?? chunks.length);
+            document.getElementById('reviewSummary').textContent =
+                openCount > 0 ? `${openCount} need review · ${total} total` : `All reviewed · ${total} total`;
+            document.getElementById('reviewNeedsFilter').setAttribute('aria-pressed', String(reviewFilter === 'needs'));
+            document.getElementById('reviewAllFilter').setAttribute('aria-pressed', String(reviewFilter === 'all'));
+
+            const visible = reviewChunksForCurrentFilter();
+            if (!visible.some(chunk => reviewIndexEquals(chunk.index, selectedReviewChunkIndex))) {
+                selectedReviewChunkIndex = visible.length ? visible[0].index : null;
+            }
+            renderReviewChunkList();
+            renderReviewEditor();
+        }
+
+        function selectReviewChunk(index, { force = false, focusEditor = false } = {}) {
+            if (reviewIndexEquals(index, selectedReviewChunkIndex)) return;
+            if (!force && reviewIsDirty
+                && !confirm('Discard the unsaved changes in this chunk?')) return;
+            reviewIsDirty = false;
+            selectedReviewChunkIndex = Number(index);
+            renderReviewChunkList();
+            renderReviewEditor();
+            if (focusEditor) document.getElementById('reviewFinalText').focus();
+        }
+
+        function setReviewFilter(nextFilter) {
+            if (nextFilter === reviewFilter) return;
+            if (reviewIsDirty && !confirm('Discard the unsaved changes in this chunk?')) return;
+            reviewFilter = nextFilter;
+            renderReviewDesk();
+        }
+
+        async function loadReviewChunks(translationId, { selectedIndex = null } = {}) {
+            const token = ++reviewLoadToken;
+            showReviewLoading();
+            try {
+                const response = await fetch(`${API_URL}/translations/${translationId}/review-chunks`);
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok) throw new Error(data.error || 'Review chunks could not be loaded');
+                if (token !== reviewLoadToken || Number(currentTranslationId) !== Number(translationId)) return;
+
+                const chunks = Array.isArray(data.chunks) ? data.chunks : [];
+                if (!chunks.length || Number(data.total_chunks || 0) === 0) {
+                    resetReviewDesk();
+                    return;
+                }
+
+                reviewData = { ...data, chunks };
+                reviewIsDirty = false;
+                reviewIsSaving = false;
+                reviewIsGenerating = false;
+                const preferred = selectedIndex ?? selectedReviewChunkIndex;
+                selectedReviewChunkIndex = chunks.some(chunk => reviewIndexEquals(chunk.index, preferred))
+                    ? Number(preferred)
+                    : null;
+                document.getElementById('reviewDesk').hidden = false;
+                renderReviewDesk();
+            } catch (error) {
+                if (token !== reviewLoadToken || Number(currentTranslationId) !== Number(translationId)) return;
+                reviewData = null;
+                selectedReviewChunkIndex = null;
+                reviewIsDirty = false;
+                reviewIsSaving = false;
+                reviewIsGenerating = false;
+                document.getElementById('reviewDesk').hidden = false;
+                document.getElementById('reviewSummary').textContent = 'Review chunks unavailable';
+                document.getElementById('reviewVisibleCount').textContent = '0 shown';
+                document.getElementById('reviewEditorContent').hidden = true;
+                const list = document.getElementById('reviewChunkList');
+                list.replaceChildren();
+                const message = document.createElement('p');
+                message.className = 'review-empty';
+                message.textContent = `Could not load the review desk: ${error.message}`;
+                list.appendChild(message);
+                setReviewEditorStatus('Load failed', 'is-error');
+                syncReviewControls();
+            }
+        }
+
+        function reviewSaveMessage(data) {
+            const notes = ['Saved'];
+            const invalidated = Number(data.invalidated_quality_results || 0);
+            const violations = Array.isArray(data.terminology_violations)
+                ? data.terminology_violations.length
+                : Number(data.terminology_violations || 0);
+            if (invalidated) notes.push(`${invalidated} quality result${invalidated === 1 ? '' : 's'} cleared`);
+            if (violations) notes.push(`${violations} terminology warning${violations === 1 ? '' : 's'}`);
+            return notes.join(' · ');
+        }
+
+        async function saveReviewChunk({ candidateId = null } = {}) {
+            const chunk = currentReviewChunk();
+            if (!chunk || reviewIsSaving || reviewIsGenerating) return;
+            if (!candidateId && !reviewIsDirty) {
+                setReviewActionStatus('No unsaved changes.');
+                return;
+            }
+
+            const translationId = currentTranslationId;
+            const chunkIndex = Number(chunk.index);
+            const payload = candidateId
+                ? { candidate_id: candidateId, expected_revision: Number(chunk.revision || 0) }
+                : { text: document.getElementById('reviewFinalText').value, expected_revision: Number(chunk.revision || 0) };
+
+            reviewIsSaving = true;
+            setReviewEditorStatus('Saving…');
+            setReviewActionStatus(candidateId ? 'Applying selected translation…' : 'Saving final text…');
+            syncReviewControls();
+
+            try {
+                const response = await fetch(`${API_URL}/translations/${translationId}/review-chunks/${chunkIndex}`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                });
+                const data = await response.json().catch(() => ({}));
+                if (response.status === 409) {
+                    reviewIsSaving = false;
+                    await loadTranslationIntoWorkspace(translationId, {
+                        scroll: false,
+                        silent: true,
+                        reviewSelection: chunkIndex,
+                    });
+                    setReviewEditorStatus('Changed in another tab · reloaded latest', 'is-error');
+                    setReviewActionStatus('Your unsaved version was not applied. Review the latest saved text before editing again.', 'is-error');
+                    return;
+                }
+                if (!response.ok) throw new Error(data.error || 'The chunk could not be saved');
+
+                reviewIsSaving = false;
+                reviewIsDirty = false;
+                await loadTranslationIntoWorkspace(translationId, {
+                    scroll: false,
+                    silent: true,
+                    reviewSelection: chunkIndex,
+                });
+                setReviewEditorStatus('Saved', 'is-saved');
+                setReviewActionStatus(reviewSaveMessage(data));
+            } catch (error) {
+                reviewIsSaving = false;
+                if (!candidateId) reviewIsDirty = true;
+                setReviewEditorStatus('Save failed', 'is-error');
+                setReviewActionStatus(error.message, 'is-error');
+                syncReviewControls();
+            }
+        }
+
+        async function generateReviewAlternatives() {
+            const chunk = currentReviewChunk();
+            if (!chunk || reviewIsDirty || reviewIsSaving || reviewIsGenerating) return;
+
+            const count = Number(document.getElementById('reviewAlternativeCount').value);
+            reviewIsGenerating = true;
+            setReviewActionStatus(`Generating ${count} alternatives for this chunk…`);
+            syncReviewControls();
+
+            try {
+                const response = await fetch(
+                    `${API_URL}/translations/${currentTranslationId}/review-chunks/${Number(chunk.index)}/alternatives`,
+                    {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            count,
+                            model: document.getElementById('model').value,
+                            judge_model: document.getElementById('judgeModel').value || '',
+                        }),
+                    }
+                );
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok) throw new Error(data.error || 'Alternatives could not be generated');
+
+                chunk.alternatives = data;
+                if (data.revision !== undefined) chunk.revision = data.revision;
+                reviewIsGenerating = false;
+                renderReviewAlternatives(chunk);
+                setReviewActionStatus(
+                    data.warning
+                        ? `Alternatives ready · ${data.warning}`
+                        : `${Number(data.generated_count ?? (data.options || []).filter(option => option.kind !== 'current').length)} alternatives ready — choose one explicitly or keep the current final.`
+                );
+                syncReviewControls();
+            } catch (error) {
+                reviewIsGenerating = false;
+                setReviewActionStatus(error.message, 'is-error');
+                syncReviewControls();
+            }
         }
 
         // Stage 1 tests need a draft (Start); Stage 2 tests need a
@@ -1659,6 +2556,7 @@
             });
 
             document.getElementById('glossary').addEventListener('input', () => {
+                clearFrontierReview();
                 updateGlossaryStatus();
                 rememberWorkspaceField('glossary');
             });
@@ -1667,10 +2565,77 @@
                 document.getElementById(id).addEventListener('change', () => rememberWorkspaceField(id));
             });
             document.getElementById('prepareBtn').addEventListener('click', handlePrepare);
+            document.getElementById('copyGlossaryPromptBtn').addEventListener(
+                'click',
+                copyGlossaryVerificationPrompt,
+            );
+            document.getElementById('verifyGlossaryFrontierBtn').addEventListener(
+                'click',
+                verifyGlossaryAutomatically,
+            );
+            document.getElementById('applyFrontierGlossary').addEventListener(
+                'click',
+                applyFrontierGlossary,
+            );
+            document.getElementById('keepOriginalGlossary').addEventListener(
+                'click',
+                () => {
+                    clearFrontierReview();
+                    showCopyToast('Original glossary kept.');
+                },
+            );
 
             updateGlossaryPlaceholder();
 
             document.getElementById('themeToggle').addEventListener('click', toggleTheme);
+            document.getElementById('reviewNeedsFilter').addEventListener('click', () => setReviewFilter('needs'));
+            document.getElementById('reviewAllFilter').addEventListener('click', () => setReviewFilter('all'));
+            document.getElementById('reviewCollapseBtn').addEventListener('click', () => {
+                const body = document.getElementById('reviewDeskBody');
+                const button = document.getElementById('reviewCollapseBtn');
+                const expanded = body.hidden;
+                body.hidden = !expanded;
+                button.setAttribute('aria-expanded', String(expanded));
+                button.textContent = expanded ? 'Collapse ↑' : 'Expand ↓';
+            });
+            document.getElementById('reviewFinalText').addEventListener('input', (event) => {
+                const chunk = currentReviewChunk();
+                if (!chunk) return;
+                reviewIsDirty = event.target.value !== (chunk.final || '');
+                setReviewEditorStatus(
+                    reviewIsDirty
+                        ? 'Unsaved changes'
+                        : chunk.review_status === 'resolved'
+                        ? 'Resolved · saved'
+                        : 'Open · saved',
+                    reviewIsDirty ? 'is-dirty' : 'is-saved'
+                );
+                setReviewActionStatus(reviewIsDirty ? 'Save this chunk before exporting or generating alternatives.' : '');
+                syncReviewControls();
+            });
+            document.getElementById('reviewFinalText').addEventListener('keydown', (event) => {
+                if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 's') {
+                    event.preventDefault();
+                    saveReviewChunk();
+                    return;
+                }
+                if (event.altKey && (event.key === 'ArrowUp' || event.key === 'ArrowDown')) {
+                    event.preventDefault();
+                    const chunks = reviewChunksForCurrentFilter();
+                    const currentPosition = chunks.findIndex(chunk =>
+                        reviewIndexEquals(chunk.index, selectedReviewChunkIndex)
+                    );
+                    const offset = event.key === 'ArrowUp' ? -1 : 1;
+                    const next = chunks[currentPosition + offset];
+                    if (next) selectReviewChunk(next.index, { focusEditor: true });
+                }
+            });
+            document.getElementById('reviewSaveBtn').addEventListener('click', () => saveReviewChunk());
+            document.getElementById('reviewGenerateBtn').addEventListener('click', generateReviewAlternatives);
+            document.getElementById('reviewAlternativeCount').addEventListener('change', (event) => {
+                document.getElementById('reviewGenerateBtn').textContent =
+                    `Generate ${event.target.value} alternatives`;
+            });
 
             document.querySelectorAll('.test-run-btn').forEach(btn => {
                 btn.addEventListener('click', () => runEvaluationTest(btn.dataset.test));
@@ -1792,6 +2757,8 @@
         function handleFileSelect(file) {
             selectedFile = file;
             forgetActiveTranslation();
+            canonicalSavedFinal = '';
+            resetReviewDesk();
             rememberDocument(file);
             startNewLogForDocument(file);
             document.getElementById('refineHeaderBtn').disabled = true;
@@ -2081,7 +3048,7 @@
                     <div class="history-actions">
                         <button class="btn btn-small" onclick="loadTranslationIntoWorkspace(${t.id})">📂 Open</button>
                         ${t.status === 'completed' ?
-                            `<button class="btn btn-small" onclick="downloadTranslation(${t.id})">⬇ Download</button>` :
+                            `<button class="btn btn-small history-download-btn" data-translation-id="${t.id}" onclick="downloadTranslation(${t.id})">⬇ Download</button>` :
                             t.status === 'stage1_completed' ?
                             `<button class="btn btn-small" onclick="continueRefinementFromHistory(${t.id})">▶ Continue</button>` :
                             t.status === 'error' ?
@@ -2092,6 +3059,7 @@
                     </div>
                 </div>
             `).join('');
+            syncExportButtons();
         }
 
         async function handleSubmit(e) {
@@ -2124,6 +3092,9 @@
             setTestButtonsEnabled('1', false);
             setTestButtonsEnabled('2', false);
             forgetActiveTranslation();
+            canonicalSavedFinal = '';
+            resetReviewDesk();
+            setExportButtonsEnabled(false);
             applySavedEvaluationResults({});
             progressSection.style.display = 'block';
             document.getElementById('progressBar').style.width = '1%';
@@ -2323,8 +3294,8 @@
                 updateEta(100);
 
                 alert('Refinement completed successfully!');
-                setExportButtonsEnabled(true);
                 setTestButtonsEnabled('2', true);
+                await loadTranslationIntoWorkspace(currentTranslationId, { scroll: false, silent: true });
                 loadTranslations();
             } catch (error) {
                 console.error('Error:', error);
@@ -2437,6 +3408,8 @@
             document.getElementById('fileInput').value = '';
             selectedFile = null;
             forgetActiveTranslation();
+            canonicalSavedFinal = '';
+            resetReviewDesk();
             // New translation is the one moment the user asked for a clean
             // form, so the kept fields and the kept book go too — otherwise
             // both reappear on the next load of a workspace meant to be empty.
@@ -2451,6 +3424,7 @@
             const prepareStatus = document.getElementById('prepareStatus');
             prepareStatus.classList.remove('has-errors');
             prepareStatus.textContent = prepareStatus.dataset.default;
+            setGlossaryVerificationStatus();
             updateGlossaryStatus();
             applySavedEvaluationResults({});
 
@@ -2472,6 +3446,10 @@
         }
 
         async function downloadTranslation(id) {
+            if (Number(id) === Number(currentTranslationId) && (reviewIsDirty || reviewIsSaving)) {
+                alert('Save or discard the chunk edit before downloading this translation.');
+                return;
+            }
             window.location.href = `${API_URL}/download/${id}`;
         }
 
@@ -2488,7 +3466,11 @@
         // Pulls a past (or in-progress) translation back into the three
         // work panels, so its text can be reviewed, downloaded, or continued
         // without re-uploading the source file.
-        async function loadTranslationIntoWorkspace(id, { scroll = true, silent = false } = {}) {
+        async function loadTranslationIntoWorkspace(id, {
+            scroll = true,
+            silent = false,
+            reviewSelection = null,
+        } = {}) {
             try {
                 const response = await fetch(`${API_URL}/translations/${id}`);
                 if (!response.ok) {
@@ -2506,6 +3488,7 @@
                     machineTranslation: t.machine_translation || '',
                     literaryRefinement: t.translated_text || '',
                 };
+                canonicalSavedFinal = t.translated_text || '';
 
                 if (t.source_lang) document.getElementById('sourceLanguage').value = t.source_lang;
                 if (t.target_lang) document.getElementById('targetLanguage').value = t.target_lang;
@@ -2529,7 +3512,7 @@
                 });
 
                 document.getElementById('refineHeaderBtn').disabled = !t.draft_chunks;
-                setExportButtonsEnabled(t.status === 'completed');
+                setExportButtonsEnabled(t.status === 'completed' && !!canonicalSavedFinal);
                 setTestButtonsEnabled('1', !!t.draft_chunks);
                 setTestButtonsEnabled('2', t.status === 'completed');
                 applySavedEvaluationResults(t.evaluation_results);
@@ -2548,6 +3531,12 @@
                     `Loaded from history (${t.status})`;
                 translationStartTime = null;
                 updateEta(t.status === 'completed' || t.status === 'stage1_completed' ? 100 : 0);
+
+                if (t.status === 'completed' && t.translated_text) {
+                    await loadReviewChunks(t.id, { selectedIndex: reviewSelection });
+                } else {
+                    resetReviewDesk();
+                }
 
                 if (scroll) document.querySelector('.main-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
             } catch (error) {
@@ -2594,7 +3583,12 @@
                     throw new Error(data.error || 'Failed to delete translation');
                 }
 
-                if (currentTranslationId === id) forgetActiveTranslation();
+                if (currentTranslationId === id) {
+                    forgetActiveTranslation();
+                    canonicalSavedFinal = '';
+                    resetReviewDesk();
+                    setExportButtonsEnabled(false);
+                }
                 await loadTranslations();
             } catch (error) {
                 console.error('Error deleting translation:', error);
@@ -2605,12 +3599,30 @@
         }
 
         // Export functions
-        function copyToClipboard() {
-            const text = document.getElementById('literaryRefinement').textContent;
-            if (text === 'No content yet') {
-                alert('No translation to copy');
-                return;
+        function savedFinalForExport() {
+            if (reviewIsDirty || reviewIsSaving) {
+                alert('Save or discard the chunk edit before exporting.');
+                return null;
             }
+            if (!canonicalSavedFinal) {
+                alert('No saved final translation to export');
+                return null;
+            }
+            return canonicalSavedFinal;
+        }
+
+        function escapeHtml(text) {
+            return text
+                .replaceAll('&', '&amp;')
+                .replaceAll('<', '&lt;')
+                .replaceAll('>', '&gt;')
+                .replaceAll('"', '&quot;')
+                .replaceAll("'", '&#039;');
+        }
+
+        function copyToClipboard() {
+            const text = savedFinalForExport();
+            if (text === null) return;
             
             navigator.clipboard.writeText(text).then(() => {
                 alert('✓ Copied to clipboard!');
@@ -2621,11 +3633,8 @@
         }
 
         function saveAsTxt() {
-            const text = document.getElementById('literaryRefinement').textContent;
-            if (text === 'No content yet') {
-                alert('No translation to save');
-                return;
-            }
+            const text = savedFinalForExport();
+            if (text === null) return;
             
             const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
             const url = URL.createObjectURL(blob);
@@ -2639,17 +3648,15 @@
         }
 
         function saveAsPdf() {
-            const text = document.getElementById('literaryRefinement').textContent;
-            if (text === 'No content yet') {
-                alert('No translation to save');
-                return;
-            }
+            const text = savedFinalForExport();
+            if (text === null) return;
             
             // Split by double newlines to get paragraphs
             const paragraphs = text.split('\n\n').filter(p => p.trim());
             const htmlParagraphs = paragraphs.map(p => {
-                // Replace single newlines with <br> within paragraphs
-                const formatted = p.trim().replace(/\n/g, '<br>');
+                // Escape model/user text before adding the only intentional
+                // markup in this document: paragraph and line-break tags.
+                const formatted = escapeHtml(p.trim()).replace(/\n/g, '<br>');
                 return `<p>${formatted}</p>`;
             }).join('\n');
             
@@ -2702,11 +3709,8 @@
         }
 
         async function saveAsEpub() {
-            const text = document.getElementById('literaryRefinement').textContent;
-            if (text === 'No content yet') {
-                alert('No translation to save');
-                return;
-            }
+            const text = savedFinalForExport();
+            if (text === null) return;
             
             // Prompt for title
             const title = prompt('Enter book title:', 'Translated Book') || 'Translated Book';

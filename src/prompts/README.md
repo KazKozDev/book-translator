@@ -24,6 +24,7 @@ the program here, and a changed prompt is a changed translation.
 | `quality/pairwise_editor.md` | Stage 3 — draft vs final, on accuracy and readability separately | `QualityTests.eval_llm_judge_stage2` |
 | `quality/adequacy_fluency.md` | Stage 3 — score one translation 1–5 on adequacy and fluency | `QualityTests._adequacy_fluency_prompt` |
 | `shared/terminology.md` | The verified-glossary block spliced into Stage 1 and Stage 2 | `TerminologyManager.prompt_context` |
+| `manual/glossary_verification.md` | Ready-to-paste glossary mode review for an external frontier model | `/glossary-verification-prompt` |
 
 ## The format
 

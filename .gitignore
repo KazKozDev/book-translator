@@ -26,6 +26,9 @@ venv/
 .venv/
 ENV/
 .env
+.env.local
+.env.*.local
+!.env.example
 
 # Project specific
 uploads/*

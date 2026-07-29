@@ -38,3 +38,19 @@ def test_launcher_marker_prevents_a_duplicate_banner(monkeypatch, capsys):
     translator.print_terminal_banner()
 
     assert capsys.readouterr().out == ''
+
+
+def test_command_launcher_keeps_the_banner_colored_even_with_global_no_color(
+    monkeypatch, capsys,
+):
+    """Finder/Codex may pass NO_COLOR to Terminal; the .command logo is visual."""
+    monkeypatch.delenv('TOLMACH_BANNER_PRINTED', raising=False)
+    monkeypatch.setenv('NO_COLOR', '1')
+    monkeypatch.setenv('TOLMACH_FORCE_BANNER_COLOR', '1')
+    monkeypatch.setattr(banner.sys.stdout, 'isatty', lambda: True)
+
+    banner.print_terminal_banner(force=True)
+
+    output = capsys.readouterr().out
+    assert f'{banner._ACCENT}{banner.TERMINAL_LOGO}{banner._RESET}' in output
+    assert f'{banner._CREAM}' in output
