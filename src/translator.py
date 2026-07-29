@@ -343,6 +343,10 @@ from epub_io import (  # noqa: E402
     build_epub_from_chapters,
 )
 
+# PDF is read-only and for the same reason stands apart: it produces plain text
+# and nothing downstream knows a PDF was involved.
+from pdf_io import is_pdf_filename, extract_pdf_book  # noqa: E402
+
 
 # The Stage 3 quality tests are the other half of this class, kept in
 # quality_tests.py: a thousand lines of optional, on-demand diagnostics that
@@ -3819,8 +3823,14 @@ def read_uploaded_book(file, source_lang: Optional[str] = None):
 
     Returns (text, chapters, book_title, book_author, source_format, filepath).
     `chapters` is None for plain text; for EPUB it is what drives chunking, so
-    that no chunk ever straddles a chapter boundary. Deleting filepath is the
-    caller's job.
+    that no chunk ever straddles a chapter boundary. Deleting filepath on the way
+    out is the caller's job — but a file rejected here never reaches a caller
+    that has a path to delete, so it is removed here instead.
+
+    PDF is read here and nowhere else. It comes back with `chapters` None, like
+    a .txt book, because that is what it is by the time it leaves this function:
+    the format is recorded so the archive can say where the text came from, but
+    every branch downstream asks only whether the source was EPUB.
     """
     if not file or file.filename == '':
         raise UploadError('No selected file')
@@ -3829,19 +3839,41 @@ def read_uploaded_book(file, source_lang: Optional[str] = None):
     filepath = os.path.join(UPLOAD_FOLDER, filename)
     file.save(filepath)
 
-    if is_epub_filename(filename):
-        chapters, book_title, book_author = extract_epub_book(filepath)
-        if not chapters:
-            raise UploadError('Could not find any chapters in this EPUB')
-        # Readable in the UI's "Original text" preview; chapter splitting for
-        # translation itself is driven by the `chapters` list, not this string.
-        text = '\n\n'.join(
-            f'=== Chapter {i} ===\n\n{chapter}' for i, chapter in enumerate(chapters, 1)
-        )
-        return text, chapters, book_title, book_author, 'epub', filepath
+    try:
+        if is_pdf_filename(filename):
+            try:
+                text, book_title, book_author = extract_pdf_book(filepath)
+            except Exception as e:
+                # pypdf's own errors name internal objects, so the message the
+                # user gets is the one thing worth adding to it.
+                logger.app_logger.error('Failed to read PDF %s: %s', filename, e)
+                raise UploadError(f'Could not read this PDF: {e}')
+            if not text.strip():
+                raise UploadError(
+                    'No text could be extracted from this PDF. If it is a scan, run '
+                    'OCR on it first, or upload the book as TXT or EPUB.'
+                )
+            return text, None, book_title, book_author, 'pdf', filepath
 
-    text = decode_text_file(filepath, source_lang)
-    return text, None, None, None, 'txt', filepath
+        if is_epub_filename(filename):
+            chapters, book_title, book_author = extract_epub_book(filepath)
+            if not chapters:
+                raise UploadError('Could not find any chapters in this EPUB')
+            # Readable in the UI's "Original text" preview; chapter splitting for
+            # translation itself is driven by the `chapters` list, not this string.
+            text = '\n\n'.join(
+                f'=== Chapter {i} ===\n\n{chapter}' for i, chapter in enumerate(chapters, 1)
+            )
+            return text, chapters, book_title, book_author, 'epub', filepath
+
+        text = decode_text_file(filepath, source_lang)
+        return text, None, None, None, 'txt', filepath
+    except UploadError:
+        try:
+            os.remove(filepath)
+        except OSError as e:
+            logger.app_logger.error('Failed to clean up a rejected upload: %s', e)
+        raise
 
 
 @app.route('/source-preview', methods=['POST'])

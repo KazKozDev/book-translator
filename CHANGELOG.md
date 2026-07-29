@@ -2,6 +2,10 @@
 
 Notable changes to Tolmach are documented here.
 
+## Unreleased
+
+- Added PDF upload beside TXT and EPUB. A PDF is read as text only: running heads and page numbers are removed and printed lines are rejoined into paragraphs, after which it follows the same path as a TXT book. A scanned PDF with no text layer is refused instead of translated as an empty book.
+
 ## [3.0.1] — 2026-07-29
 
 - Kept source preview and document glossary storage available when Ollama is stopped.

@@ -884,7 +884,7 @@
                         <span class="panel-title">Original text</span>
                         <button type="button" class="header-action" id="uploadHeaderBtn">→ 1 UPLOAD</button>
                     </h3>
-                    <input type="file" id="fileInput" class="file-input" accept=".txt,.epub" hidden>
+                    <input type="file" id="fileInput" class="file-input" accept=".txt,.epub,.pdf" hidden>
                     <div class="text-panel-content is-placeholder" id="originalText">No content yet</div>
                 </div>
                 <div class="text-panel panel-draft">
@@ -2997,7 +2997,7 @@
             const text = panel.textContent;
             const isPlaceholder = !text || text === 'No content yet' || text.startsWith('Loading')
                 || text.startsWith('Draft batches') || text.startsWith('Refined batches')
-                || text.startsWith('Could not display') || text.includes('EPUB loaded —');
+                || text.startsWith('Could not') || text.includes('EPUB loaded —');
             panel.classList.toggle('is-placeholder', isPlaceholder);
 
             const meta = document.getElementById(metaIds[panelId]);
@@ -3077,10 +3077,9 @@
             const originalPanel = document.getElementById('originalText');
             const previewToken = ++sourcePreviewToken;
 
-            if (isEpubFile(file)) {
-                // EPUB is a zip archive, so ask the same server-side reader that
-                // Start uses to extract its spine into the Original text panel.
-                originalPanel.textContent = 'Loading EPUB source preview…';
+            if (needsServerSidePreview(file)) {
+                const format = file.name.toLowerCase().endsWith('.pdf') ? 'PDF' : 'EPUB';
+                originalPanel.textContent = `Loading ${format} source preview…`;
                 updatePanelMeta('originalText');
                 try {
                     const formData = new FormData();
@@ -3091,7 +3090,15 @@
                         body: formData,
                     });
                     const data = await response.json().catch(() => ({}));
-                    if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
+                    if (!response.ok) {
+                        const rejected = new Error(data.error || `HTTP ${response.status}`);
+                        // 400 means the reader refused the file itself — an
+                        // EPUB with no chapters, a PDF that is only scanned
+                        // images. Start would refuse it for the same reason, so
+                        // the panel must not promise a translation.
+                        rejected.unreadable = response.status === 400;
+                        throw rejected;
+                    }
                     if (previewToken !== sourcePreviewToken || file !== selectedFile) return;
 
                     originalPanel.textContent = data.truncated
@@ -3101,7 +3108,9 @@
                     document.getElementById('deckStatus').textContent = `${file.name} ready · Press START to translate`;
                 } catch (error) {
                     if (previewToken !== sourcePreviewToken || file !== selectedFile) return;
-                    originalPanel.textContent = `Could not display the EPUB source preview: ${error.message}. The file can still be translated.`;
+                    originalPanel.textContent = error.unreadable
+                        ? `Could not read this ${format}: ${error.message}`
+                        : `Could not display the ${format} source preview: ${error.message}. The file can still be translated.`;
                     updatePanelMeta('originalText');
                 }
                 return;
@@ -3130,8 +3139,13 @@
             reader.readAsText(file.slice(0, SOURCE_PREVIEW_LIMIT));
         }
 
-        function isEpubFile(file) {
-            return file.name.toLowerCase().endsWith('.epub');
+        // EPUB is a zip and PDF is its own binary container, so neither can be
+        // read by FileReader in the browser. Both go to /source-preview, which
+        // is the same reader Start uses — the preview cannot disagree with what
+        // gets translated.
+        function needsServerSidePreview(file) {
+            const name = file.name.toLowerCase();
+            return name.endsWith('.epub') || name.endsWith('.pdf');
         }
 
         function formatFileSize(bytes) {
