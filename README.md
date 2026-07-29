@@ -6,7 +6,7 @@ Professional literary translation software for translating entire TXT and EPUB b
 git clone https://github.com/KazKozDev/book-translator.git && cd book-translator && python3 launch.py
 ```
 
-![Tolmach offline AI book translator for EPUB and novels](assets/demo.gif)
+![Tolmach offline AI book translator for EPUB and novels](assets/demo-polished.gif)
 
 Open source · Local by default · No API key required
 
@@ -225,6 +225,6 @@ The earlier modular application remains available as tag **v2.1.0**, including i
   <a href="https://github.com/KazKozDev/book-translator/blob/main/CHANGELOG.md">CHANGELOG</a> ·
   <a href="https://github.com/KazKozDev/book-translator/blob/main/CONTRIBUTING.md">CONTRIBUTING</a> ·
   <a href="https://github.com/KazKozDev/book-translator/blob/main/LICENSE">LICENSE</a> ·
-  <a href="https://github.com/KazKozDev/book-translator/blob/main/SECURITY.md"><strong>Disclaimer</strong></a> ·
+  <a href="https://github.com/KazKozDev/book-translator/blob/main/DISCLAIMER.md"><strong>DISCLAIMER</strong></a> ·
   <a href="https://www.linkedin.com/in/kazkozdev/">LinkedIn</a>
 </p>

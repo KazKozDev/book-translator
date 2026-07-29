@@ -30,11 +30,10 @@ ENV/
 .env.*.local
 !.env.example
 
-# Project specific
-uploads/*
-!uploads/.gitkeep
-translations/*
-!translations/.gitkeep
+# Runtime data (created automatically when the app starts)
+/uploads/
+/translations/
+/logs/
 *.db
 *.sqlite3
 
@@ -46,11 +45,8 @@ translations/*
 *.swo
 .DS_Store
 
-# Logs. The rotated backups (*.log.1 … *.log.5) go too — logs/* already covers
-# them, and *.log alone would not.
+# Logs outside the runtime directory
 *.log
-logs/*
-!logs/.gitkeep
 
 # Temporary files
 nltk_data/
