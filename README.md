@@ -1,12 +1,12 @@
-# Tolmach — Offline AI Book Translator for EPUB and Novels
+# Tolmach — Offline AI Book Translator for EPUB, PDF, and Novels
 
-Professional literary translation software for translating entire TXT and EPUB books with local Ollama models, document glossaries, guarded refinement, and side-by-side review.
+Professional literary translation software for translating entire TXT, EPUB, and PDF books with local Ollama models, document glossaries, guarded refinement, and side-by-side review.
 
 ```bash
 git clone https://github.com/KazKozDev/book-translator.git && cd book-translator && python3 launch.py
 ```
 
-![Tolmach offline AI book translator for EPUB and novels](assets/demo-polished.gif)
+![Tolmach offline AI book translator for EPUB, PDF, and novels](assets/demo-polished.gif)
 
 Open source · Local by default · No API key required
 
@@ -26,16 +26,18 @@ Open source · Local by default · No API key required
 
    **START** creates the first translation. **CONTINUE** reviews and refines it. When the job finishes, use the export buttons to download the book.
 
-## Translate an entire EPUB book with AI
+## Translate an entire EPUB or PDF book with AI
 
 Choose the source language, target language, and text genre. Click **→ 1 UPLOAD** and select the complete book—not one chapter at a time.
 
 ```text
 Source language: English
 Target language: Russian
-Input:           TXT or EPUB
+Input:           TXT, EPUB, or PDF
 Download:        TXT, PDF, or EPUB
 ```
+
+A PDF is read for its text only. Tolmach removes running heads and page numbers and rejoins the printed lines back into paragraphs, then translates the result exactly as it would a TXT book — layout, images, and chapter structure are not carried over. A scanned PDF with no text layer is refused at upload instead of being translated as an empty book; run OCR on it first, or use the TXT or EPUB edition.
 
 Click **→ 2 START** to create the draft translation. Finished sections appear in the Translation panel while the rest of the book continues processing. Click **→ 3 CONTINUE** when you want Tolmach to refine that draft into the final version.
 
@@ -72,7 +74,7 @@ Optional quality checks flag possible terminology errors, missing text, changed 
 
 ## How it works
 
-The browser sends your TXT or EPUB to a Flask server running on your computer.<br>
+The browser sends your TXT, EPUB, or PDF to a Flask server running on your computer.<br>
 **PREPARE** scans the whole book and builds a glossary for that document.<br>
 **START** splits the book into chunks and translates them with the selected Ollama model.<br>
 **CONTINUE** proposes small edits, and a separate verifier checks each edit against the source.<br>
@@ -87,7 +89,7 @@ Book → Glossary → Draft translation → Verified refinement → Human review
 
 ### Translation pipeline
 
-1. **Upload** — the Flask backend reads TXT or EPUB and stores the source in `uploads/`.
+1. **Upload** — the Flask backend reads TXT, EPUB, or PDF and stores the source in `uploads/`. A PDF is read as text only: its printed lines are rejoined into paragraphs and it then follows the same path as a TXT book.
 2. **Prepare** — deterministic text harvesting and GLiNER collect entity candidates. BGE-M3 groups likely spelling variants, then the selected instruct model resolves ambiguous groups and proposes target renderings. The editable glossary is stored for this document fingerprint and language pair.
 3. **Start** — the source is split into chunks of about 1200 characters at paragraph and sentence boundaries. The Translation model receives each chunk with its genre, glossary constraints, and previous-paragraph context. Completed chunks are written to SQLite and streamed to the browser.
 4. **Continue** — the Refinement model returns located edits instead of rewriting an entire chunk. Python applies only those replacements. The Verifier compares each patched version with the source, checks the alternatives in both orders, and retries without ordered A/B versions when it detects position bias.
@@ -121,6 +123,7 @@ Glossary   Ollama   Verifier
 - `src/quality_tests.py` — deterministic and model-based quality checks.
 - `src/terminology.py` — glossary parsing and enforcement rules.
 - `src/epub_io.py` — EPUB input and output.
+- `src/pdf_io.py` — PDF input: text extraction and paragraph reconstruction.
 - `src/translation_cache.py` — persistent chunk cache.
 - `src/prompts/` — prompts sent to each model role.
 - `src/static/` — browser interface, Settings, Guide, and live Log pages.
@@ -159,7 +162,7 @@ The installer uses an existing Python 3.10+ installation when available. Otherwi
 
 ## Limitations
 
-- Tolmach accepts TXT and EPUB input. It does not import PDF or DOCX files.
+- Tolmach accepts TXT, EPUB, and PDF input. It does not import DOCX files. A PDF contributes text only — layout, images, and chapter structure are not preserved, and a scanned PDF without a text layer is refused rather than translated.
 - Translating a complete book can take 10–15 hours on local hardware.
 - Translation and review models can still miss errors or make good text worse. Proofread the final book before publishing it.
 - Large Ollama models need substantial memory and disk space; Tolmach cannot make a model fit hardware that is too small.
@@ -206,19 +209,18 @@ The test suite does not require Ollama, downloaded models, or network access.
 
 </details>
 
-## Credits and project history
+## License
 
-[**kroryan**](https://github.com/kroryan) — created the v2.0 modular architecture, contributed Windows compatibility, and identified security and stability fixes later carried into this rewrite.
-[**moonixt**](https://github.com/moonixt) — contributed Portuguese language support and startup instructions.
-The earlier modular application remains available as tag **v2.1.0**, including its Windows tray application and Docker build as they stood on 26-01-21.
+Tolmach Book Translator is free and open-source software licensed under the [GNU Affero General Public License version 3 only](LICENSE) (`AGPL-3.0-only`).
+
+Copyright (C) 2024-2026 Artem Kazakov Kozlov.
 
 <br><br>
 
 <p align="center">
-  <a href="https://github.com/KazKozDev/book-translator/blob/main/LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-blue.svg"></a>
+  <a href="https://github.com/KazKozDev/book-translator/blob/main/LICENSE"><img alt="License: AGPL-3.0-only" src="https://img.shields.io/badge/License-AGPL--3.0--only-blue.svg"></a>
   <a href="https://github.com/KazKozDev/book-translator/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/KazKozDev/book-translator/actions/workflows/ci.yml/badge.svg"></a>
   <a href="https://www.python.org/"><img alt="Python 3.10+" src="https://img.shields.io/badge/Python-3.10%2B-3776AB.svg?logo=python&amp;logoColor=white"></a>
-  <a href="https://builtwithvibes.io/"><img alt="Vibe coded" src="https://img.shields.io/badge/-Vibe%20coded-111111.svg"></a>
 </p>
 
 <p align="center">

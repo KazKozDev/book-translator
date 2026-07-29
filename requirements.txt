@@ -13,6 +13,10 @@ requests==2.31.0
 psutil==5.9.6
 EbookLib==0.19
 beautifulsoup4==4.12.3
+# Text extraction from uploaded PDFs. Pure Python, no system dependency: the
+# launcher installs this file unattended, so a package needing poppler or a
+# compiler is not an option here. Read-only — nothing exports PDF.
+pypdf==6.14.2
 # chrF, for the backtranslation diagnostic.
 sacrebleu==2.4.3
 # Local multilingual named-entity extraction used by Stage 0 Prepare.
