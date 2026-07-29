@@ -1,3 +1,5 @@
+import os
+
 import pytest
 
 import frontier_glossary as frontier
@@ -199,6 +201,10 @@ def test_owner_only_local_env_key_is_available_without_exposing_it(
     assert 'local-secret-value' not in repr(catalog)
 
 
+@pytest.mark.skipif(
+    os.name == 'nt',
+    reason='Windows does not expose POSIX owner-only permission bits',
+)
 def test_local_env_with_open_permissions_is_rejected(monkeypatch, tmp_path):
     env_file = tmp_path / '.env.local'
     env_file.write_text('OPENAI_API_KEY=local-secret-value\n', encoding='utf-8')

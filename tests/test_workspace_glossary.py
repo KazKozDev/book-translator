@@ -95,7 +95,9 @@ def test_workspace_glossary_rejects_invalid_drafts(glossary_client, fingerprint,
 
 
 def test_client_drops_legacy_global_glossary_storage():
-    index_html = (Path(app_module.__file__).parent / 'static' / 'index.html').read_text()
+    index_html = (
+        Path(app_module.__file__).parent / 'static' / 'index.html'
+    ).read_text(encoding='utf-8')
 
     assert "glossary: 'workspaceGlossary'" not in index_html
     assert "localStorage.removeItem(LEGACY_WORKSPACE_GLOSSARY_KEY)" in index_html
