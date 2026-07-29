@@ -218,7 +218,7 @@ The earlier modular application remains available as tag **v2.1.0**, including i
   <a href="https://github.com/KazKozDev/book-translator/blob/main/LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-blue.svg"></a>
   <a href="https://github.com/KazKozDev/book-translator/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/KazKozDev/book-translator/actions/workflows/ci.yml/badge.svg"></a>
   <a href="https://www.python.org/"><img alt="Python 3.10+" src="https://img.shields.io/badge/Python-3.10%2B-3776AB.svg?logo=python&amp;logoColor=white"></a>
-  <a href="https://github.com/openai/codex"><img alt="Vibe coded with Codex" src="https://img.shields.io/badge/Vibe_coded_with-Codex-111111.svg?logo=openai&amp;logoColor=white"></a>
+  <a href="https://builtwithvibes.io/"><img alt="Vibe coded" src="https://img.shields.io/badge/-Vibe%20coded-111111.svg"></a>
 </p>
 
 <p align="center">
