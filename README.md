@@ -1,14 +1,12 @@
-# Tolmach — Local AI Book Translator for Ollama
+# Tolmach — Offline AI Book Translator for EPUB and Novels
 
-Upload a TXT or EPUB book, translate it on your computer, review the result, and download the final text as TXT, PDF, or EPUB.
-
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE) [![CI](https://github.com/KazKozDev/book-translator/actions/workflows/ci.yml/badge.svg)](https://github.com/KazKozDev/book-translator/actions/workflows/ci.yml) [![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-3776AB.svg?logo=python&logoColor=white)](https://www.python.org/)
+Professional literary translation software for translating entire TXT and EPUB books with local Ollama models, document glossaries, guarded refinement, and side-by-side review.
 
 ```bash
 git clone https://github.com/KazKozDev/book-translator.git && cd book-translator && python3 launch.py
 ```
 
-![Tolmach translating and reviewing a book](assets/demo.gif)
+![Tolmach offline AI book translator for EPUB and novels](assets/demo.gif)
 
 Open source · Local by default · No API key required
 
@@ -28,7 +26,7 @@ Open source · Local by default · No API key required
 
    **START** creates the first translation. **CONTINUE** reviews and refines it. When the job finishes, use the export buttons to download the book.
 
-## How to translate a TXT or EPUB book with Ollama
+## Translate an entire EPUB book with AI
 
 Choose the source language, target language, and text genre. Click **→ 1 UPLOAD** and select the complete book—not one chapter at a time.
 
@@ -41,9 +39,9 @@ Download:        TXT, PDF, or EPUB
 
 Click **→ 2 START** to create the draft translation. Finished sections appear in the Translation panel while the rest of the book continues processing. Click **→ 3 CONTINUE** when you want Tolmach to refine that draft into the final version.
 
-The job is saved locally, so you can reopen it from the Archive. A complete book may take hours; the actual time depends on its length, your models, and your computer.
+The job is saved locally, so you can reopen it from the Archive. A complete book can take 10–15 hours; the actual time depends on its length, your models, and your computer.
 
-## How to keep character and place names consistent
+## Use an AI book translator with a glossary
 
 After uploading the book, click **→ PREPARE**. Tolmach scans the complete source and creates an editable glossary of recurring names, places, organisations, and terms.
 
@@ -60,7 +58,7 @@ Review this list before starting the translation: delete noise, correct a wrong 
 
 The glossary belongs only to this book and language pair. If you configure an optional external provider, **Verify automatically** can check the glossary and show proposed changes; Tolmach applies nothing until you approve it.
 
-## How to review an AI book translation before export
+## Review a novel translation side by side
 
 After **→ 3 CONTINUE** finishes, open **Review desk**. Each chunk shows the original source, the first draft, and the editable final translation next to each other.
 
@@ -162,7 +160,7 @@ The installer uses an existing Python 3.10+ installation when available. Otherwi
 ## Limitations
 
 - Tolmach accepts TXT and EPUB input. It does not import PDF or DOCX files.
-- Translating a complete book can take hours on local hardware.
+- Translating a complete book can take 10–15 hours on local hardware.
 - Translation and review models can still miss errors or make good text worse. Proofread the final book before publishing it.
 - Large Ollama models need substantial memory and disk space; Tolmach cannot make a model fit hardware that is too small.
 - Optional glossary verification sends the glossary and language pair—not the full book—to the selected API provider and may cost money.
@@ -208,15 +206,13 @@ The test suite does not require Ollama, downloaded models, or network access.
 
 </details>
 
-## Contributing
+## Credits and project history
 
-Bug fixes, language additions, and reproducible issue reports are welcome. Discuss large architecture changes in an issue first, then follow [CONTRIBUTING.md](CONTRIBUTING.md).
+[**kroryan**](https://github.com/kroryan) — created the v2.0 modular architecture, contributed Windows compatibility, and identified security and stability fixes later carried into this rewrite.
 
-### Credits and project history
+[**moonixt**](https://github.com/moonixt) — contributed Portuguese language support.
 
-- **[kroryan](https://github.com/kroryan)** — created the v2.0 modular architecture, contributed Windows compatibility, and identified security and stability fixes later carried into this rewrite.
-- **[moonixt](https://github.com/moonixt)** — contributed Portuguese language support.
-- **Derek W.** — contributed README and startup instructions.
+**Derek W.** — contributed README and startup instructions.
 
 The earlier modular application remains available as tag **`v2.1.0`**, including its Windows tray application and Docker build as they stood on 2026-01-21:
 
@@ -229,3 +225,21 @@ Tag **`v2.0.0`** contains the earlier October 2025 rewrite.
 ## License
 
 MIT — see [LICENSE](LICENSE).
+
+## Disclaimer
+
+Tolmach uses AI models to translate, refine, and evaluate text. Model output can contain omissions, mistranslations, inconsistent terminology, or invented details. Human review remains required, especially before professional publication. Keep the local server private, protect any configured API keys, and report vulnerabilities privately according to [Security](https://github.com/KazKozDev/book-translator/blob/main/SECURITY.md).
+
+<p align="center">
+  <a href="https://github.com/KazKozDev/book-translator/blob/main/LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-blue.svg"></a>
+  <a href="https://github.com/KazKozDev/book-translator/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/KazKozDev/book-translator/actions/workflows/ci.yml/badge.svg"></a>
+  <a href="https://www.python.org/"><img alt="Python 3.10+" src="https://img.shields.io/badge/Python-3.10%2B-3776AB.svg?logo=python&amp;logoColor=white"></a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/KazKozDev/book-translator/issues">Issues</a> ·
+  <a href="https://github.com/KazKozDev/book-translator/blob/main/CHANGELOG.md">CHANGELOG</a> ·
+  <a href="https://github.com/KazKozDev/book-translator/blob/main/CONTRIBUTING.md">CONTRIBUTING</a> ·
+  <a href="https://github.com/KazKozDev/book-translator/blob/main/LICENSE">LICENSE</a> ·
+  <a href="https://www.linkedin.com/in/kazkozdev/">LinkedIn</a>
+</p>

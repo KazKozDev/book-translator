@@ -45,8 +45,6 @@ translations/*
 *.swp
 *.swo
 .DS_Store
-# The preview config is shared; the local settings file is per-machine.
-.claude/settings.local.json
 
 # Logs. The rotated backups (*.log.1 … *.log.5) go too — logs/* already covers
 # them, and *.log alone would not.
