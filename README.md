@@ -209,19 +209,18 @@ The test suite does not require Ollama, downloaded models, or network access.
 
 </details>
 
-## Credits and project history
+## License
 
-[**kroryan**](https://github.com/kroryan) — created the v2.0 modular architecture, contributed Windows compatibility, and identified security and stability fixes later carried into this rewrite.
-[**moonixt**](https://github.com/moonixt) — contributed Portuguese language support and startup instructions.
-The earlier modular application remains available as tag **v2.1.0**, including its Windows tray application and Docker build as they stood on 26-01-21.
+Tolmach Book Translator is free and open-source software licensed under the [GNU Affero General Public License version 3 only](LICENSE) (`AGPL-3.0-only`).
+
+Copyright (C) 2024-2026 Artem Kazakov Kozlov.
 
 <br><br>
 
 <p align="center">
-  <a href="https://github.com/KazKozDev/book-translator/blob/main/LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-blue.svg"></a>
+  <a href="https://github.com/KazKozDev/book-translator/blob/main/LICENSE"><img alt="License: AGPL-3.0-only" src="https://img.shields.io/badge/License-AGPL--3.0--only-blue.svg"></a>
   <a href="https://github.com/KazKozDev/book-translator/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/KazKozDev/book-translator/actions/workflows/ci.yml/badge.svg"></a>
   <a href="https://www.python.org/"><img alt="Python 3.10+" src="https://img.shields.io/badge/Python-3.10%2B-3776AB.svg?logo=python&amp;logoColor=white"></a>
-  <a href="https://builtwithvibes.io/"><img alt="Vibe coded" src="https://img.shields.io/badge/-Vibe%20coded-111111.svg"></a>
 </p>
 
 <p align="center">

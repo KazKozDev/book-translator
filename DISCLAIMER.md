@@ -1,6 +1,6 @@
 Disclaimer
 
-Tolmach Book Translator is open-source software released under the MIT License. Tolmach does not claim ownership of your source texts or of any generated output.
+Tolmach Book Translator is free and open-source software released under the GNU Affero General Public License version 3 only (AGPL-3.0-only). Copyright (C) 2024-2026 Artem Kazakov Kozlov. Tolmach does not claim ownership of your source texts or of any generated output.
 
 You are solely responsible for ensuring that you have the legal right to use, translate, edit, and publish the source text, and for complying with all applicable copyright and intellectual-property laws.
 
