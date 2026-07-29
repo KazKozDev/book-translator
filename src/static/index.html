@@ -257,10 +257,19 @@
         .history-actions {
             display: flex;
             flex-wrap: wrap;
-            gap: 8px;
+            gap: 10px;
             justify-content: flex-end;
             margin-left: 16px;
         }
+        /* History actions deliberately reuse the panel-header treatment: text
+           only, accent-coloured, and no separate button surface. */
+        .history-actions .header-action {
+            font-size: .74rem;
+            letter-spacing: .08em;
+            text-transform: uppercase;
+        }
+        .history-actions .history-delete-action { color: var(--muted); }
+        .history-actions .history-delete-action:hover { color: #b91c1c; }
 
         .btn-delete {
             background: transparent;
@@ -339,6 +348,14 @@
            wordmark, so lift the image itself to place the visible mark beside
            the top of the expanded glossary. */
         .glossary-mark { position: relative; top: 20px; display: block; flex: 0 0 500px; width: 500px; max-width: none; align-self: flex-start; margin: -55px 0 0 -20px; mix-blend-mode: multiply; opacity: .28; transform: translate(-20px, 166px) scale(2); transform-origin: left center; }
+        .glossary-mark-plate { display: block; width: 100%; }
+        /* Once the drift is running the canvas carries the whole wordmark: the
+           letters exactly as they are, the blown-off specks moving on their own.
+           Until then, and whenever anything about it fails, the plain image is
+           what stays on screen. */
+        .glossary-mark-drift { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; }
+        .glossary-mark.is-drifting .glossary-mark-plate { visibility: hidden; }
+        .glossary-mark.is-drifting .glossary-mark-drift { opacity: 1; }
         .glossary-editor, .glossary-guide { min-width: 0; border: none; border-radius: 0; background: #eceef0; }
         .glossary-guide { padding: 24px 26px; }
         /* The editor is built like a text panel: header, then one scrolling
@@ -438,11 +455,17 @@
         .deck-status-group { display: flex; align-items: center; gap: 12px; }
         .deck-status { color: var(--muted); font-size: .78rem; }
         .deck-status-group .header-action { font-size: .78rem; font-weight: 600; }
-        .export-buttons { gap: 8px; margin: 0; padding: 0; border: none; background: transparent; justify-content: flex-end; }
-        .btn-export { padding: 8px 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--paper); box-shadow: none; color: var(--ink); font-size: .8rem; font-weight: 500; }
-        .btn-export:hover { border-color: #d1d5db; background: #f9fafb; box-shadow: none; transform: none; }
-        .btn-export:disabled { border-color: var(--line-soft); background: transparent; color: var(--faint); cursor: not-allowed; }
-        .btn-export:disabled:hover { border-color: var(--line-soft); background: transparent; }
+        .export-buttons { gap: 10px; margin: 0; padding: 0; border: none; background: transparent; justify-content: flex-end; }
+        /* Export actions belong to the deck bar, so they use the same text-only
+           treatment as New translation and the panel-header actions. */
+        .btn-export {
+            border: none; padding: 0; background: none; box-shadow: none;
+            color: var(--accent); font: inherit; font-size: .78rem; font-weight: 600;
+            letter-spacing: .08em; text-transform: uppercase; cursor: pointer;
+        }
+        .btn-export:hover { background: none; color: var(--accent-dark); text-decoration: underline; text-underline-offset: 3px; box-shadow: none; transform: none; }
+        .btn-export:disabled { color: var(--faint); cursor: not-allowed; }
+        .btn-export:disabled:hover { color: var(--faint); text-decoration: none; }
 
         /* Review desk: one compact navigator beside a text-first editor.
            It spans the page below the document deck so hundreds of chunks can
@@ -502,19 +525,20 @@
         .review-signal strong { display: block; margin: 0; color: var(--ink); font-size: .7rem; letter-spacing: .05em; text-transform: uppercase; }
         .review-signal.is-major strong, .review-signal.is-warning strong { color: #b91c1c; }
         .review-signal-detail { display: block; margin-top: 3px; color: var(--ink); overflow-wrap: anywhere; }
-        .review-signal-apply { flex: 0 0 auto; min-height: 24px; padding: 2px 8px; border: 1px solid var(--line); border-radius: 5px; background: transparent; color: var(--muted); font: inherit; font-size: .68rem; font-weight: 600; line-height: 1.2; cursor: pointer; }
-        .review-signal-apply:hover { border-color: var(--accent); color: var(--accent-dark); }
-        .review-signal-apply:disabled { border-color: var(--line-soft); color: var(--faint); cursor: not-allowed; }
+        .review-signal-apply { flex: 0 0 auto; padding: 0; border: none; background: none; color: var(--accent); font: inherit; font-size: .68rem; font-weight: 600; letter-spacing: .05em; line-height: 1.2; text-transform: uppercase; cursor: pointer; }
+        .review-signal-apply:hover { color: var(--accent-dark); text-decoration: underline; text-underline-offset: 3px; }
+        .review-signal-apply:disabled { color: var(--faint); cursor: not-allowed; }
         .review-final-label { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 9px; color: var(--ink); font-size: .74rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
         .review-final-label span { color: var(--faint); font-size: .68rem; font-weight: 500; letter-spacing: 0; text-transform: none; }
         .review-final-text { display: block; width: 100%; min-height: 210px; padding: 15px 16px; border: 1px solid var(--line); border-radius: 6px; background: var(--paper); color: var(--ink); font: inherit; font-size: .87rem; line-height: 1.7; resize: vertical; }
         .review-final-text:focus { outline: 2px solid rgba(91, 124, 153, .22); outline-offset: 1px; border-color: var(--accent); }
-        .review-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 9px; margin-top: 12px; }
-        .review-action { min-height: 34px; padding: 7px 12px; border: 1px solid var(--line); border-radius: 6px; background: var(--paper); color: var(--ink); font: inherit; font-size: .78rem; font-weight: 600; cursor: pointer; }
-        .review-action:hover { border-color: var(--accent); color: var(--accent-dark); }
-        .review-action.is-primary { border-color: var(--accent); background: var(--accent); color: #fff; }
-        .review-action.is-primary:hover { border-color: var(--accent-dark); background: var(--accent-dark); color: #fff; }
-        .review-action:disabled { border-color: var(--line-soft); background: transparent; color: var(--faint); cursor: not-allowed; }
+        .review-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-top: 12px; }
+        .review-action { padding: 0; border: none; background: none; color: var(--accent); font: inherit; font-size: .78rem; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; cursor: pointer; }
+        .review-action:hover { color: var(--accent-dark); text-decoration: underline; text-underline-offset: 3px; }
+        .review-action.is-primary { color: var(--accent); }
+        .review-action.is-primary:hover { color: var(--accent-dark); }
+        .review-action:disabled { color: var(--faint); cursor: not-allowed; }
+        .review-action:disabled:hover { color: var(--faint); text-decoration: none; }
         .review-count { min-height: 34px; padding: 6px 24px 6px 8px; border: 1px solid var(--line); border-radius: 6px; background-color: var(--paper); color: var(--ink); font: inherit; font-size: .78rem; cursor: pointer; }
         .review-action-status { flex: 1 1 210px; min-height: 1em; color: var(--muted); font-size: .72rem; text-align: right; }
         .review-action-status.is-error { color: #b91c1c; }
@@ -689,16 +713,16 @@
         .theme-dark .rail-value.has-violations { color: #f87171; }
         .theme-dark .glossary-status.has-errors { color: #f87171; }
         .theme-dark .copy-toast { background: #eceef0; color: #17181c; }
-        .theme-dark .btn-export:hover, .theme-dark .btn-small:hover { background: #24262c; }
+        .theme-dark .btn-small:hover { background: #24262c; }
         .theme-dark .btn-delete:hover { background: rgba(248, 113, 113, .1); color: #f87171; border-color: #f87171; }
         .theme-dark .text-panel-content.dragover { background-color: #24262c; }
         .theme-dark .review-nav, .theme-dark .review-readonly:first-child { background: #1a1b1f; }
         .theme-dark .review-readonly { background: #1d1f24; }
         .theme-dark .review-readonly:first-child .review-readonly-text { color: #9195a1; }
         .theme-dark .review-chunk-row:hover { background: rgba(134, 164, 189, .08); }
-        .theme-dark .review-signal-apply:not(:disabled) { border-color: var(--muted); background: var(--paper); color: var(--ink); }
-        .theme-dark .review-signal-apply:not(:disabled):hover { border-color: var(--accent); color: var(--accent); }
-        .theme-dark .review-signal-apply:disabled { border-color: var(--line-soft); background: transparent; color: var(--faint); }
+        .theme-dark .review-signal-apply:not(:disabled) { color: var(--accent); }
+        .theme-dark .review-signal-apply:not(:disabled):hover { color: var(--accent-dark); }
+        .theme-dark .review-signal-apply:disabled { color: var(--faint); }
         .theme-dark .review-chunk-state { color: #d5a54d; }
         .theme-dark .review-status.is-dirty { color: #d5a54d; }
         .theme-dark .review-status.is-error,
@@ -706,7 +730,7 @@
         .theme-dark .review-judge-state.is-error,
         .theme-dark .review-signal.is-major strong,
         .theme-dark .review-signal.is-warning strong { color: #f87171; }
-        .theme-dark .review-action.is-primary { color: #17181c; }
+        .theme-dark .review-action.is-primary:not(:disabled) { color: var(--accent); }
     </style>
     <script>
         // Applied before the body paints, so there's no flash of the wrong theme.
@@ -843,7 +867,10 @@
                     </section>
                     </aside>
                 </div>
-                <img class="glossary-mark" src="/static/assets/tolmach.png" alt="" aria-hidden="true">
+                <div class="glossary-mark" aria-hidden="true">
+                    <img class="glossary-mark-plate" src="/static/assets/tolmach.png" alt="">
+                    <canvas class="glossary-mark-drift"></canvas>
+                </div>
             </div>
         </form>
 
@@ -1239,6 +1266,7 @@
         const SOURCE_PREVIEW_LIMIT = 100000;
         const PANEL_PREVIEW_LIMIT = 12000;
         let selectedFile = null;
+        let sourcePreviewToken = 0;
         let translationPreviews = {};
         let allTranslations = [];
         let historySearchQuery = '';
@@ -1257,6 +1285,12 @@
         let reviewAppliedIssueIndexes = new Set();
         let reviewLoadToken = 0;
         const ACTIVE_TRANSLATION_KEY = 'activeTranslationId';
+        const LEGACY_WORKSPACE_GLOSSARY_KEY = 'workspaceGlossary';
+        let workspaceGlossaryContext = null;
+        let selectedDocumentFingerprint = null;
+        let workspaceGlossaryLoadToken = 0;
+        let workspaceGlossarySaveTimer = null;
+        let glossaryInputRevision = 0;
 
         function rememberActiveTranslation(id) {
             currentTranslationId = id;
@@ -1278,14 +1312,13 @@
         // The fields a person filled in by hand, kept across a reload of Home.
         // The selected document is deliberately not among them: a File object
         // exists nowhere but this tab until Start uploads it, so promising to
-        // restore it would mean restoring a name with no bytes behind it. The
-        // glossary is here because it is the expensive one — Prepare spends
-        // minutes of model time to fill that box.
+        // restore it would mean restoring a name with no bytes behind it.
+        // The glossary is deliberately not here: it lives in SQLite, scoped
+        // to the exact document and language pair.
         const WORKSPACE_KEYS = {
             sourceLanguage: 'workspaceSourceLanguage',
             targetLanguage: 'workspaceTargetLanguage',
             genre: 'workspaceGenre',
-            glossary: 'workspaceGlossary',
         };
 
         function rememberWorkspaceField(id) {
@@ -1315,6 +1348,100 @@
             }
             updateGlossaryPlaceholder();
             updateGlossaryStatus();
+        }
+
+        function clearWorkspaceGlossaryBinding() {
+            workspaceGlossaryLoadToken += 1;
+            workspaceGlossaryContext = null;
+            selectedDocumentFingerprint = null;
+            if (workspaceGlossarySaveTimer) {
+                clearTimeout(workspaceGlossarySaveTimer);
+                workspaceGlossarySaveTimer = null;
+            }
+        }
+
+        async function documentFingerprint(file) {
+            const bytes = await file.arrayBuffer();
+            const digest = await crypto.subtle.digest('SHA-256', bytes);
+            return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('');
+        }
+
+        function workspaceGlossaryUrl(context) {
+            const query = new URLSearchParams({
+                sourceLanguage: context.sourceLanguage,
+                targetLanguage: context.targetLanguage,
+            });
+            return `${API_URL}/workspace-glossary/${context.documentFingerprint}?${query}`;
+        }
+
+        function queueWorkspaceGlossarySave() {
+            if (!workspaceGlossaryContext) return;
+            if (workspaceGlossarySaveTimer) clearTimeout(workspaceGlossarySaveTimer);
+            const context = workspaceGlossaryContext;
+            const glossary = document.getElementById('glossary').value;
+            workspaceGlossarySaveTimer = setTimeout(async () => {
+                workspaceGlossarySaveTimer = null;
+                try {
+                    const response = await fetch(workspaceGlossaryUrl(context), {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            sourceLanguage: context.sourceLanguage,
+                            targetLanguage: context.targetLanguage,
+                            glossary,
+                        }),
+                    });
+                    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                } catch (error) {
+                    console.warn('Could not save this book\'s glossary:', error);
+                }
+            }, 350);
+        }
+
+        async function loadWorkspaceGlossaryForSelectedDocument() {
+            const file = selectedFile;
+            const glossaryField = document.getElementById('glossary');
+            const loadToken = ++workspaceGlossaryLoadToken;
+            workspaceGlossaryContext = null;
+            if (workspaceGlossarySaveTimer) {
+                clearTimeout(workspaceGlossarySaveTimer);
+                workspaceGlossarySaveTimer = null;
+            }
+            glossaryField.value = '';
+            clearFrontierReview();
+            updateGlossaryStatus();
+
+            if (!file) return;
+            const revisionWhenLoadingStarted = glossaryInputRevision;
+            try {
+                const fingerprint = selectedDocumentFingerprint || await documentFingerprint(file);
+                if (loadToken !== workspaceGlossaryLoadToken || file !== selectedFile) return;
+                selectedDocumentFingerprint = fingerprint;
+                const context = {
+                    documentFingerprint: fingerprint,
+                    sourceLanguage: document.getElementById('sourceLanguage').value,
+                    targetLanguage: document.getElementById('targetLanguage').value,
+                };
+                workspaceGlossaryContext = context;
+                const response = await fetch(workspaceGlossaryUrl(context));
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
+                if (loadToken !== workspaceGlossaryLoadToken || workspaceGlossaryContext !== context) return;
+
+                // Typing must win over a slow lookup for a previously saved
+                // version of this same book.
+                if (glossaryInputRevision === revisionWhenLoadingStarted) {
+                    glossaryField.value = data.glossary || '';
+                    clearFrontierReview();
+                    updateGlossaryStatus();
+                } else {
+                    queueWorkspaceGlossarySave();
+                }
+            } catch (error) {
+                if (loadToken === workspaceGlossaryLoadToken) {
+                    console.warn('Could not load this book\'s glossary:', error);
+                }
+            }
         }
 
         // The selected book itself, kept in IndexedDB rather than localStorage:
@@ -1372,6 +1499,8 @@
             const file = await recallDocument();
             if (!file) return;
             selectedFile = file;
+            selectedDocumentFingerprint = null;
+            loadWorkspaceGlossaryForSelectedDocument();
             setPrepareEnabled(true);
             showSourcePreview(file);
         }
@@ -1615,6 +1744,7 @@
             const button = document.getElementById('verifyGlossaryFrontierBtn');
             const provider = localStorage.getItem('frontierProvider') || 'openai';
             const apiKey = sessionStorage.getItem(`frontierApiKey:${provider}`) || '';
+            const model = localStorage.getItem(`frontierModel:${provider}`) || '';
             const originalLabel = button.textContent;
             button.disabled = true;
             button.textContent = 'Checking…';
@@ -1626,6 +1756,7 @@
                     body: JSON.stringify({
                         provider,
                         apiKey,
+                        model,
                         glossary: document.getElementById('glossary').value,
                         sourceLanguage: document.getElementById('sourceLanguage').value,
                         targetLanguage: document.getElementById('targetLanguage').value,
@@ -1649,8 +1780,9 @@
         function applyFrontierGlossary() {
             if (!pendingFrontierGlossary) return;
             document.getElementById('glossary').value = pendingFrontierGlossary;
+            glossaryInputRevision += 1;
             updateGlossaryStatus();
-            rememberWorkspaceField('glossary');
+            queueWorkspaceGlossarySave();
             clearFrontierReview();
             showCopyToast('Verified glossary applied.');
         }
@@ -2099,6 +2231,13 @@
                 reviewIsDirty = false;
                 reviewIsSaving = false;
                 reviewIsGenerating = false;
+                // The Progress rail's refinement and glossary counters live in
+                // the translation stream, which a reopened translation never
+                // had. This payload carries the same numbers back, so they
+                // survive a reload — and are refreshed after every chunk saved
+                // by hand, which changes them.
+                if (data.terminology) updateTerminologyStatus(data.terminology);
+                if (data.refinement) updateRefinementStatus(data.refinement);
                 const preferred = selectedIndex ?? selectedReviewChunkIndex;
                 selectedReviewChunkIndex = chunks.some(chunk => reviewIndexEquals(chunk.index, preferred))
                     ? Number(preferred)
@@ -2529,11 +2668,14 @@
 
                 // Never silently overwrite work already in the boxes.
                 const glossaryHadContent = glossaryField.value.trim().length > 0;
-                if (data.glossary && !glossaryHadContent) glossaryField.value = data.glossary;
+                if (data.glossary && !glossaryHadContent) {
+                    glossaryField.value = data.glossary;
+                    glossaryInputRevision += 1;
+                }
                 updateGlossaryStatus();
-                // Setting .value fires no input event, and this is precisely
-                // the content worth keeping across a reload.
-                rememberWorkspaceField('glossary');
+                // Setting .value fires no input event, so persist this
+                // generated draft explicitly for this particular document.
+                queueWorkspaceGlossarySave();
 
                 const entityCount = (data.entities || []).length;
                 const resolution = data.entity_resolution || {};
@@ -2608,6 +2750,9 @@
             // Before restoreActiveTranslation, which awaits the server: an
             // opened translation carries its own languages and genre, and
             // those should win over whatever the form was last left at.
+            // This key was global in older builds.  Remove it once so an old
+            // book's terms can never leak into a newly selected document.
+            try { localStorage.removeItem(LEGACY_WORKSPACE_GLOSSARY_KEY); } catch (e) {}
             restoreWorkspaceFields();
             restoreSelectedDocument();
             applyThemeButton();
@@ -2682,13 +2827,20 @@
             });
 
             document.getElementById('glossary').addEventListener('input', () => {
+                glossaryInputRevision += 1;
                 clearFrontierReview();
                 updateGlossaryStatus();
-                rememberWorkspaceField('glossary');
+                queueWorkspaceGlossarySave();
             });
-            document.getElementById('targetLanguage').addEventListener('change', updateGlossaryPlaceholder);
-            ['sourceLanguage', 'targetLanguage', 'genre'].forEach(id => {
-                document.getElementById(id).addEventListener('change', () => rememberWorkspaceField(id));
+            ['sourceLanguage', 'targetLanguage'].forEach(id => {
+                document.getElementById(id).addEventListener('change', () => {
+                    rememberWorkspaceField(id);
+                    updateGlossaryPlaceholder();
+                    if (selectedFile) loadWorkspaceGlossaryForSelectedDocument();
+                });
+            });
+            document.getElementById('genre').addEventListener('change', () => {
+                rememberWorkspaceField('genre');
             });
             document.getElementById('prepareBtn').addEventListener('click', handlePrepare);
             document.getElementById('copyGlossaryPromptBtn').addEventListener(
@@ -2884,6 +3036,8 @@
 
         function handleFileSelect(file) {
             selectedFile = file;
+            selectedDocumentFingerprint = null;
+            loadWorkspaceGlossaryForSelectedDocument();
             forgetActiveTranslation();
             canonicalSavedFinal = '';
             resetReviewDesk();
@@ -2919,16 +3073,37 @@
 
         // Shared by a fresh pick and by the document restored on load, so a
         // book that survived a page load looks exactly like one just chosen.
-        function showSourcePreview(file) {
+        async function showSourcePreview(file) {
             const originalPanel = document.getElementById('originalText');
+            const previewToken = ++sourcePreviewToken;
 
             if (isEpubFile(file)) {
-                // It's a zip archive, not text — the server extracts chapter text
-                // from it, so there's nothing meaningful to preview client-side.
-                originalPanel.textContent =
-                    `${file.name} (${formatFileSize(file.size)})\n\nEPUB loaded — chapters will be extracted and translated on the server, then reassembled into a translated EPUB.`;
+                // EPUB is a zip archive, so ask the same server-side reader that
+                // Start uses to extract its spine into the Original text panel.
+                originalPanel.textContent = 'Loading EPUB source preview…';
                 updatePanelMeta('originalText');
-                document.getElementById('deckStatus').textContent = `${file.name} ready · Press START to translate`;
+                try {
+                    const formData = new FormData();
+                    formData.append('file', file);
+                    formData.append('sourceLanguage', document.getElementById('sourceLanguage').value);
+                    const response = await fetch(`${API_URL}/source-preview`, {
+                        method: 'POST',
+                        body: formData,
+                    });
+                    const data = await response.json().catch(() => ({}));
+                    if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
+                    if (previewToken !== sourcePreviewToken || file !== selectedFile) return;
+
+                    originalPanel.textContent = data.truncated
+                        ? `${data.preview}\n\n[Showing the first ${SOURCE_PREVIEW_LIMIT.toLocaleString()} characters. The full book will be translated.]`
+                        : data.preview;
+                    updatePanelMeta('originalText');
+                    document.getElementById('deckStatus').textContent = `${file.name} ready · Press START to translate`;
+                } catch (error) {
+                    if (previewToken !== sourcePreviewToken || file !== selectedFile) return;
+                    originalPanel.textContent = `Could not display the EPUB source preview: ${error.message}. The file can still be translated.`;
+                    updatePanelMeta('originalText');
+                }
                 return;
             }
 
@@ -2939,6 +3114,7 @@
             // large books bounded in the DOM. The full file is still uploaded.
             const reader = new FileReader();
             reader.onload = (event) => {
+                if (previewToken !== sourcePreviewToken || file !== selectedFile) return;
                 const preview = event.target.result;
                 originalPanel.textContent = file.size > SOURCE_PREVIEW_LIMIT
                     ? `${preview}\n\n[Showing the first ${SOURCE_PREVIEW_LIMIT.toLocaleString()} characters. The full book will be translated.]`
@@ -2947,6 +3123,7 @@
                 document.getElementById('deckStatus').textContent = `${file.name} ready · Press START to translate`;
             };
             reader.onerror = () => {
+                if (previewToken !== sourcePreviewToken || file !== selectedFile) return;
                 originalPanel.textContent = 'Could not display the source preview. The file can still be translated.';
                 updatePanelMeta('originalText');
             };
@@ -3174,16 +3351,16 @@
                         </div>
                     </div>
                     <div class="history-actions">
-                        <button class="btn btn-small" onclick="loadTranslationIntoWorkspace(${t.id})">📂 Open</button>
+                        <button class="header-action" onclick="loadTranslationIntoWorkspace(${t.id})">Open</button>
                         ${t.status === 'completed' ?
-                            `<button class="btn btn-small history-download-btn" data-translation-id="${t.id}" onclick="downloadTranslation(${t.id})">⬇ Download</button>` :
+                            `<button class="header-action history-download-btn" data-translation-id="${t.id}" onclick="downloadTranslation(${t.id})">Download</button>` :
                             t.status === 'stage1_completed' ?
-                            `<button class="btn btn-small" onclick="continueRefinementFromHistory(${t.id})">▶ Continue</button>` :
+                            `<button class="header-action" onclick="continueRefinementFromHistory(${t.id})">Continue</button>` :
                             t.status === 'error' ?
-                            `<button class="btn btn-small" onclick="retryTranslation(${t.id})">🔄 Retry</button>` :
+                            `<button class="header-action" onclick="retryTranslation(${t.id})">Retry</button>` :
                             ''
                         }
-                        <button class="btn btn-small btn-delete" onclick="deleteTranslation(${t.id}, this)" aria-label="Delete ${t.filename || 'translation'}">Delete</button>
+                        <button class="header-action history-delete-action" onclick="deleteTranslation(${t.id}, this)" aria-label="Delete ${t.filename || 'translation'}">Delete</button>
                     </div>
                 </div>
             `).join('');
@@ -3536,9 +3713,11 @@
         }
 
         function resetForm() {
+            sourcePreviewToken += 1;
             document.getElementById('translationForm').reset();
             document.getElementById('fileInput').value = '';
             selectedFile = null;
+            clearWorkspaceGlossaryBinding();
             forgetActiveTranslation();
             canonicalSavedFinal = '';
             resetReviewDesk();
@@ -3612,7 +3791,9 @@
                 const t = await response.json();
 
                 // This translation is no longer tied to a freshly selected file.
+                sourcePreviewToken += 1;
                 selectedFile = null;
+                clearWorkspaceGlossaryBinding();
                 forgetDocument();
                 rememberActiveTranslation(t.id);
                 revealedLiveTranslation = true;
@@ -3889,6 +4070,297 @@
             loadStats();
             loadTranslations();
         }, 5000);
+    </script>
+
+    <script>
+        /* The wordmark beside the glossary is drawn as if wind had torn the
+           right-hand letters apart. In the source PNG every blown-off speck is
+           its own island of opaque pixels on a transparent field, so the specks
+           can be lifted out of the image and drifted one by one while the
+           letters stay exactly where the designer put them.
+
+           None of this is load-bearing. The mark is decoration: if the pixels
+           can't be read, if nothing looks like debris, or if the reader asks for
+           less motion, the untouched <img> is what remains on screen. */
+        (function () {
+            const mark = document.querySelector('.glossary-mark');
+            if (!mark) return;
+            const plate = mark.querySelector('.glossary-mark-plate');
+            const canvas = mark.querySelector('.glossary-mark-drift');
+            if (!plate || !canvas || !canvas.getContext || !window.IntersectionObserver) return;
+
+            // Everything left of this line is an intact letter and must not move.
+            // Measured against the source image, where the tear starts a little
+            // past the "A".
+            const TORN_EDGE = 0.62;
+            // An island bigger than this is a letter body, not debris. Both
+            // limits are in the source image's own pixels.
+            const SPECK_MAX_AREA = 2000;
+            const SPECK_MAX_SIDE = 96;
+            const OPAQUE = 16;
+            // 30fps is plenty for motion this slow, and halves the work.
+            const FRAME_MS = 1000 / 30;
+
+            const calmer = window.matchMedia('(prefers-reduced-motion: reduce)');
+            let context = null, letters = null, debris = null, specks = null;
+            let state = 'unbuilt';
+            let visible = false, running = false, frame = 0, painted = 0;
+
+            // Seeded, so every reload gets the same wind.
+            function seeded(seed) {
+                let value = seed >>> 0;
+                return function () {
+                    value = (value + 0x6d2b79f5) >>> 0;
+                    let mixed = Math.imul(value ^ (value >>> 15), 1 | value);
+                    mixed = (mixed + Math.imul(mixed ^ (mixed >>> 7), 61 | mixed)) ^ mixed;
+                    return ((mixed ^ (mixed >>> 14)) >>> 0) / 4294967296;
+                };
+            }
+
+            // Splits the image into two layers: the wordmark with the debris
+            // removed, and the debris alone. Runs once, and only ever looks at
+            // the torn side of the picture.
+            function lift() {
+                const width = plate.naturalWidth, height = plate.naturalHeight;
+                if (!width || !height) return false;
+
+                const source = document.createElement('canvas');
+                source.width = width;
+                source.height = height;
+                const sourceContext = source.getContext('2d');
+                sourceContext.drawImage(plate, 0, 0);
+                // Only the torn side is ever read back. It is the only part that
+                // moves, and once the debris is taken out of it this canvas is
+                // already the layer of letters the animation draws under them.
+                const tornAt = Math.round(width * TORN_EDGE);
+                // A speck is at most SPECK_MAX_SIDE across and its middle is past
+                // the tear, so this much of a run-up holds every speck whole.
+                const scanLeft = Math.max(0, tornAt - SPECK_MAX_SIDE);
+                const scanWidth = width - scanLeft;
+                let image;
+                try {
+                    image = sourceContext.getImageData(scanLeft, 0, scanWidth, height);
+                } catch (error) {
+                    return false;   // Tainted canvas: keep the still image.
+                }
+                const pixels = image.data;
+
+                // Ink sits in a shallow band across that strip, and the flood fill
+                // below only has to cover the band.
+                let inkRight = -1, inkTop = height, inkBottom = -1;
+                for (let y = 0; y < height; y++) {
+                    let at = y * scanWidth * 4 + 3;
+                    let inked = false;
+                    for (let x = 0; x < scanWidth; x++, at += 4) {
+                        if (pixels[at] <= OPAQUE) continue;
+                        inked = true;
+                        if (x > inkRight) inkRight = x;
+                    }
+                    if (!inked) continue;
+                    if (y < inkTop) inkTop = y;
+                    inkBottom = y;
+                }
+                if (inkBottom < 0) return false;
+                const bandWidth = inkRight + 1;
+                const bandHeight = inkBottom - inkTop + 1;
+
+                // Flood fill each island of opaque pixels once, keeping the ones
+                // small enough, and far enough right, to read as blown-off debris.
+                // An island that runs off the left of the strip is a letter body
+                // carrying on towards the intact side, whatever its size here.
+                const island = new Int32Array(bandWidth * bandHeight);
+                const queue = new Int32Array(bandWidth * bandHeight);
+                const found = [];
+                let label = 0;
+                for (let seed = 0; seed < island.length; seed++) {
+                    if (island[seed] !== 0) continue;
+                    const seedX = seed % bandWidth, seedY = (seed / bandWidth) | 0;
+                    if (pixels[((seedY + inkTop) * scanWidth + seedX) * 4 + 3] <= OPAQUE) continue;
+                    label++;
+                    island[seed] = label;
+                    queue[0] = seed;
+                    let head = 0, tail = 1, area = 0;
+                    let minX = bandWidth, maxX = 0, minY = bandHeight, maxY = 0;
+                    while (head < tail) {
+                        const at = queue[head++];
+                        const x = at % bandWidth, y = (at / bandWidth) | 0;
+                        area++;
+                        if (x < minX) minX = x;
+                        if (x > maxX) maxX = x;
+                        if (y < minY) minY = y;
+                        if (y > maxY) maxY = y;
+                        for (let dy = -1; dy <= 1; dy++) {
+                            const nextY = y + dy;
+                            if (nextY < 0 || nextY >= bandHeight) continue;
+                            for (let dx = -1; dx <= 1; dx++) {
+                                const nextX = x + dx;
+                                if (nextX < 0 || nextX >= bandWidth) continue;
+                                const next = nextY * bandWidth + nextX;
+                                if (island[next] !== 0) continue;
+                                if (pixels[((nextY + inkTop) * scanWidth + nextX) * 4 + 3] <= OPAQUE) continue;
+                                island[next] = label;
+                                queue[tail++] = next;
+                            }
+                        }
+                    }
+                    const boxWidth = maxX - minX + 1, boxHeight = maxY - minY + 1;
+                    const middle = scanLeft + (minX + maxX) / 2;
+                    if (minX > 0 && area <= SPECK_MAX_AREA && boxWidth <= SPECK_MAX_SIDE
+                        && boxHeight <= SPECK_MAX_SIDE && middle >= tornAt) {
+                        found.push({ label, area, minX, minY, boxWidth, boxHeight });
+                    }
+                }
+                if (!found.length) return false;
+
+                // The debris layer only has to cover the torn corner.
+                let left = bandWidth, top = bandHeight, right = 0, bottom = 0;
+                for (const speck of found) {
+                    left = Math.min(left, speck.minX);
+                    top = Math.min(top, speck.minY);
+                    right = Math.max(right, speck.minX + speck.boxWidth);
+                    bottom = Math.max(bottom, speck.minY + speck.boxHeight);
+                }
+                const stripWidth = right - left, stripHeight = bottom - top;
+                const strip = sourceContext.createImageData(stripWidth, stripHeight);
+                const stripPixels = strip.data;
+
+                // Move each speck's pixels across: into the debris layer, out of
+                // the letters. Only the bounding boxes are touched.
+                for (const speck of found) {
+                    for (let y = speck.minY; y < speck.minY + speck.boxHeight; y++) {
+                        for (let x = speck.minX; x < speck.minX + speck.boxWidth; x++) {
+                            if (island[y * bandWidth + x] !== speck.label) continue;
+                            const from = ((y + inkTop) * scanWidth + x) * 4;
+                            const to = ((y - top) * stripWidth + (x - left)) * 4;
+                            stripPixels[to] = pixels[from];
+                            stripPixels[to + 1] = pixels[from + 1];
+                            stripPixels[to + 2] = pixels[from + 2];
+                            stripPixels[to + 3] = pixels[from + 3];
+                            pixels[from + 3] = 0;
+                        }
+                    }
+                }
+
+                sourceContext.putImageData(image, scanLeft, 0);
+                letters = source;
+
+                debris = document.createElement('canvas');
+                debris.width = stripWidth;
+                debris.height = stripHeight;
+                debris.getContext('2d').putImageData(strip, 0, 0);
+
+                const random = seeded(0x746f6c6d);
+                const reach = width - tornAt;
+                specks = found.map(speck => {
+                    const centreX = scanLeft + speck.minX + speck.boxWidth / 2;
+                    // A speck that has already travelled further is further into
+                    // the gust, so it rides it harder.
+                    const gust = Math.min(1, (centreX - tornAt) / reach);
+                    // Dust is thrown about; a torn-off piece of a letter has some
+                    // weight to it and only stirs.
+                    const light = Math.min(1, 300 / speck.area);
+                    return {
+                        sourceX: speck.minX - left,
+                        sourceY: speck.minY - top,
+                        width: speck.boxWidth,
+                        height: speck.boxHeight,
+                        x: centreX,
+                        y: inkTop + speck.minY + speck.boxHeight / 2,
+                        alongWind: (1 + 4 * gust) * (0.4 + 0.6 * light),
+                        acrossWind: (0.5 + 1.8 * gust) * (0.4 + 0.6 * light),
+                        // Turning a four-pixel chip only costs it sharpness, so
+                        // the smallest ones travel flat.
+                        spin: speck.area < 40
+                            ? 0
+                            : (0.03 + 0.09 * gust) * light * (random() < 0.5 ? -1 : 1),
+                        rate: 0.12 + 0.2 * random(),
+                        phase: random() * Math.PI * 2,
+                        fade: 0.2 * gust,
+                    };
+                });
+
+                canvas.width = width;
+                canvas.height = height;
+                context = canvas.getContext('2d');
+                mark.classList.add('is-drifting');
+                return true;
+            }
+
+            function paint(now) {
+                const seconds = now / 1000;
+                context.clearRect(0, 0, canvas.width, canvas.height);
+                context.drawImage(letters, 0, 0);
+                for (const speck of specks) {
+                    const angle = seconds * speck.rate * Math.PI * 2 + speck.phase;
+                    const along = Math.sin(angle);
+                    const across = Math.sin(angle * 0.63 + speck.phase);
+                    context.globalAlpha = 1 - speck.fade * (0.5 + 0.5 * across);
+                    const turn = speck.spin * along;
+                    const cos = Math.cos(turn), sin = Math.sin(turn);
+                    context.setTransform(
+                        cos, sin, -sin, cos,
+                        speck.x + along * speck.alongWind,
+                        speck.y + across * speck.acrossWind
+                    );
+                    context.drawImage(
+                        debris, speck.sourceX, speck.sourceY, speck.width, speck.height,
+                        -speck.width / 2, -speck.height / 2, speck.width, speck.height
+                    );
+                }
+                context.setTransform(1, 0, 0, 1, 0, 0);
+                context.globalAlpha = 1;
+            }
+
+            function step(now) {
+                frame = requestAnimationFrame(step);
+                if (now - painted < FRAME_MS) return;
+                painted = now;
+                paint(now);
+            }
+
+            function ready() {
+                if (state === 'ready') return true;
+                if (state !== 'unbuilt') return false;   // building, or no good
+                // Still downloading; the load listener below brings us back.
+                if (!plate.complete || !plate.naturalWidth) return false;
+                state = 'building';
+                // Reading the mark apart takes long enough to be felt, and the
+                // moment it becomes needed is the moment the glossary is opening.
+                // So it waits for the browser to be idle: the still image holds
+                // the place until then, which is what it was doing anyway.
+                const soon = window.requestIdleCallback
+                    ? work => window.requestIdleCallback(work, { timeout: 2000 })
+                    : work => setTimeout(work, 200);
+                soon(() => {
+                    state = lift() ? 'ready' : 'unusable';
+                    sync();
+                });
+                return false;
+            }
+
+            function sync() {
+                const wanted = visible && !document.hidden && !calmer.matches && ready();
+                if (wanted === running) return;
+                running = wanted;
+                if (running) {
+                    painted = 0;
+                    frame = requestAnimationFrame(step);
+                } else {
+                    cancelAnimationFrame(frame);
+                }
+            }
+
+            // The glossary starts collapsed and the mark is dropped entirely on
+            // narrow screens, so nothing above runs until the mark is on screen.
+            const watcher = new IntersectionObserver(entries => {
+                visible = entries[entries.length - 1].isIntersecting;
+                sync();
+            });
+            watcher.observe(mark);
+            plate.addEventListener('load', sync);
+            document.addEventListener('visibilitychange', sync);
+            if (calmer.addEventListener) calmer.addEventListener('change', sync);
+        })();
     </script>
 </body>
 </html>

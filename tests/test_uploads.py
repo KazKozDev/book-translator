@@ -5,6 +5,8 @@ character. So none of these cases raise — they either return the book or retur
 mojibake, and only a test can tell the difference.
 """
 
+from io import BytesIO
+
 import translator
 
 
@@ -65,3 +67,37 @@ def test_the_language_hint_is_read_loosely(tmp_path):
 
     for hint in ('ru', 'RU', ' ru-RU '):
         assert translator.decode_text_file(path, hint) == RUSSIAN
+
+
+def test_epub_source_preview_uses_the_translation_reader_and_cleans_up(tmp_path, monkeypatch):
+    upload_folder = tmp_path / 'uploads'
+    upload_folder.mkdir()
+    monkeypatch.setattr(translator, 'UPLOAD_FOLDER', str(upload_folder))
+    translator.app.config.update(TESTING=True)
+    epub_bytes = translator.build_epub_from_chapters(
+        ['Opening paragraph.\n\nSecond opening paragraph.', 'Chapter two.'],
+        title='Source Book',
+        author='Source Author',
+    )
+
+    response = translator.app.test_client().post(
+        '/source-preview',
+        data={
+            'file': (BytesIO(epub_bytes), 'source.epub'),
+            'sourceLanguage': 'en',
+        },
+        content_type='multipart/form-data',
+    )
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload['source_format'] == 'epub'
+    assert payload['title'] == 'Source Book'
+    assert payload['author'] == 'Source Author'
+    assert payload['truncated'] is False
+    assert '=== Chapter 1 ===' in payload['preview']
+    assert 'Opening paragraph.' in payload['preview']
+    assert '=== Chapter 2 ===' in payload['preview']
+    assert 'Chapter two.' in payload['preview']
+    assert payload['source_chars'] == len(payload['preview'])
+    assert list(upload_folder.iterdir()) == []

@@ -26,7 +26,6 @@ except ImportError:
 from flask import Flask, request, jsonify, Response, send_file, send_from_directory
 from flask_cors import CORS
 from werkzeug.utils import secure_filename
-import uuid
 
 app = Flask(__name__)
 CORS(app)
@@ -51,7 +50,7 @@ TRANSLATEGEMMA_TEMPERATURE = 0.3  # A dedicated MT model wants near-greedy decod
 # TERMINAL_LOGO is re-exported, not used here: test_the_banner_has_one_source
 # asserts both entry points resolve to the same object, so linters calling it
 # an unused import are wrong.
-from banner import SUBTITLE, TERMINAL_LOGO, print_terminal_banner  # noqa: E402,F401
+from banner import TERMINAL_LOGO, print_terminal_banner  # noqa: E402,F401
 
 
 def is_translategemma(model_name: Optional[str]) -> bool:
@@ -216,6 +215,19 @@ def init_db():
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 UNIQUE (translation_id, source_term),
                 FOREIGN KEY (translation_id) REFERENCES translations (id)
+            );
+
+            -- Stage 0 finishes before a translation row exists.  Keep its
+            -- editable draft in SQLite anyway, scoped to the exact document
+            -- and language pair, so a new book never inherits the last
+            -- book's terminology from browser-wide storage.
+            CREATE TABLE IF NOT EXISTS workspace_glossaries (
+                document_fingerprint TEXT NOT NULL,
+                source_lang TEXT NOT NULL,
+                target_lang TEXT NOT NULL,
+                glossary TEXT NOT NULL DEFAULT '',
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (document_fingerprint, source_lang, target_lang)
             );
 
             CREATE TABLE IF NOT EXISTS evaluation_results (
@@ -2906,6 +2918,7 @@ def verify_glossary_with_frontier():
     target_code = data.get('targetLanguage')
     provider = data.get('provider')
     submitted_key = data.get('apiKey')
+    submitted_model = data.get('model')
     if not isinstance(glossary, str) or not glossary.strip():
         return jsonify({'error': 'Add at least one glossary entry first'}), 400
     if not isinstance(source_code, str) or not isinstance(target_code, str):
@@ -2914,6 +2927,8 @@ def verify_glossary_with_frontier():
         return jsonify({'error': 'Choose a frontier provider in Settings'}), 400
     if submitted_key is not None and not isinstance(submitted_key, str):
         return jsonify({'error': 'API key must be text'}), 400
+    if submitted_model is not None and not isinstance(submitted_model, str):
+        return jsonify({'error': 'Model name must be text'}), 400
 
     source_language = LANG_NAMES.get(source_code, source_code).strip()
     target_language = LANG_NAMES.get(target_code, target_code).strip()
@@ -2935,6 +2950,7 @@ def verify_glossary_with_frontier():
             prompt,
             glossary,
             submitted_key,
+            submitted_model,
         )
     except FrontierGlossaryError as error:
         return jsonify({'error': str(error)}), error.status_code
@@ -2971,6 +2987,83 @@ def get_models():
             'modified': model.get('modified_at') or 'Unknown',
         })
     return jsonify({'models': models})
+
+
+WORKSPACE_GLOSSARY_FINGERPRINT = re.compile(r'^[a-f0-9]{64}$')
+MAX_WORKSPACE_GLOSSARY_LENGTH = 200_000
+
+
+def _workspace_glossary_context(document_fingerprint: str, source_lang: Optional[str], target_lang: Optional[str]):
+    """Validate the per-document identity used for an editable Stage 0 draft."""
+    if not WORKSPACE_GLOSSARY_FINGERPRINT.fullmatch(document_fingerprint or ''):
+        return None, ('Invalid document fingerprint', 400)
+    if not isinstance(source_lang, str) or not source_lang.strip():
+        return None, ('Source language is required', 400)
+    if not isinstance(target_lang, str) or not target_lang.strip():
+        return None, ('Target language is required', 400)
+    return (
+        document_fingerprint,
+        source_lang.strip(),
+        target_lang.strip(),
+    ), None
+
+
+@app.route('/workspace-glossary/<document_fingerprint>', methods=['GET'])
+@with_error_handling
+def get_workspace_glossary(document_fingerprint):
+    """Return the editable Stage 0 glossary for one book and language pair."""
+    context, error = _workspace_glossary_context(
+        document_fingerprint,
+        request.args.get('sourceLanguage'),
+        request.args.get('targetLanguage'),
+    )
+    if error:
+        return jsonify({'error': error[0]}), error[1]
+
+    with sqlite3.connect(DB_PATH) as conn:
+        row = conn.execute(
+            '''
+            SELECT glossary FROM workspace_glossaries
+            WHERE document_fingerprint = ? AND source_lang = ? AND target_lang = ?
+            ''',
+            context,
+        ).fetchone()
+    return jsonify({'glossary': row[0] if row else '', 'found': row is not None})
+
+
+@app.route('/workspace-glossary/<document_fingerprint>', methods=['PUT'])
+@with_error_handling
+def save_workspace_glossary(document_fingerprint):
+    """Save an editable Stage 0 glossary without creating a translation job."""
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({'error': 'Expected a JSON glossary draft'}), 400
+    context, error = _workspace_glossary_context(
+        document_fingerprint,
+        data.get('sourceLanguage'),
+        data.get('targetLanguage'),
+    )
+    if error:
+        return jsonify({'error': error[0]}), error[1]
+    glossary = data.get('glossary')
+    if not isinstance(glossary, str):
+        return jsonify({'error': 'Glossary must be text'}), 400
+    if len(glossary) > MAX_WORKSPACE_GLOSSARY_LENGTH:
+        return jsonify({'error': 'Glossary draft is too large'}), 400
+
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.execute(
+            '''
+            INSERT INTO workspace_glossaries (
+                document_fingerprint, source_lang, target_lang, glossary, updated_at
+            ) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+            ON CONFLICT(document_fingerprint, source_lang, target_lang)
+            DO UPDATE SET glossary = excluded.glossary, updated_at = CURRENT_TIMESTAMP
+            ''',
+            (*context, glossary),
+        )
+    return jsonify({'status': 'saved'})
+
 
 @app.route('/translations', methods=['GET'])
 @with_error_handling
@@ -3132,6 +3225,27 @@ def _review_chunks_payload(conn, translation_row) -> Dict:
         for row in term_rows
     ])
 
+    # The refinement and glossary counters the Progress rail shows while a run
+    # streams. They were live-only, so reopening a finished translation — or
+    # just reloading the page — redrew a completed refinement as "Not started"
+    # and its glossary as unused. Every number below is recovered from what
+    # the run already stored per chunk, and is counted the same way the stream
+    # counts it, so the rail reads the same before and after a reload.
+    refinement = {
+        'errors_found': 0,
+        'errors_applied': 0,
+        'patches_rejected': 0,
+        'position_biases': 0,
+        'neutral_checks': 0,
+        'chunks_reviewed': 0,
+        'chunks_changed': 0,
+        'review_failures': 0,
+        'verifier_model': None,
+        'review_model': None,
+    }
+    used_terms = set()
+    violation_count = 0
+
     chunks = []
     for index, source in enumerate(original_chunks):
         draft = draft_chunks[index] if index < len(draft_chunks) else ''
@@ -3175,7 +3289,8 @@ def _review_chunks_payload(conn, translation_row) -> Dict:
                 'test': 'untranslated',
                 'label': 'Final text is identical to the source',
             })
-        for violation in terminology.exact_violations(source, final):
+        chunk_violations = terminology.exact_violations(source, final)
+        for violation in chunk_violations:
             signals.append({
                 'test': 'terminology',
                 'label': 'Required glossary rendering is missing',
@@ -3188,6 +3303,30 @@ def _review_chunks_payload(conn, translation_row) -> Dict:
                 'label': 'Refinement patch was rejected by the verifier',
                 'detail': verified,
             })
+
+        used_terms.update(
+            term.source.casefold() for term in terminology.relevant_terms(source)
+        )
+        violation_count += len(chunk_violations)
+        if details and not details.get('cache_hit'):
+            # A cache hit is not a review — the stream does not count it as one
+            # either, and it has no findings of its own to add.
+            refinement['chunks_reviewed'] += 1
+            refinement['errors_found'] += int(details.get('errors_found') or 0)
+            refinement['errors_applied'] += int(details.get('errors_applied') or 0)
+            if isinstance(verified, dict):
+                if not verified.get('accepted'):
+                    refinement['patches_rejected'] += 1
+                if verified.get('position_bias_detected'):
+                    refinement['position_biases'] += 1
+                if verified.get('neutral_check'):
+                    refinement['neutral_checks'] += 1
+            if warning:
+                refinement['review_failures'] += 1
+            if final != draft:
+                refinement['chunks_changed'] += 1
+            refinement['verifier_model'] = details.get('verifier_model') or refinement['verifier_model']
+            refinement['review_model'] = details.get('review_model') or refinement['review_model']
 
         problematic = bool(issues or signals or warning)
         review_status = (
@@ -3215,6 +3354,12 @@ def _review_chunks_payload(conn, translation_row) -> Dict:
     return {
         'translation_id': translation_row['id'],
         'status': translation_row['status'],
+        'refinement': refinement,
+        'terminology': {
+            'total': len(terminology.terms),
+            'used': len(used_terms),
+            'violations': violation_count,
+        },
         'total_chunks': len(chunks),
         'problematic_count': sum(1 for chunk in chunks if chunk['problematic']),
         'open_count': sum(
@@ -3698,6 +3843,37 @@ def read_uploaded_book(file, source_lang: Optional[str] = None):
     return text, None, None, None, 'txt', filepath
 
 
+@app.route('/source-preview', methods=['POST'])
+@with_error_handling
+def source_preview():
+    """Extract a readable, bounded preview without starting a translation."""
+    if 'file' not in request.files:
+        return jsonify({'error': 'No file part'}), 400
+
+    filepath = None
+    try:
+        text, _, title, author, source_format, filepath = read_uploaded_book(
+            request.files['file'], request.form.get('sourceLanguage')
+        )
+        preview_limit = 100_000
+        return jsonify({
+            'preview': text[:preview_limit],
+            'truncated': len(text) > preview_limit,
+            'source_chars': len(text),
+            'source_format': source_format,
+            'title': title,
+            'author': author,
+        })
+    except UploadError as e:
+        return jsonify({'error': str(e)}), 400
+    finally:
+        if filepath and os.path.exists(filepath):
+            try:
+                os.remove(filepath)
+            except OSError as e:
+                logger.app_logger.error('Failed to clean up source preview upload: %s', e)
+
+
 @app.route('/prepare', methods=['POST'])
 @with_error_handling
 def prepare():
@@ -4063,10 +4239,6 @@ LOG_STREAM_BACKLOG_BYTES = 256 * 1024
 # A comment frame often enough that an idle stream is not mistaken for a dead
 # one, by the browser or by the person watching it.
 LOG_STREAM_KEEPALIVE_SECONDS = 15
-# The Log page receives the same banner as the Terminal.  Keep its artwork in
-# banner.py: launch.py and this direct entry point already rely on that module
-# being the single source of truth.
-LOG_CONSOLE_BANNER = f'{TERMINAL_LOGO}\n\n{SUBTITLE}'
 # "2026-07-27 07:42:27,388 - translation_logger - INFO - Stage 2 …". Lines that
 # do not match are continuations — a logged prompt is many lines long — and are
 # passed through attached to whatever came before them.
@@ -4242,11 +4414,6 @@ def stream_logs():
             for source, filename in LOG_STREAM_SOURCES.items()
         ]
         try:
-            # This is a view marker, not a line written into any file. It must
-            # precede the backlog so a newly opened Log page starts with the
-            # Tolmach identity even when it is following an existing run.
-            if not since:
-                yield f"data: {json.dumps({'source': 'console', 'level': 'BANNER', 'time': '', 'message': LOG_CONSOLE_BANNER}, ensure_ascii=False)}\n\n"
             history = [entry for tail in tails for entry in tail.backlog(backlog_lines)]
             # The timestamp format sorts chronologically as text, which is what
             # lets three separately written files be interleaved correctly.

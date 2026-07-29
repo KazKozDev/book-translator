@@ -70,17 +70,16 @@
         .dot.live { background: var(--mark); }
         .dot.down { background: var(--error); }
         .dot.paused { background: var(--warn); }
-        .controls { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+        .controls { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
         .chip {
-            border: 1px solid var(--line); border-radius: 999px; padding: 4px 11px;
-            background: transparent; color: var(--muted);
+            border: none; padding: 0; background: none; color: var(--muted);
             font: inherit; font-size: .72rem; font-weight: 600; letter-spacing: .05em; text-transform: uppercase;
             cursor: pointer;
         }
-        .chip:hover { border-color: var(--accent); color: var(--accent); }
-        .chip.on { border-color: var(--accent); background: var(--accent); color: #fff; }
-        .chip.danger:hover { border-color: var(--error); color: var(--error); }
-        :root.theme-dark .chip.on { color: #15161a; }
+        .chip:hover { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
+        .chip.on { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
+        .chip.danger:hover { color: var(--error); }
+        .chip:focus-visible { outline: 2px solid color-mix(in srgb, var(--accent) 45%, transparent); outline-offset: 3px; }
         .search {
             border: 1px solid var(--line); border-radius: 6px; padding: 5px 10px; min-width: 180px;
             background: var(--paper); color: var(--ink); font: inherit; font-size: .78rem;
@@ -118,20 +117,6 @@
         .row.level-CONT .time, .row.level-CONT .tag { visibility: hidden; }
         .row.level-MARK { padding-top: 8px; padding-bottom: 8px; }
         .row.level-MARK .msg { color: var(--mark); }
-        /* The first event of every fresh stream is the terminal banner. It is
-           deliberately an event, not copied markup, so the Terminal and Log
-           page always use the same artwork from banner.py. */
-        .row.level-BANNER {
-            display: block; margin: 8px 16px 14px; padding: 14px 16px;
-            border: 1px solid var(--line); border-left: 3px solid var(--accent);
-            border-radius: 7px; background: var(--paper); color: var(--accent);
-            overflow-x: auto; white-space: pre;
-        }
-        .row.level-BANNER .msg {
-            display: block; min-width: max-content; font-weight: 700;
-            text-align: center;
-        }
-
         /* Then meaning. A translation run is stages, chunks and verdicts; the
            rest is bookkeeping and should stay quiet. */
         .row.kind-stage { margin-top: 7px; border-top: 1px solid var(--line); border-left-color: var(--stage); background: var(--stage-bg); padding-top: 4px; padding-bottom: 3px; }
@@ -341,8 +326,7 @@
                 row.classList.add('hit');
                 markMatches(message, needle);
             }
-            if (entry.level === 'BANNER') row.append(message);
-            else row.append(time, tag, message);
+            row.append(time, tag, message);
             return row;
         }
 

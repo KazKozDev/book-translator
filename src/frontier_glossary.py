@@ -22,21 +22,22 @@ import requests
 PROVIDERS: Dict[str, Dict[str, str]] = {
     'openai': {
         'label': 'OpenAI',
-        'model': 'gpt-5.6',
+        'model': 'gpt-5.6-luna',
         'env_key': 'OPENAI_API_KEY',
     },
     'anthropic': {
         'label': 'Anthropic',
-        'model': 'claude-opus-5',
+        'model': 'claude-haiku-4-5-20251001',
         'env_key': 'ANTHROPIC_API_KEY',
     },
     'google': {
         'label': 'Google',
-        'model': 'gemini-3.1-pro-preview',
+        'model': 'gemini-3.5-flash-lite',
         'env_key': 'GEMINI_API_KEY',
     },
 }
 
+FRONTIER_READ_TIMEOUT = 600
 LOCAL_ENV_FILE = Path(__file__).resolve().parents[1] / '.env.local'
 LOCAL_ENV_NAMES = {
     'OPENAI_API_KEY',
@@ -45,6 +46,7 @@ LOCAL_ENV_NAMES = {
     'GOOGLE_API_KEY',
 }
 VALID_MODES = {'exact', 'inflectable', 'preferred'}
+MODEL_ID = re.compile(r'^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$')
 OUTPUT_LINE = re.compile(
     r'^(?P<source>.+?)\s*=>\s*(?P<target>.+?)\s*\|\s*'
     r'(?P<mode>exact|inflectable|preferred)\s*$',
@@ -170,6 +172,19 @@ def _safe_http_error(provider: str, response: requests.Response) -> FrontierGlos
     return FrontierGlossaryError(message)
 
 
+def _model_id(provider: str, submitted_model: Optional[str]) -> str:
+    if submitted_model is None or not submitted_model.strip():
+        return PROVIDERS[provider]['model']
+    model = submitted_model.strip()
+    if not MODEL_ID.fullmatch(model):
+        raise FrontierGlossaryError(
+            'Model name may contain only letters, numbers, dots, colons, '
+            'underscores, and hyphens',
+            400,
+        )
+    return model
+
+
 def _post_json(
     provider: str,
     client: Any,
@@ -183,7 +198,7 @@ def _post_json(
             url,
             headers=headers,
             json=payload,
-            timeout=(10, 180),
+            timeout=(10, FRONTIER_READ_TIMEOUT),
         )
     except requests.Timeout as exc:
         raise FrontierGlossaryError(
@@ -209,7 +224,12 @@ def _post_json(
     return data
 
 
-def _openai(prompt: str, api_key: str, client: Any) -> Tuple[str, bool]:
+def _openai(
+    prompt: str,
+    api_key: str,
+    model: str,
+    client: Any,
+) -> Tuple[str, bool]:
     data = _post_json(
         'openai',
         client,
@@ -219,7 +239,7 @@ def _openai(prompt: str, api_key: str, client: Any) -> Tuple[str, bool]:
             'Content-Type': 'application/json',
         },
         payload={
-            'model': PROVIDERS['openai']['model'],
+            'model': model,
             'input': prompt,
             'reasoning': {'effort': 'medium'},
             'tools': [{'type': 'web_search', 'search_context_size': 'high'}],
@@ -242,7 +262,12 @@ def _openai(prompt: str, api_key: str, client: Any) -> Tuple[str, bool]:
     return '\n'.join(part for part in text_parts if part).strip(), searched
 
 
-def _anthropic(prompt: str, api_key: str, client: Any) -> Tuple[str, bool]:
+def _anthropic(
+    prompt: str,
+    api_key: str,
+    model: str,
+    client: Any,
+) -> Tuple[str, bool]:
     messages: List[Dict[str, Any]] = [{'role': 'user', 'content': prompt}]
     searched = False
     final_data: Dict[str, Any] = {}
@@ -257,7 +282,7 @@ def _anthropic(prompt: str, api_key: str, client: Any) -> Tuple[str, bool]:
                 'Content-Type': 'application/json',
             },
             payload={
-                'model': PROVIDERS['anthropic']['model'],
+                'model': model,
                 'max_tokens': 12000,
                 'messages': messages,
                 'tools': [{
@@ -298,8 +323,12 @@ def _anthropic(prompt: str, api_key: str, client: Any) -> Tuple[str, bool]:
     return text, searched
 
 
-def _google(prompt: str, api_key: str, client: Any) -> Tuple[str, bool]:
-    model = PROVIDERS['google']['model']
+def _google(
+    prompt: str,
+    api_key: str,
+    model: str,
+    client: Any,
+) -> Tuple[str, bool]:
     data = _post_json(
         'google',
         client,
@@ -413,17 +442,21 @@ def verify_glossary(
     prompt: str,
     original_glossary: str,
     submitted_key: Optional[str] = None,
+    submitted_model: Optional[str] = None,
     *,
     client: Any = requests,
 ) -> FrontierResult:
     """Call one selected provider and validate its web-grounded answer."""
+    if provider not in PROVIDERS:
+        raise FrontierGlossaryError('Choose a supported frontier provider', 400)
+    model = _model_id(provider, submitted_model)
     api_key = _api_key(provider, submitted_key)
     if provider == 'openai':
-        candidate, searched = _openai(prompt, api_key, client)
+        candidate, searched = _openai(prompt, api_key, model, client)
     elif provider == 'anthropic':
-        candidate, searched = _anthropic(prompt, api_key, client)
+        candidate, searched = _anthropic(prompt, api_key, model, client)
     elif provider == 'google':
-        candidate, searched = _google(prompt, api_key, client)
+        candidate, searched = _google(prompt, api_key, model, client)
     else:  # _api_key already guards this; keep the dispatch total.
         raise FrontierGlossaryError('Choose a supported frontier provider', 400)
 
@@ -442,7 +475,7 @@ def verify_glossary(
         glossary=glossary,
         provider=provider,
         provider_label=details['label'],
-        model=details['model'],
+        model=model,
         changes=changes,
         searched=True,
     )

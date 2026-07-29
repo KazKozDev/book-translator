@@ -245,3 +245,77 @@ def test_alternatives_reject_non_independent_or_translation_only_judges(
     )
 
     assert response.status_code == 400
+
+
+def test_review_route_rebuilds_the_progress_rail_counters_from_stored_chunks(
+    review_app,
+):
+    """The refinement and glossary counters used to exist only in the
+    translation stream, so reopening a finished book redrew a completed
+    refinement as "Not started". Everything they showed is recoverable from
+    what the run already stored per chunk."""
+    client, translation_id, database_path = review_app
+    with sqlite3.connect(database_path) as conn:
+        conn.execute(
+            '''
+            INSERT INTO chunk_reviews (
+                translation_id, chunk_index, review_details, review_status
+            ) VALUES (?, 0, ?, 'resolved')
+            ''',
+            (
+                translation_id,
+                json.dumps({
+                    'errors_found': 3,
+                    'errors_applied': 2,
+                    'review_model': 'translator:12b',
+                    'verifier_model': 'verifier:27b',
+                    'verified': {
+                        'accepted': True,
+                        'position_bias_detected': True,
+                        'neutral_check': 'accepted',
+                    },
+                }, ensure_ascii=False),
+            ),
+        )
+        # A cache hit is not a review: the stream does not count it, so
+        # neither does the replay.
+        conn.execute(
+            '''
+            INSERT INTO chunk_reviews (
+                translation_id, chunk_index, review_details, review_status
+            ) VALUES (?, 2, ?, 'not_needed')
+            ''',
+            (translation_id, json.dumps({'cache_hit': True, 'issues': []})),
+        )
+        conn.executemany(
+            '''
+            INSERT INTO translation_terms (
+                translation_id, source_term, target_term, enforcement_mode
+            ) VALUES (?, ?, ?, ?)
+            ''',
+            [
+                (translation_id, 'One', 'Один', 'exact'),
+                (translation_id, 'Two', 'Два', 'inflectable'),
+                (translation_id, 'Nowhere', 'Нигде', 'exact'),
+            ],
+        )
+
+    payload = client.get(
+        f'/translations/{translation_id}/review-chunks'
+    ).get_json()
+
+    assert payload['refinement'] == {
+        'errors_found': 3,
+        'errors_applied': 2,
+        'patches_rejected': 1,
+        'position_biases': 1,
+        'neutral_checks': 1,
+        'chunks_reviewed': 2,
+        'chunks_changed': 2,
+        'review_failures': 0,
+        'verifier_model': 'verifier:27b',
+        'review_model': 'translator:12b',
+    }
+    # "used" counts the terms this source text puts in play, not the ones the
+    # translation got right — the same thing the stream counts.
+    assert payload['terminology'] == {'total': 3, 'used': 2, 'violations': 1}

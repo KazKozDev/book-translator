@@ -1,173 +1,231 @@
-# Book Translator — Translate Books Offline with Ollama and Local LLMs
+# Tolmach — Local AI Book Translator for Ollama
 
-Upload a `.txt` file and get back a translation that a second AI pass has already reviewed and refined.
+Upload a TXT or EPUB book, translate it on your computer, review the result, and download the final text as TXT, PDF, or EPUB.
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE) [![CI](https://github.com/KazKozDev/book-translator/actions/workflows/ci.yml/badge.svg)](https://github.com/KazKozDev/book-translator/actions/workflows/ci.yml) [![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-3776AB.svg?logo=python&logoColor=white)](https://www.python.org/)
 
 ```bash
-git clone https://github.com/KazKozDev/book-translator.git
-cd book-translator
-ollama pull translategemma:12b
-ollama pull qwen3:32b
-python launch.py
+git clone https://github.com/KazKozDev/book-translator.git && cd book-translator && python3 launch.py
 ```
 
-Runs offline · No API keys · Open source
+![Tolmach translating and reviewing a book](assets/demo.gif)
+
+Open source · Local by default · No API key required
 
 ---
 
 ## Quick start
 
-1. Make sure [Ollama](https://ollama.com/) is installed and running, and pull the two models the pipeline needs — a TranslateGemma for the translation pass and a separate instruct model for everything that grades or edits it:
+1. Run the command above. It clones the current repository and starts `launch.py`. The launcher creates `venv`, installs the Python dependencies, checks Ollama and the required local models, starts Tolmach at `http://localhost:5001`, and opens it in your browser.
 
-   ```bash
-   ollama pull translategemma:12b
-   ollama pull qwen3:32b
+2. Open **Settings**, choose a local model for each role, and click **Save setup**.
+
+3. Return to the main page and follow the numbered buttons:
+
+   ```text
+   → 1 UPLOAD → PREPARE (optional) → 2 START → 3 CONTINUE → TXT / PDF / EPUB
    ```
 
-   These are the minimums the launcher checks for; larger models in either role work, and Settings lets you point each role at a different one.
+   **START** creates the first translation. **CONTINUE** reviews and refines it. When the job finishes, use the export buttons to download the book.
 
-2. Install dependencies and start the app:
+## How to translate a TXT or EPUB book with Ollama
 
-   ```bash
-   pip install -r requirements.txt
-   python src/translator.py
-   ```
+Choose the source language, target language, and text genre. Click **→ 1 UPLOAD** and select the complete book—not one chapter at a time.
 
-3. Open [http://localhost:5001](http://localhost:5001), pick source/target language and a model, upload a `.txt` or `.epub` file with **→ 1 UPLOAD**, open the **Glossary** panel and press **→ PREPARE**, then press **→ 2 START**. Download the result once refinement finishes.
+```text
+Source language: English
+Target language: Russian
+Input:           TXT or EPUB
+Download:        TXT, PDF, or EPUB
+```
 
-Or let the launcher do the setup: `python launch.py` creates the virtual environment, installs dependencies, checks that Ollama is running and has the two models the pipeline needs, frees port `5001`, starts the server and opens the browser. Double-clicking `Launch Book-Translator.command` (macOS), `Launch Book-Translator.sh` (Linux) or `Launch Book-Translator.bat` (Windows) runs exactly the same script.
+Click **→ 2 START** to create the draft translation. Finished sections appear in the Translation panel while the rest of the book continues processing. Click **→ 3 CONTINUE** when you want Tolmach to refine that draft into the final version.
 
-## Translate books offline, with no API keys
+The job is saved locally, so you can reopen it from the Archive. A complete book may take hours; the actual time depends on its length, your models, and your computer.
 
-Everything runs against your local Ollama server — no text leaves your machine and there's no API key or account to set up. That matters for manuscripts under NDA, personal documents, or just working without an internet connection. The trade-off is speed: translation quality and throughput depend entirely on the local model you choose and the hardware you run it on.
+## How to keep character and place names consistent
 
-## Decide the names once, translate, then patch what is wrong
+After uploading the book, click **→ PREPARE**. Tolmach scans the complete source and creates an editable glossary of recurring names, places, organisations, and terms.
 
-Everything after the upload is translated one ~1200-character chunk at a time. Proper-noun renderings are agreed before translation starts so they remain consistent throughout the book.
+```text
+Netherfield => Незерфилд | exact
+Mr. Darcy => мистер Дарси | inflectable
+```
 
-**Prepare** (optional, once per document) runs local [GLiNER multilingual NER](https://huggingface.co/urchade/gliner_multi-v2.1), unions the result with a capitalisation harvest so a name mentioned twice is not dropped by a frequency floor, and uses multilingual embeddings to cluster spelling variants. Two model passes follow, each with its own role in Settings. **Entity resolution** rules on the clustering — confirming what the embeddings merged, splitting what they got wrong, deciding the ambiguous pairs. That is reasoning about the document rather than translation, and it is the role that repays a large model: a 12B model gives two different characters the same rendering where a 27B one keeps them apart. **Glossary rendering** then renders each agreed candidate, in batches, with that candidate's own quoted context from wherever in the book it appears, and picks the enforcement mode per term. A source form it proposes is accepted only if the document contains that form literally, so it can add a name the extractors missed and cannot invent one. The model weights download from Hugging Face once on the first Prepare run, then remain local and stay loaded between runs. The result is a proposal — canonical entity → aliases → target rendering — not “verified terminology”: review it and tick the approval box before Start.
+Review this list before starting the translation: delete noise, correct a wrong translation, and add anything the scan missed.
 
-**Translate** produces the draft, with the agreed renderings in the context of each chunk.
+- `exact` keeps the target wording unchanged.
+- `inflectable` lets the model change the grammatical form.
+- `preferred` tells the model which wording to favor.
 
-**Refine** does not rewrite the draft. It reports errors as located spans with a category and severity, Python applies the replacements and copies every other character through unchanged, and a second model checks the patch against the source twice with the versions swapped. A consistent patched/patched verdict keeps it. A tie or a vote that follows position A/B gets one position-free check of the concrete replacements instead of an automatic veto. Style-only and minor subjective findings are reported but never applied. A draft/final diff of a few percent is the expected result; a rewriting pass produced 20% and lost meaning doing it.
+The glossary belongs only to this book and language pair. If you configure an optional external provider, **Verify automatically** can check the glossary and show proposed changes; Tolmach applies nothing until you approve it.
+
+## How to review an AI book translation before export
+
+After **→ 3 CONTINUE** finishes, open **Review desk**. Each chunk shows the original source, the first draft, and the editable final translation next to each other.
+
+```text
+Source → Draft → Final → Save final → Download
+```
+
+Start with **Needs review**, inspect the proposed fixes, and apply only the changes you want. You can edit the final text directly or ask for two or three alternatives. Tolmach never replaces your final choice automatically.
+
+Optional quality checks flag possible terminology errors, missing text, changed numbers, wrong-language passages, repetition, and meaning drift. They are diagnostics: they do not rewrite the book or prevent export.
 
 ## How it works
 
+The browser sends your TXT or EPUB to a Flask server running on your computer.<br>
+**PREPARE** scans the whole book and builds a glossary for that document.<br>
+**START** splits the book into chunks and translates them with the selected Ollama model.<br>
+**CONTINUE** proposes small edits, and a separate verifier checks each edit against the source.<br>
+SQLite saves the job, glossary, aligned text, review state, quality results, and cache locally.
+
+```text
+Book → Glossary → Draft translation → Verified refinement → Human review → Download
 ```
-upload → prepare: NER + recurring-entity clustering → names → split into chunks → translate → refine: estimate → patch → verify
-       → cache (SQLite) → quality check → download / EPUB export
-```
-
-Flask serves the UI (`src/static/index.html`) and a small JSON API; every stage calls your local Ollama server. Chunk translations are cached in `cache.db` so re-running or resuming a job doesn't retranslate work already done, and job metadata/history live in `translations.db`.
-
-## Quality Check
-
-Run on demand from the panel, never automatically — several of these call a model again. Point the judge tests at a different model than the one that did the translating, or you are measuring with the ruler you cut with.
-
-The tests that need no model read the **whole document**, which is the only way to catch the errors that live between chunks:
-
-| Test | What it answers |
-|---|---|
-| Named-entity consistency | is every agreed rendering actually used in every chunk its name appears in (inflected forms count) |
-| Numbers and dates | digit-written source facts that disappeared or changed in the final |
-| Chunk coverage | missing, blank, or count-mismatched aligned final chunks |
-| Untranslated words | which words are still in the source's script — a name that was never translated |
-| Terminology delta | are exact glossary constraints satisfied, draft vs final |
-| Length ratio | final against the **source**, which is where compression shows; final/draft is reported but tells you little |
-| Diff ratio, repetition | how much refinement moved, and whether anything duplicated |
-| LaBSE alignment | document-wide multilingual source/final alignment; flags semantic-drift outlier chunks |
-| Target-language segments | multilingual Language ID flags untranslated or confidently wrong-language final chunks |
-
-The model-based tests sample five chunks, chosen by risk (names, dialogue, numbers) rather than evenly spaced: adequacy and fluency for the draft and for the final — same prompt, same chunks, so the two numbers can be subtracted — a pairwise draft-vs-final judge that is shown the source and asked about accuracy separately from readability, COMET-Kiwi on either, and backtranslation chrF, which is marked diagnostic-only because a back-translation is not a reference.
-
-There is no single score. Adequacy and fluency move in opposite directions when a refinement pass trades meaning for polish, and an average is precisely what hides that. The **Verdict** block shows each axis as draft → final and states the gates in words: an adequacy regression, a judge that prefers the draft on accuracy while preferring the final on readability, a missing name rendering, an unsatisfied glossary constraint.
-
-Every model behind these tests — GLiNER, BGE-M3, LaBSE, Language ID, COMET-Kiwi — installs with `requirements.txt`, which the launcher runs on every start, and its weights download once on first use. The one thing that is not automatic is COMET-Kiwi's checkpoint: `Unbabel/wmt22-cometkiwi-da` is gated on Hugging Face, so it needs access granted on the model page and `huggingface-cli login` (or `HF_TOKEN`) before that test returns a number. XCOMET/MQM is intentionally not part of this first layer: run deterministic gates, LaBSE, and Language ID before adding a heavy quality evaluator.
-
-## Configuration
-
-| Setting | Default | Notes |
-|---|---|---|
-| Port | `5001` | override with the `PORT` environment variable |
-| Ollama endpoint | `http://localhost:11434` | fixed, not currently configurable |
-| Model | chosen in the UI | any model already pulled in Ollama |
-| Languages | English, Russian, Spanish, French, German, Italian, Portuguese, Chinese, Japanese, Korean | selected per job |
-| Genre | Unknown, Fiction, Technical, Academic, Business, Poetry | tunes the translation prompt |
-| Chunk size | 1200 characters | paragraph-sized segments; text is split on paragraph, then sentence boundaries |
-
-### TranslateGemma
-
-`translategemma` (4B/12B/27B) is recognised by name and gets its own first-pass
-prompt — the format its model card documents, plus this pipeline's genre,
-glossary and previous-paragraph context folded in between the framing sentences
-so the shape the model was trained on stays intact. Its own sampling settings
-(`top_k 64`, `top_p 0.95`, stop `<end_of_turn>`) are sent explicitly, at a lower
-temperature than general models get.
-
-It is translation-only, so four things need a different model: Prepare, the
-refinement pass (Continue), the verifier that rules on its patches, and the
-LLM-judge tests. All of them are rejected with an explanatory message if
-TranslateGemma is still selected. Backtranslation is
-allowed — it is just the first pass run in reverse.
-
-## Requirements
-
-- Python 3.10+ (the launcher refuses to run on anything older, and `gliner` — the entity model behind Prepare — has no 3.9 wheels)
-- [Ollama](https://ollama.com/) installed and running locally
-- Two Ollama models: a TranslateGemma for translation and a separate instruct model for refinement, verification and the judge tests
-- Disk space for the Hugging Face cache in `~/.cache/huggingface`: the entity, embedding and alignment models are a few hundred MB each, and COMET-Kiwi's checkpoint is several GB. Nothing is downloaded until the feature that needs it runs.
-
-## Limitations
-
-- Input is `.txt` or `.epub` — no PDF or DOCX import. Output can be downloaded as `.txt` or exported as EPUB.
-- Translation speed is bounded by your local model and hardware — a full book can take hours, not minutes.
-- Refinement costs three model calls per changed chunk (estimate, then two verification comparisons), plus one neutral edit check only when those comparisons tie or expose position bias. It is slower than the old rewrite pass — and often correctly decides to change nothing.
-- The refinement verifier is a local quantised model asked to compare two translations. It is a real gate, not a reliable one: on a measured run it accepted an edit that replaced a correct reading with a wrong one, and on the same text at a different temperature it rejected it. Treat a kept patch as "not obviously worse", not as "verified".
-- The verifier is its own role in Settings and wants a model clearly larger than the one doing the refining. Point both at the same model and it grades its own edits: its vote may follow the order of the versions instead of their content. Stage 2 now labels that as position bias and retries once without A/B ordering, but the fallback is a guardrail rather than a substitute for an independent verifier.
-- Named-entity consistency matches on the stem so inflected forms count, which means it cannot tell two renderings apart when they differ only in the ending (Дурсль vs Дурсли). Such pairs are listed as needing a human eye rather than reported as clean.
-- Translation quality hasn't been measured against a benchmark.
-- The backend is a Flask module (`src/translator.py`) with the quality tests, terminology, EPUB export, caching and logging in modules beside it. `pytest tests/` (from `requirements-dev.txt`) covers the parts that need no model: proper-noun harvesting, span validation and patching, and the document-level checks.
 
 <details>
-<summary>Project layout</summary>
+<summary>Technical architecture</summary>
 
-- `src/` — everything the application is made of. The root holds only what a person or a tool looks for there: the readme and the community files, the launchers, the dependency lists, and the directories a run writes into
-- `src/translator.py` — Flask app, translation pipeline, SQLite persistence, health/metrics endpoints
-- `src/quality_tests.py`, `src/terminology.py`, `src/epub_io.py`, `src/translation_cache.py`, `src/monitoring.py` — the quality tests, the glossary rules, the EPUB writer, the chunk cache, and the logging
-- `src/prompts/` — every word the models are sent, one file per role, with [its own README](src/prompts/README.md). Edit a file and the next run uses it; `src/prompts.py` is the loader
-- `src/static/index.html` — browser UI for uploads, model/genre selection, the names editor, progress tracking, the Quality Check panel, and downloads
-- `src/static/logs.html` — the live log console, opened from the Log link like any other page
-- `launch.py` — the cross-platform bootstrap behind all three launcher files; standard library only, so it runs before the virtual environment exists
-- `tests/` — the model-free half of the pipeline: `pip install -r requirements-dev.txt && python -m pytest tests/`
-- `uploads/`, `translations/`, `logs/` — runtime directories for uploaded files, exported output, and rotating logs. Loading a document rolls the logs over, so `logs/*.log` is the current book and `logs/*.log.1` the one before it; the Log page streams them live
-- `cache.db` — cached chunk translations; `translations.db` — job history and status
+### Translation pipeline
+
+1. **Upload** — the Flask backend reads TXT or EPUB and stores the source in `uploads/`.
+2. **Prepare** — deterministic text harvesting and GLiNER collect entity candidates. BGE-M3 groups likely spelling variants, then the selected instruct model resolves ambiguous groups and proposes target renderings. The editable glossary is stored for this document fingerprint and language pair.
+3. **Start** — the source is split into chunks of about 1200 characters at paragraph and sentence boundaries. The Translation model receives each chunk with its genre, glossary constraints, and previous-paragraph context. Completed chunks are written to SQLite and streamed to the browser.
+4. **Continue** — the Refinement model returns located edits instead of rewriting an entire chunk. Python applies only those replacements. The Verifier compares each patched version with the source, checks the alternatives in both orders, and retries without ordered A/B versions when it detects position bias.
+5. **Review and export** — Review desk keeps Source, Draft, and editable Final text aligned. Exporters write the accepted final text as TXT, PDF, or EPUB.
+
+```text
+Browser
+   ↓
+Flask UI + JSON API
+   ↓
+Prepare → Start → Continue → Review
+   ↓         ↓         ↓
+Glossary   Ollama   Verifier
+   └───────── SQLite ─────────┘
+                   ↓
+             TXT / PDF / EPUB
+```
+
+### Storage and quality checks
+
+- `translations.db` stores jobs, aligned chunks, glossary drafts, review state, and saved quality results.
+- `cache.db` stores completed chunk translations so resumed jobs do not repeat finished work.
+- Deterministic checks inspect the complete document for missing chunks, changed numbers, glossary violations, source-script leakage, unusual length, and repetition.
+- Optional model checks include draft/final LLM judging, backtranslation chrF, LaBSE alignment, language identification, and COMET-Kiwi. They report evidence but do not edit the translation.
+
+### Important files
+
+- `launch.py` — cross-platform bootstrap used by the macOS, Linux, and Windows launchers.
+- `src/translator.py` — Flask application, API, translation stages, persistence, and export orchestration.
+- `src/frontier_glossary.py` — optional external glossary verification.
+- `src/quality_tests.py` — deterministic and model-based quality checks.
+- `src/terminology.py` — glossary parsing and enforcement rules.
+- `src/epub_io.py` — EPUB input and output.
+- `src/translation_cache.py` — persistent chunk cache.
+- `src/prompts/` — prompts sent to each model role.
+- `src/static/` — browser interface, Settings, Guide, and live Log pages.
+- `tests/` — model-free unit and integration tests.
 
 </details>
 
-## Credits
+## Configuration
 
-This version is a rewrite around a different pipeline — Prepare, draft, guarded
-patch — and it replaced the modular v2 line rather than growing out of it. The
-work that came before it is not gone, and some of it is in here:
+| Setting | Default | What it means |
+|---|---|---|
+| App address | `http://localhost:5001` | Local browser interface; set `PORT` to change the port |
+| Ollama address | `http://localhost:11434` | Local server that runs the language models |
+| Translation model | `translategemma:12b` preferred | Creates the first translation during **START** |
+| Glossary model | First suitable local instruct model | Builds glossary suggestions during **PREPARE** |
+| Refinement model | First suitable local instruct model | Proposes improvements during **CONTINUE** |
+| Verifier model | A model different from Refinement | Checks whether proposed edits preserve the source meaning |
+| Judge model | A model different from Translation | Runs optional translation-quality diagnostics |
+| Chunk size | `1200` characters | Splits first on paragraphs, then on sentence boundaries |
+| Source language | English | Chosen separately for each book |
+| Target language | Spanish | Chosen separately for each book |
+| Text genre | Unknown / Auto | Also supports Fiction, Technical, Academic, Business, and Poetry |
+| Glossary verification | Off | Optional: configure `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, or `GEMINI_API_KEY` |
+| COMET-Kiwi access | Off | Optional: set `HF_TOKEN` after receiving access to the gated model |
 
-- **[kroryan](https://github.com/kroryan)** — the v2.0 modular architecture, the
-  CI workflow this repository's own workflow is adapted from, Windows
-  compatibility, and a set of security and stability fixes. Three of those
-  findings applied directly to this rewrite and were ported: SQL built by string
-  interpolation in the two cleanup queries, `psutil.disk_usage('/')` (not a path
-  on Windows), and single-encoding file reading. The last one had bitten in the
-  opposite direction here — the only fallback was cp1251, so a Portuguese or
-  French book came back as Cyrillic nonsense with nothing raised.
-- **[moonixt](https://github.com/moonixt)** — Portuguese support. Portuguese and
-  Korean are both in this version's language list.
-- **Derek W.** — README and startup instructions.
+## Requirements
 
-That line is tagged **`v2.1.0`** — `git checkout v2.1.0` gets the modular
-package, the Windows tray app and the Docker build exactly as they stood on
-2026-01-21. (`v2.0.0`, from October 2025, is an earlier rewrite of this
-repository and predates all of it.)
+- **macOS or Linux** for the one-command installer. Windows users can run the repository launcher.
+- **Ollama** running on the same computer.
+- The minimum local setup is `translategemma:12b` for translation plus `gemma4:31b` for the other roles. For a more independent refinement check, choose a third instruct model as Verifier.
+- Enough memory and disk space for the models you choose.
+- Internet access on the first run to download Python dependencies, Ollama models, and optional Hugging Face components.
+- Supported languages: English, Russian, Spanish, French, German, Italian, Portuguese, Chinese, Japanese, and Korean.
+
+The installer uses an existing Python 3.10+ installation when available. Otherwise, it installs Python 3.12 through `uv`.
+
+## Limitations
+
+- Tolmach accepts TXT and EPUB input. It does not import PDF or DOCX files.
+- Translating a complete book can take hours on local hardware.
+- Translation and review models can still miss errors or make good text worse. Proofread the final book before publishing it.
+- Large Ollama models need substantial memory and disk space; Tolmach cannot make a model fit hardware that is too small.
+- Optional glossary verification sends the glossary and language pair—not the full book—to the selected API provider and may cost money.
+- COMET-Kiwi is optional, downloads a multi-gigabyte gated checkpoint, and requires Hugging Face access.
+- Tolmach does not currently provide an official Docker image.
+
+<details>
+<summary>Manual installation, Docker, development setup</summary>
+
+### Manual installation
+
+```bash
+git clone https://github.com/KazKozDev/book-translator.git
+cd book-translator
+python3 launch.py
+```
+
+`launch.py` creates the virtual environment, installs runtime dependencies, checks Ollama and the required models, starts the server, and opens the browser.
+
+The platform launchers use the same setup:
+
+- macOS: double-click `Launch Book-Translator.command`
+- Linux: run `./Launch Book-Translator.sh`
+- Windows: double-click `Launch Book-Translator.bat`
+
+To use optional glossary verification, copy `.env.example` to `.env.local` and add the provider key. On macOS and Linux, set the file permissions to `600`.
+
+### Docker
+
+This repository does not currently include a Dockerfile or published image. Use the native launcher so Tolmach can detect Ollama, installed models, and local hardware.
+
+### Development setup
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements-dev.txt
+python -m pytest tests -q
+ruff check .
+```
+
+The test suite does not require Ollama, downloaded models, or network access.
+
+</details>
+
+## Contributing
+
+Bug fixes, language additions, and reproducible issue reports are welcome. Discuss large architecture changes in an issue first, then follow [CONTRIBUTING.md](CONTRIBUTING.md).
+
+### Credits and project history
+
+- **[kroryan](https://github.com/kroryan)** — created the v2.0 modular architecture, contributed Windows compatibility, and identified security and stability fixes later carried into this rewrite.
+- **[moonixt](https://github.com/moonixt)** — contributed Portuguese language support.
+- **Derek W.** — contributed README and startup instructions.
+
+The earlier modular application remains available as tag **`v2.1.0`**, including its Windows tray application and Docker build as they stood on 2026-01-21:
+
+```bash
+git checkout v2.1.0
+```
+
+Tag **`v2.0.0`** contains the earlier October 2025 rewrite.
 
 ## License
 
-MIT — see [LICENSE](LICENSE)
-
-[Issues](https://github.com/KazKozDev/book-translator/issues) · [LinkedIn](https://www.linkedin.com/in/kazkozdev/)
+MIT — see [LICENSE](LICENSE).

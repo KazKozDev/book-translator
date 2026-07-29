@@ -51,7 +51,7 @@ def test_openai_uses_web_search_and_returns_only_validated_glossary():
     )
 
     assert result.glossary == CORRECTED
-    assert result.model == 'gpt-5.6'
+    assert result.model == 'gpt-5.6-luna'
     assert len(result.changes) == 3
     url, request = client.calls[0]
     assert url == 'https://api.openai.com/v1/responses'
@@ -61,6 +61,7 @@ def test_openai_uses_web_search_and_returns_only_validated_glossary():
     }]
     assert request['json']['store'] is False
     assert request['headers']['Authorization'] == 'Bearer session-key'
+    assert request['timeout'] == (10, 600)
 
 
 def test_anthropic_uses_server_web_search_and_extracts_text():
@@ -75,7 +76,7 @@ def test_anthropic_uses_server_web_search_and_extracts_text():
     )
 
     assert result.glossary == CORRECTED
-    assert result.model == 'claude-opus-5'
+    assert result.model == 'claude-haiku-4-5-20251001'
     _, request = client.calls[0]
     assert request['json']['tools'][0]['type'] == 'web_search_20250305'
     assert request['headers']['x-api-key'] == 'session-key'
@@ -94,11 +95,48 @@ def test_google_requires_grounding_metadata_and_extracts_text():
     )
 
     assert result.glossary == CORRECTED
-    assert result.model == 'gemini-3.1-pro-preview'
+    assert result.model == 'gemini-3.5-flash-lite'
     url, request = client.calls[0]
-    assert 'gemini-3.1-pro-preview:generateContent' in url
+    assert 'gemini-3.5-flash-lite:generateContent' in url
     assert request['json']['tools'] == [{'google_search': {}}]
     assert request['headers']['x-goog-api-key'] == 'session-key'
+
+
+def test_custom_model_is_used_and_reported():
+    client = FakeClient([FakeResponse({
+        'output': [
+            {'type': 'web_search_call', 'id': 'ws_1'},
+            {
+                'type': 'message',
+                'content': [{'type': 'output_text', 'text': CORRECTED}],
+            },
+        ],
+    })])
+
+    result = frontier.verify_glossary(
+        'openai',
+        'PROMPT',
+        ORIGINAL,
+        'session-key',
+        'gpt-5.4-mini',
+        client=client,
+    )
+
+    assert result.model == 'gpt-5.4-mini'
+    assert client.calls[0][1]['json']['model'] == 'gpt-5.4-mini'
+
+
+@pytest.mark.parametrize('model', [
+    '../other-model',
+    'models/custom',
+    'model name',
+    'x' * 129,
+])
+def test_custom_model_rejects_unsafe_or_malformed_ids(model):
+    with pytest.raises(frontier.FrontierGlossaryError, match='Model name'):
+        frontier.verify_glossary(
+            'google', 'PROMPT', ORIGINAL, 'session-key', model,
+        )
 
 
 def test_a_response_without_actual_web_search_is_rejected():

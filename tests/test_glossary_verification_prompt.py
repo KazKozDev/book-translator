@@ -68,18 +68,19 @@ def test_frontier_provider_catalog_exposes_no_secret_values(monkeypatch):
 def test_frontier_route_returns_reviewable_changes_without_applying_them(monkeypatch):
     recorded = {}
 
-    def fake_verify(provider, prompt, glossary, submitted_key):
+    def fake_verify(provider, prompt, glossary, submitted_key, submitted_model):
         recorded.update({
             'provider': provider,
             'prompt': prompt,
             'glossary': glossary,
             'submitted_key': submitted_key,
+            'submitted_model': submitted_model,
         })
         return FrontierResult(
             glossary='Hermione => Гермиона | inflectable',
             provider='openai',
             provider_label='OpenAI',
-            model='gpt-5.6',
+            model='gpt-5.6-luna',
             changes=[{
                 'source': 'Hermione',
                 'before': 'Hermione => Гермиона',
@@ -95,6 +96,7 @@ def test_frontier_route_returns_reviewable_changes_without_applying_them(monkeyp
         json={
             'provider': 'openai',
             'apiKey': 'session-only-key',
+            'model': 'gpt-5.4-mini',
             'sourceLanguage': 'en',
             'targetLanguage': 'ru',
             'glossary': 'Hermione => Гермиона',
@@ -106,4 +108,5 @@ def test_frontier_route_returns_reviewable_changes_without_applying_them(monkeyp
     assert response.get_json()['searched'] is True
     assert 'TARGET LANGUAGE: Russian' in recorded['prompt']
     assert recorded['submitted_key'] == 'session-only-key'
+    assert recorded['submitted_model'] == 'gpt-5.4-mini'
     assert response.headers['Cache-Control'] == 'no-store'

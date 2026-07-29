@@ -82,8 +82,12 @@
                 <div class="form-group">
                     <label class="role-heading" for="frontierProvider">Provider</label>
                     <select id="frontierProvider" disabled><option value="">Loading providers…</option></select>
-                    <p class="frontier-model" id="frontierModel">—</p>
                     <p class="hint">Web search and model tokens may be billed by the provider.</p>
+                </div>
+                <div class="form-group">
+                    <label class="role-heading" for="frontierModel">Model</label>
+                    <input id="frontierModel" type="text" autocomplete="off" spellcheck="false" placeholder="Model name">
+                    <p class="hint">The recommended lightweight model is filled in automatically. You can replace it with any compatible model ID available from this provider.</p>
                 </div>
                 <div class="form-group">
                     <label class="role-heading" for="frontierApiKey">API key</label>
@@ -176,14 +180,15 @@
         }
         save.addEventListener('click', () => { localStorage.setItem('translationModel', translationModel.value); localStorage.setItem('refinementModel', refinementModel.value); localStorage.setItem('verifierModel', verifierModel.value); localStorage.removeItem('entityModel'); localStorage.setItem('generalInstructModel', generalInstructModel.value); localStorage.setItem('judgeModel', judgeModel.value); status.textContent = 'Saved. Return to the app when ready.'; });
         const frontierKeyName = provider => `frontierApiKey:${provider}`;
+        const frontierModelName = provider => `frontierModel:${provider}`;
         function loadFrontierProviderDetails() {
             const provider = frontierProviders.find(item => item.id === frontierProvider.value);
             if (!provider) {
-                frontierModel.textContent = '—';
+                frontierModel.value = '';
                 frontierKeyAvailability.textContent = '';
                 return;
             }
-            frontierModel.textContent = provider.model;
+            frontierModel.value = localStorage.getItem(frontierModelName(provider.id)) || provider.model;
             frontierKeyAvailability.textContent = provider.environment_key_available
                 ? 'A server environment key is available for this provider.'
                 : '';
@@ -215,6 +220,12 @@
             }
         }
         frontierProvider.addEventListener('change', () => {
+            if (previousFrontierProvider && frontierModel.value.trim()) {
+                localStorage.setItem(
+                    frontierModelName(previousFrontierProvider),
+                    frontierModel.value.trim(),
+                );
+            }
             if (previousFrontierProvider && frontierApiKey.value.trim()) {
                 sessionStorage.setItem(
                     frontierKeyName(previousFrontierProvider),
@@ -226,6 +237,7 @@
         saveFrontier.addEventListener('click', () => {
             const provider = frontierProvider.value;
             localStorage.setItem('frontierProvider', provider);
+            localStorage.setItem(frontierModelName(provider), frontierModel.value.trim());
             if (frontierApiKey.value.trim()) {
                 sessionStorage.setItem(frontierKeyName(provider), frontierApiKey.value.trim());
             } else {

@@ -152,6 +152,70 @@ def test_entity_consistency_admits_which_names_it_cannot_tell_apart():
     assert 'check them by hand' in result['note']
 
 
+def test_entity_consistency_accepts_an_inflected_short_name():
+    """A four-letter vowel-final name loses that vowel to the ending, so
+    holding it to its full form reported every correct oblique form as the
+    name being missing."""
+    terminology = TerminologyManager.from_text('The Water => Река | inflectable')
+    result = translator.eval_entity_consistency(
+        ['The Hill stood over The Water.'],
+        ['Холм возвышался над рекой у реки.'],
+        terminology,
+    )
+
+    assert not result['flagged']
+    assert result['value'] == 0
+    assert result['details']['loosely_matched'] == ['Река']
+    assert 'shortened stem' in result['note']
+
+
+def test_entity_consistency_does_not_let_a_longer_word_stand_in_for_a_short_name():
+    """The shortened stem of "Холм" is a prefix of "холодный" too. Endings
+    are short, so length is what separates the two."""
+    terminology = TerminologyManager.from_text('The Hill => Холм | inflectable')
+    result = translator.eval_entity_consistency(
+        ['The Hill was quiet.'], ['Холодный ветер стих.'], terminology,
+    )
+
+    assert result['flagged']
+    assert result['details']['findings'][0]['source'] == 'The Hill'
+
+
+def test_terminology_delta_says_when_the_glossary_gives_it_nothing_to_enforce():
+    """Only exact terms can be checked by literal match, so a glossary of
+    inflectable names produces a green this test cannot fail — which reads
+    exactly like a clean run and is not one."""
+    terminology = TerminologyManager.from_text(
+        'Dursley => Дурсль | inflectable\nDudley => Дадли | preferred'
+    )
+
+    result = translator.eval_terminology_delta(
+        'Mr. Dursley had a son called Dudley.',
+        'Мистер Д. и его сын.',
+        'Мистер Д. и его сын.',
+        terminology,
+    )
+
+    assert not result['flagged']
+    assert 'Nothing to enforce' in result['note']
+    assert 'Named-entity consistency' in result['note']
+
+
+def test_terminology_delta_still_counts_exact_violations():
+    terminology = TerminologyManager.from_text('Dursley => Дурсль | exact')
+
+    result = translator.eval_terminology_delta(
+        'Mr. Dursley drove to work.',
+        'Мистер Дурслей поехал на работу.',
+        'Мистер Дурсль поехал на работу.',
+        terminology,
+    )
+
+    assert not result['flagged']
+    assert result['value'] == 1
+    assert 'fixed 1 glossary violation' in result['note']
+
+
 def test_entity_consistency_says_so_instead_of_passing_on_an_empty_glossary():
     """An empty glossary made this check pass unconditionally, which for a
     text whose main risk is proper nouns is the most expensive kind of

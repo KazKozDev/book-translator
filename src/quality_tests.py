@@ -198,7 +198,21 @@ class QualityTests:
         draft_violations = terminology.exact_violations(original_text, draft_text)
         final_violations = terminology.exact_violations(original_text, final_text)
         delta = len(draft_violations) - len(final_violations)
-        if len(draft_violations) == 0 and len(final_violations) == 0:
+        # Only `exact` terms can be violated deterministically, so a glossary
+        # without any is a green this test cannot fail — which reads exactly
+        # like a clean run and is not one. Say which it is.
+        relevant = terminology.relevant_terms(original_text)
+        enforceable = [term for term in relevant if term.mode == 'exact']
+        if relevant and not enforceable:
+            note = (
+                f'Nothing to enforce: none of the {len(relevant)} glossary term(s) in '
+                f'this text are exact-mode, and inflectable and preferred renderings '
+                f'cannot be checked by literal match. Named-entity consistency is the '
+                f'test that covers them.'
+            )
+        elif not relevant:
+            note = 'None of the glossary terms occur in the source text.'
+        elif len(draft_violations) == 0 and len(final_violations) == 0:
             note = 'No verified terms were violated in either pass.'
         elif delta > 0:
             note = f'Refinement fixed {delta} glossary violation(s) ({len(draft_violations)} → {len(final_violations)}).'
@@ -309,14 +323,45 @@ class QualityTests:
     # as the same name inflected, rather than two different renderings. Names
     # inflect at the end, so the comparison is on the leading characters.
     ENTITY_STEM_MIN = 4
+    # A name this short has no room to give up two characters, but it still
+    # inflects, so it gives up one — see _entity_match_rule.
+    ENTITY_SHORT_STEM_MIN = 3
+    # …and buys that back with a ceiling on how far past the name an accepted
+    # form may run, since endings are short and unrelated words that merely
+    # share a prefix usually are not.
+    ENTITY_SHORT_GROWTH_MAX = 2
+
+    @staticmethod
+    def _entity_head(term: str) -> str:
+        """The word of a target term that carries the inflection."""
+        parts = term.split()
+        return parts[-1] if parts else term
+
+    @classmethod
+    def _entity_match_rule(cls, term: str) -> Tuple[str, Optional[int]]:
+        """The prefix an inflected form has to keep, and the longest form that
+        prefix may accept (``None`` for no ceiling).
+
+        A long name can give up its last two characters and still be specific.
+        A four-character one cannot: keeping it whole was reading every
+        oblique form of a vowel-final name as the name being missing, because
+        the ending replaces that final vowel rather than being added to it
+        (``Река`` → ``реке``). So it gives up one character — and because a
+        three-character prefix is no longer specific enough on its own
+        (``хол`` from ``Холм`` also starts ``холодный``), the forms it accepts
+        are capped by length.
+        """
+        head = cls._entity_head(term)
+        if len(head) > cls.ENTITY_STEM_MIN:
+            return head[:max(cls.ENTITY_STEM_MIN, len(head) - 2)].casefold(), None
+        if len(head) <= cls.ENTITY_SHORT_STEM_MIN:
+            return head.casefold(), None
+        return head[:-1].casefold(), len(head) + cls.ENTITY_SHORT_GROWTH_MAX
 
     @classmethod
     def _entity_stem(cls, term: str) -> str:
         """The leading part of a target term that inflection leaves alone."""
-        head = term.split()[-1] if term.split() else term
-        if len(head) <= cls.ENTITY_STEM_MIN:
-            return head.casefold()
-        return head[:max(cls.ENTITY_STEM_MIN, len(head) - 2)].casefold()
+        return cls._entity_match_rule(term)[0]
 
     @classmethod
     def _matches_entity_rendering(cls, candidate: str, target: str) -> bool:
@@ -327,9 +372,14 @@ class QualityTests:
         ``Фенвикс``. This is deliberately conservative rather than pretending
         to provide morphology for every supported target language.
         """
-        head = target.split()[-1] if target.split() else target
+        head = cls._entity_head(target)
+        stem, max_length = cls._entity_match_rule(target)
         folded = candidate.casefold()
-        return len(folded) >= len(head) and folded.startswith(cls._entity_stem(target))
+        if len(folded) < len(head):
+            return False
+        if max_length is not None and len(folded) > max_length:
+            return False
+        return folded.startswith(stem)
 
     def eval_entity_consistency(
         self, original_chunks: List[str], final_chunks: List[str],
@@ -379,7 +429,7 @@ class QualityTests:
         })
 
         pairs = list(zip(original_chunks, final_chunks))
-        findings, checked = [], 0
+        findings, checked, loosely_matched = [], 0, []
         for term in terminology.terms:
             folded_source = term.source.casefold()
             occurrences, satisfied, forms = 0, 0, Counter()
@@ -397,6 +447,8 @@ class QualityTests:
             if not occurrences:
                 continue
             checked += 1
+            if self._entity_match_rule(term.target)[1] is not None:
+                loosely_matched.append(term.target)
             if satisfied < occurrences:
                 findings.append({
                     'source': term.source,
@@ -428,6 +480,13 @@ class QualityTests:
                 f'allowed to change.'
             )
 
+        if loosely_matched:
+            note += (
+                f' Matched on a shortened stem so that they can inflect: '
+                f'{", ".join(loosely_matched[:6])}. A name this short leaves little '
+                f'to match on, so an unrelated word of the same shape can satisfy it.'
+            )
+
         return {
             'test': 'entity_consistency',
             'label': 'Named-entity consistency',
@@ -436,6 +495,7 @@ class QualityTests:
                 'terms_checked': checked,
                 'findings': findings[:20],
                 'ambiguous_pairs': [list(pair) for pair in ambiguous[:20]],
+                'loosely_matched': loosely_matched[:20],
             },
             'flagged': bool(findings),
             'note': note,
