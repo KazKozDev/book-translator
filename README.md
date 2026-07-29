@@ -222,14 +222,6 @@ git checkout v2.1.0
 
 Tag **`v2.0.0`** contains the earlier October 2025 rewrite.
 
-## License
-
-MIT — see [LICENSE](LICENSE).
-
-## Disclaimer
-
-Tolmach uses AI models to translate, refine, and evaluate text. Model output can contain omissions, mistranslations, inconsistent terminology, or invented details. Human review remains required, especially before professional publication. Keep the local server private, protect any configured API keys, and report vulnerabilities privately according to [Security](https://github.com/KazKozDev/book-translator/blob/main/SECURITY.md).
-
 <p align="center">
   <a href="https://github.com/KazKozDev/book-translator/blob/main/LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-blue.svg"></a>
   <a href="https://github.com/KazKozDev/book-translator/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/KazKozDev/book-translator/actions/workflows/ci.yml/badge.svg"></a>
@@ -241,5 +233,6 @@ Tolmach uses AI models to translate, refine, and evaluate text. Model output can
   <a href="https://github.com/KazKozDev/book-translator/blob/main/CHANGELOG.md">CHANGELOG</a> ·
   <a href="https://github.com/KazKozDev/book-translator/blob/main/CONTRIBUTING.md">CONTRIBUTING</a> ·
   <a href="https://github.com/KazKozDev/book-translator/blob/main/LICENSE">LICENSE</a> ·
+  <a href="https://github.com/KazKozDev/book-translator/blob/main/SECURITY.md"><strong>Disclaimer</strong></a> ·
   <a href="https://www.linkedin.com/in/kazkozdev/">LinkedIn</a>
 </p>
