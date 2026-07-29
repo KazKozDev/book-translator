@@ -70,6 +70,10 @@ def test_the_language_hint_is_read_loosely(tmp_path):
 
 
 def test_epub_source_preview_uses_the_translation_reader_and_cleans_up(tmp_path, monkeypatch):
+    def unexpected_ollama_check(*args, **kwargs):
+        raise AssertionError('source preview must not call Ollama')
+
+    monkeypatch.setattr(translator.requests, 'get', unexpected_ollama_check)
     upload_folder = tmp_path / 'uploads'
     upload_folder.mkdir()
     monkeypatch.setattr(translator, 'UPLOAD_FOLDER', str(upload_folder))

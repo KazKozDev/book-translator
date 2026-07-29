@@ -14,6 +14,10 @@ OTHER_FINGERPRINT = 'b' * 64
 
 @pytest.fixture
 def glossary_client(tmp_path, monkeypatch):
+    def unexpected_ollama_check(*args, **kwargs):
+        raise AssertionError('workspace glossary persistence must not call Ollama')
+
+    monkeypatch.setattr(app_module.requests, 'get', unexpected_ollama_check)
     database_path = tmp_path / 'translations.db'
     monkeypatch.setattr(app_module, 'DB_PATH', str(database_path))
     app_module.init_db()

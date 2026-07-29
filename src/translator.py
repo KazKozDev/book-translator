@@ -2821,6 +2821,7 @@ def check_ollama():
         'health_check', 'serve_frontend', 'serve_static', 'delete_translation',
         'get_translation', 'get_translations', 'get_review_chunks',
         'update_review_chunk', 'download_translation',
+        'source_preview', 'get_workspace_glossary', 'save_workspace_glossary',
         'get_glossary_verification_prompt', 'get_frontier_providers',
         'verify_glossary_with_frontier',
         # The log console is most wanted precisely when the pipeline is
