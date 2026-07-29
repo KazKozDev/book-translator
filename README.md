@@ -209,18 +209,8 @@ The test suite does not require Ollama, downloaded models, or network access.
 ## Credits and project history
 
 [**kroryan**](https://github.com/kroryan) — created the v2.0 modular architecture, contributed Windows compatibility, and identified security and stability fixes later carried into this rewrite.
-
-[**moonixt**](https://github.com/moonixt) — contributed Portuguese language support.
-
-**Derek W.** — contributed README and startup instructions.
-
-The earlier modular application remains available as tag **v2.1.0**, including its Windows tray application and Docker build as they stood on 2026-01-21:
-
-```bash
-git checkout v2.1.0
-```
-
-Tag **`v2.0.0`** contains the earlier October 2025 rewrite.
+[**moonixt**](https://github.com/moonixt) — contributed Portuguese language support and startup instructions.
+The earlier modular application remains available as tag **v2.1.0**, including its Windows tray application and Docker build as they stood on 26-01-21.
 
 <p align="center">
   <a href="https://github.com/KazKozDev/book-translator/blob/main/LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-blue.svg"></a>
