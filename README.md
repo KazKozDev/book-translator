@@ -214,7 +214,7 @@ The test suite does not require Ollama, downloaded models, or network access.
 
 **Derek W.** — contributed README and startup instructions.
 
-The earlier modular application remains available as tag **`v2.1.0`**, including its Windows tray application and Docker build as they stood on 2026-01-21:
+The earlier modular application remains available as tag **v2.1.0**, including its Windows tray application and Docker build as they stood on 2026-01-21:
 
 ```bash
 git checkout v2.1.0
