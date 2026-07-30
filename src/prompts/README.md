@@ -24,6 +24,7 @@ the program here, and a changed prompt is a changed translation.
 | `stage2_refine/verify_edits.md` | Stage 2c fallback — resolve a tie or position-biased vote by checking the concrete replacements without ordered versions | `BookTranslator.stage2_verify_edits` |
 | `quality/pairwise_editor.md` | Stage 3 — draft vs final, on accuracy and readability separately | `QualityTests.eval_llm_judge_stage2` |
 | `quality/adequacy_fluency.md` | Stage 3 — score one translation 1–5 on adequacy and fluency | `QualityTests._adequacy_fluency_prompt` |
+| `review/frontier_decision.md` | Review Desk — let the configured cloud provider apply or keep every proposed chunk fix | `frontier_review.build_review_prompt` |
 | `shared/terminology.md` | The verified-glossary block spliced into Stage 1 and Stage 2 | `TerminologyManager.prompt_context` |
 | `manual/glossary_verification.md` | Ready-to-paste glossary mode review for an external frontier model | `/glossary-verification-prompt` |
 

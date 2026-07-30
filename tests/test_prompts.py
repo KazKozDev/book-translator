@@ -16,6 +16,7 @@ from pathlib import Path
 import pytest
 
 import prompts
+from frontier_review import build_review_prompt
 from quality_tests import QualityTests
 from terminology import GlossaryTerm, TerminologyManager
 from translator import BookTranslator
@@ -266,8 +267,26 @@ def manual_glossary_verification() -> str:
     )
 
 
+def review_frontier_decision() -> str:
+    return build_review_prompt([{
+        'chunk_index': 1,
+        'revision': 2,
+        'source': SOURCE,
+        'draft': DRAFT,
+        'final': FINAL,
+        'issues': [{
+            'issue_index': 0,
+            'span': 'выпускала',
+            'replacement': 'производила',
+            'type': 'mistranslation',
+            'severity': 'major',
+        }],
+    }])
+
+
 CASES = {
     'manual_glossary_verification': manual_glossary_verification,
+    'review_frontier_decision': review_frontier_decision,
     'stage0_rendering_from_candidates': stage0_rendering_from_candidates,
     'stage0_rendering_from_excerpt': stage0_rendering_from_excerpt,
     'stage0_cluster_adjudication': stage0_cluster_adjudication,

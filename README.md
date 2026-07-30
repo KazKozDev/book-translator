@@ -1,4 +1,4 @@
-# Tolmach — Offline AI Book Translator for EPUB, PDF, and Novels
+# Tolmach — AI Book Translator for EPUB, PDF, and Novels
 
 Professional literary translation software for translating entire TXT, EPUB, and PDF books with local Ollama models, document glossaries, guarded refinement, and side-by-side review.
 
@@ -63,6 +63,8 @@ The glossary belongs only to this book and language pair. If you configure an op
 ## Review a novel translation side by side
 
 After **→ 3 CONTINUE** finishes, open **Review desk**. Each chunk shows the original source, the first draft, and the editable final translation next to each other.
+
+Proposed fixes can be applied manually, decided and saved by the configured cloud provider for one chunk, or processed for every open chunk with **Review all automatically**. Cloud decisions are restricted to apply/keep for the existing proposed fixes; they cannot rewrite the chunk or invent another option.
 
 ```text
 Source → Draft → Final → Save final → Download

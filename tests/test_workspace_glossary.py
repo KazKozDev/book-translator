@@ -94,6 +94,91 @@ def test_workspace_glossary_rejects_invalid_drafts(glossary_client, fingerprint,
     assert response.get_json()['error'] == message
 
 
+def _job(database_path, *, fingerprint=FINGERPRINT, terms=()):
+    """A translation row as /translate would have written it."""
+    with sqlite3.connect(database_path) as conn:
+        cur = conn.execute(
+            '''
+            INSERT INTO translations (
+                filename, source_lang, target_lang, model, status,
+                document_fingerprint
+            ) VALUES ('book.txt', 'en', 'ru', 'model', 'completed', ?)
+            ''',
+            (fingerprint,),
+        )
+        translation_id = cur.lastrowid
+        conn.executemany(
+            '''
+            INSERT INTO translation_terms (
+                translation_id, source_term, target_term, enforcement_mode, status
+            ) VALUES (?, ?, ?, ?, 'verified')
+            ''',
+            [(translation_id, *term) for term in terms],
+        )
+    return translation_id
+
+
+def test_a_reopened_translation_carries_its_book_and_its_glossary(glossary_client):
+    """Reopening a job — which is also what a page reload does — used to leave
+    the glossary editor empty: the File the fingerprint was computed from is
+    gone from the tab, so nothing could find the saved draft. The job now
+    records the fingerprint, which is the binding the editor rebinds through."""
+    client, database_path = glossary_client
+    client.put(f'/workspace-glossary/{FINGERPRINT}', json=_draft())
+    translation_id = _job(database_path, terms=[('Darcy', 'Дарси', 'exact')])
+
+    reopened = client.get(f'/translations/{translation_id}').get_json()
+
+    assert reopened['document_fingerprint'] == FINGERPRINT
+    assert reopened['glossary'] == 'Darcy => Дарси | exact'
+    draft = client.get(
+        f'/workspace-glossary/{reopened["document_fingerprint"]}',
+        query_string=_query(reopened['source_lang'], reopened['target_lang']),
+    )
+    assert draft.get_json() == {'glossary': 'Darcy => Дарси | exact', 'found': True}
+
+
+def test_a_job_without_a_fingerprint_still_shows_the_terms_it_ran_under(glossary_client):
+    """Pasted text has no file to fingerprint, and jobs from before the column
+    existed have no value in it. Those cannot rebind an editable draft, but the
+    approved terms are still on the job and are what the editor falls back to."""
+    client, database_path = glossary_client
+    translation_id = _job(
+        database_path,
+        fingerprint=None,
+        terms=[('Darcy', 'Дарси', 'exact'), ('Netherfield', 'Незерфилд', 'inflectable')],
+    )
+
+    reopened = client.get(f'/translations/{translation_id}').get_json()
+
+    assert reopened['document_fingerprint'] is None
+    assert reopened['glossary'] == (
+        'Darcy => Дарси | exact\nNetherfield => Незерфилд | inflectable'
+    )
+
+
+def test_a_reopened_glossary_parses_back_into_the_terms_it_came_from(glossary_client):
+    """The rebuilt text goes back into the same textarea and through the same
+    parser as anything typed by hand, so it has to survive the round trip."""
+    client, database_path = glossary_client
+    terms = [('Darcy', 'Дарси', 'exact'), ('Mr Bennet', 'мистер Беннет', 'preferred')]
+    translation_id = _job(database_path, terms=terms)
+
+    text = client.get(f'/translations/{translation_id}').get_json()['glossary']
+
+    assert [
+        (term.source, term.target, term.mode)
+        for term in app_module.TerminologyManager.from_text(text).terms
+    ] == terms
+
+
+def test_a_translation_with_no_glossary_reopens_with_an_empty_one(glossary_client):
+    client, database_path = glossary_client
+    translation_id = _job(database_path)
+
+    assert client.get(f'/translations/{translation_id}').get_json()['glossary'] == ''
+
+
 def test_client_drops_legacy_global_glossary_storage():
     index_html = (
         Path(app_module.__file__).parent / 'static' / 'index.html'
@@ -103,3 +188,12 @@ def test_client_drops_legacy_global_glossary_storage():
     assert "localStorage.removeItem(LEGACY_WORKSPACE_GLOSSARY_KEY)" in index_html
     assert "crypto.subtle.digest('SHA-256'" in index_html
     assert 'workspace-glossary/' in index_html
+
+
+def test_client_restores_the_glossary_when_it_reopens_a_translation():
+    index_html = (
+        Path(app_module.__file__).parent / 'static' / 'index.html'
+    ).read_text(encoding='utf-8')
+
+    assert 'loadWorkspaceGlossaryForTranslation(t);' in index_html
+    assert "formData.append('documentFingerprint', fingerprintForJob);" in index_html

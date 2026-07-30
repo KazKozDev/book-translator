@@ -36,6 +36,7 @@ from frontier_glossary import (  # noqa: E402
     provider_catalog,
     verify_glossary,
 )
+from frontier_review import decide_review_cases  # noqa: E402
 from languages import LANG_NAMES  # noqa: E402
 
 # TranslateGemma (Gemma 3 based, 4B/12B/27B) is a translation-only model: it
@@ -189,7 +190,8 @@ def init_db():
                 original_chunks TEXT,
                 draft_chunks TEXT,
                 final_chunks TEXT,
-                chunk_chapter_map TEXT
+                chunk_chapter_map TEXT,
+                document_fingerprint TEXT
             );
 
             CREATE TABLE IF NOT EXISTS chunks (
@@ -278,6 +280,10 @@ def init_db():
             # units as the Stage 1 judge (chunks), instead of realigning
             # paragraph-by-position after the fact.
             ('final_chunks', 'ALTER TABLE translations ADD COLUMN final_chunks TEXT'),
+            # Which book this job was started from, so reopening the job can
+            # rebind its editable glossary draft in workspace_glossaries
+            # instead of showing an empty editor.
+            ('document_fingerprint', 'ALTER TABLE translations ADD COLUMN document_fingerprint TEXT'),
         ):
             if column not in existing_columns:
                 conn.execute(ddl)
@@ -2828,6 +2834,8 @@ def check_ollama():
         'source_preview', 'get_workspace_glossary', 'save_workspace_glossary',
         'get_glossary_verification_prompt', 'get_frontier_providers',
         'verify_glossary_with_frontier',
+        'decide_review_chunk_with_frontier',
+        'decide_all_review_chunks_with_frontier',
         # The log console is most wanted precisely when the pipeline is
         # failing, and "Ollama is down" is one of the things it exists to show.
         'stream_logs', 'reset_logs', 'rotate_logs',
@@ -3013,6 +3021,20 @@ def _workspace_glossary_context(document_fingerprint: str, source_lang: Optional
     ), None
 
 
+def _store_workspace_glossary(conn, context, glossary: str) -> None:
+    """Upsert one document + language pair's editable glossary draft."""
+    conn.execute(
+        '''
+        INSERT INTO workspace_glossaries (
+            document_fingerprint, source_lang, target_lang, glossary, updated_at
+        ) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+        ON CONFLICT(document_fingerprint, source_lang, target_lang)
+        DO UPDATE SET glossary = excluded.glossary, updated_at = CURRENT_TIMESTAMP
+        ''',
+        (*context, glossary),
+    )
+
+
 @app.route('/workspace-glossary/<document_fingerprint>', methods=['GET'])
 @with_error_handling
 def get_workspace_glossary(document_fingerprint):
@@ -3057,16 +3079,7 @@ def save_workspace_glossary(document_fingerprint):
         return jsonify({'error': 'Glossary draft is too large'}), 400
 
     with sqlite3.connect(DB_PATH) as conn:
-        conn.execute(
-            '''
-            INSERT INTO workspace_glossaries (
-                document_fingerprint, source_lang, target_lang, glossary, updated_at
-            ) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
-            ON CONFLICT(document_fingerprint, source_lang, target_lang)
-            DO UPDATE SET glossary = excluded.glossary, updated_at = CURRENT_TIMESTAMP
-            ''',
-            (*context, glossary),
-        )
+        _store_workspace_glossary(conn, context, glossary)
     return jsonify({'status': 'saved'})
 
 
@@ -3103,7 +3116,23 @@ def get_translation(translation_id):
             (translation_id,)
         ).fetchall()
 
+        term_rows = conn.execute(
+            '''
+            SELECT source_term, target_term, enforcement_mode
+            FROM translation_terms WHERE translation_id = ?
+            ORDER BY id
+            ''',
+            (translation_id,)
+        ).fetchall()
+
         data = dict(translation)
+        # The glossary this job actually ran under, in the textarea's own
+        # format, so reopening a translation can show its terminology instead
+        # of an empty editor. Same serialisation as /prepare.
+        data['glossary'] = '\n'.join(
+            f"{r['source_term']} => {r['target_term']} | {r['enforcement_mode']}"
+            for r in term_rows
+        )
         data['evaluation_results'] = {
             r['test_name']: {
                 'judge_model': r['judge_model'],
@@ -3390,6 +3419,179 @@ def get_review_chunks(translation_id):
                 'error': 'No aligned chunks yet — run Start first',
             }), 400
         return jsonify(_review_chunks_payload(conn, row))
+
+
+def _frontier_review_case(chunk: Dict, translation_row) -> Optional[Dict]:
+    """The exact manual Apply choices a provider is allowed to decide."""
+    final = chunk.get('final') or ''
+    issues = []
+    for issue_index, issue in enumerate(chunk.get('issues') or []):
+        if not isinstance(issue, dict):
+            continue
+        span = issue.get('span')
+        replacement = issue.get('replacement')
+        if (
+            not isinstance(span, str)
+            or not isinstance(replacement, str)
+            or not span.strip()
+            or not replacement.strip()
+            or span == replacement
+            or span not in final
+        ):
+            continue
+        issues.append({
+            'issue_index': issue_index,
+            'span': span,
+            'replacement': replacement,
+            'type': str(issue.get('type') or 'issue'),
+            'severity': str(issue.get('severity') or 'unspecified'),
+        })
+    if not issues:
+        return None
+    return {
+        'chunk_index': int(chunk['index']),
+        'revision': int(chunk.get('revision') or 0),
+        'source_language': LANG_NAMES.get(
+            translation_row['source_lang'],
+            translation_row['source_lang'],
+        ),
+        'target_language': LANG_NAMES.get(
+            translation_row['target_lang'],
+            translation_row['target_lang'],
+        ),
+        'source': chunk.get('source') or '',
+        'draft': chunk.get('draft') or '',
+        'final': final,
+        'issues': issues,
+    }
+
+
+def _frontier_review_payload(
+    translation_id: int,
+    chunk_index: Optional[int] = None,
+):
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.row_factory = sqlite3.Row
+        row = conn.execute(
+            'SELECT * FROM translations WHERE id = ?',
+            (translation_id,),
+        ).fetchone()
+        if not row:
+            return None, None, (jsonify({'error': 'Translation not found'}), 404)
+        if is_run_active(translation_id):
+            return None, None, (jsonify({
+                'error': 'This translation is still running. Wait for it to finish before reviewing.',
+            }), 409)
+        if not row['final_chunks']:
+            return None, None, (jsonify({
+                'error': 'Run Continue first — there is no final translation to review',
+            }), 400)
+        review_payload = _review_chunks_payload(conn, row)
+
+    chunks = review_payload['chunks']
+    if chunk_index is not None:
+        selected = next(
+            (chunk for chunk in chunks if int(chunk['index']) == chunk_index),
+            None,
+        )
+        if not selected:
+            return None, None, (
+                jsonify({'error': 'Chunk index is out of range'}),
+                404,
+            )
+        chunks = [selected]
+    else:
+        chunks = [
+            chunk for chunk in chunks
+            if chunk.get('review_status') != 'resolved'
+        ]
+
+    cases = [
+        case
+        for case in (
+            _frontier_review_case(chunk, row)
+            for chunk in chunks
+        )
+        if case is not None
+    ]
+    if not cases:
+        message = (
+            'This chunk has no applicable proposed fixes'
+            if chunk_index is not None
+            else 'No open Review Desk chunks have applicable proposed fixes'
+        )
+        return None, None, (jsonify({'error': message}), 400)
+    return row, cases, None
+
+
+def _run_frontier_review_decision(
+    translation_id: int,
+    chunk_index: Optional[int] = None,
+):
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict):
+        return jsonify({'error': 'Review Desk decision request is required'}), 400
+    provider = payload.get('provider')
+    submitted_key = payload.get('apiKey')
+    submitted_model = payload.get('model')
+    if not isinstance(provider, str):
+        return jsonify({'error': 'Choose a frontier provider in Settings'}), 400
+    if submitted_key is not None and not isinstance(submitted_key, str):
+        return jsonify({'error': 'API key must be text'}), 400
+    if submitted_model is not None and not isinstance(submitted_model, str):
+        return jsonify({'error': 'Model name must be text'}), 400
+
+    _, cases, error_response = _frontier_review_payload(
+        translation_id,
+        chunk_index,
+    )
+    if error_response:
+        return error_response
+    try:
+        result = decide_review_cases(
+            provider,
+            cases,
+            submitted_key,
+            submitted_model,
+        )
+    except FrontierGlossaryError as error:
+        return jsonify({'error': str(error)}), error.status_code
+    except Exception:
+        logger.app_logger.error(
+            'Unexpected frontier Review Desk decision error\n'
+            + traceback.format_exc()
+        )
+        return jsonify({
+            'error': 'Frontier Review Desk decision failed unexpectedly',
+        }), 502
+
+    response = jsonify({
+        'translation_id': translation_id,
+        'provider': result.provider,
+        'provider_label': result.provider_label,
+        'model': result.model,
+        'decisions': result.decisions,
+    })
+    response.headers['Cache-Control'] = 'no-store'
+    return response
+
+
+@app.route(
+    '/translations/<int:translation_id>/review-chunks/<int:chunk_index>/frontier-decision',
+    methods=['POST'],
+)
+def decide_review_chunk_with_frontier(translation_id, chunk_index):
+    """Ask the selected cloud provider about one chunk's manual Apply choices."""
+    return _run_frontier_review_decision(translation_id, chunk_index)
+
+
+@app.route(
+    '/translations/<int:translation_id>/review-chunks/frontier-decisions',
+    methods=['POST'],
+)
+def decide_all_review_chunks_with_frontier(translation_id):
+    """Decide every open, applicable Review Desk fix in one provider pass."""
+    return _run_frontier_review_decision(translation_id)
 
 
 @app.route(
@@ -4044,6 +4246,13 @@ def translate():
         if not all([file, source_lang, target_lang, model_name]):
             return jsonify({'error': 'Missing required parameters'}), 400
 
+        # The browser already fingerprints the book to scope its editable
+        # glossary draft. Keeping that identity on the job is what lets a
+        # reopened translation find the same draft again.
+        document_fingerprint = request.form.get('documentFingerprint') or ''
+        if not WORKSPACE_GLOSSARY_FINGERPRINT.fullmatch(document_fingerprint):
+            document_fingerprint = None
+
         try:
             text, chapters, book_title, book_author, source_format, filepath = read_uploaded_book(file, source_lang)
         except UploadError as e:
@@ -4054,10 +4263,12 @@ def translate():
             cur = conn.execute('''
                 INSERT INTO translations (
                     filename, source_lang, target_lang, model,
-                    status, original_text, genre, source_format, book_title, book_author
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    status, original_text, genre, source_format, book_title, book_author,
+                    document_fingerprint
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', (filename, source_lang, target_lang, model_name,
-                  'in_progress', text, genre, source_format, book_title, book_author))
+                  'in_progress', text, genre, source_format, book_title, book_author,
+                  document_fingerprint))
             translation_id = cur.lastrowid
             conn.executemany(
                 '''
@@ -4080,7 +4291,16 @@ def translate():
                     for term in terminology.terms
                 ],
             )
-            
+            # Start is also a save point for the editable draft: the browser
+            # debounces its autosave, so the very last keystroke before Start
+            # would otherwise never reach SQLite.
+            if document_fingerprint:
+                _store_workspace_glossary(
+                    conn,
+                    (document_fingerprint, source_lang, target_lang),
+                    request.form.get('glossary', '')[:MAX_WORKSPACE_GLOSSARY_LENGTH],
+                )
+
         translator = BookTranslator(model_name=model_name)
         
         def generate():

@@ -475,8 +475,14 @@
         .review-desk-header { display: flex; align-items: flex-end; justify-content: space-between; gap: 22px; margin-bottom: 14px; }
         .review-heading { min-width: 170px; }
         .review-heading h2 { margin: 5px 0 0; color: var(--ink); font-size: 1.15rem; font-weight: 700; letter-spacing: -.01em; }
-        .review-summary { flex: 1 1 auto; margin: 0; color: var(--muted); font-size: .78rem; }
-        .review-header-controls { display: flex; align-items: center; justify-content: flex-end; gap: 18px; }
+        .review-summary-group { flex: 0 0 auto; min-width: 0; margin-left: auto; }
+        .review-summary { margin: 0; color: var(--muted); font-size: .78rem; }
+        .review-header-controls { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 18px; }
+        .review-cloud-all { flex: none; font-size: .74rem; }
+        .review-cloud-status { min-height: 1em; margin-top: 4px; color: var(--muted); font-size: .72rem; }
+        .review-cloud-status:empty { display: none; }
+        .review-cloud-status.is-error { color: #b91c1c; font-weight: 600; }
+        .review-cloud-status.is-saved { color: var(--accent); font-weight: 600; }
         .review-filter { display: flex; gap: 12px; margin: 0; padding: 0; border: 0; }
         .review-filter button { padding: 4px 0; border: none; border-bottom: 1px solid transparent; background: transparent; color: var(--muted); font: inherit; font-size: .78rem; cursor: pointer; }
         .review-filter button:hover { color: var(--ink); }
@@ -645,7 +651,7 @@
         @media (max-width: 820px) {
             .toolbar .form-group { flex: 1 1 160px; }
             .review-desk-header { align-items: flex-start; flex-wrap: wrap; }
-            .review-summary { order: 3; flex-basis: 100%; }
+            .review-summary-group { order: 3; flex-basis: 100%; }
             .review-workbench { grid-template-columns: 1fr; }
             .review-nav { border-right: none; border-bottom: 1px solid var(--line); }
             .review-chunk-list { max-height: 228px; }
@@ -727,6 +733,7 @@
         .theme-dark .review-status.is-dirty { color: #d5a54d; }
         .theme-dark .review-status.is-error,
         .theme-dark .review-action-status.is-error,
+        .theme-dark .review-cloud-status.is-error,
         .theme-dark .review-judge-state.is-error,
         .theme-dark .review-signal.is-major strong,
         .theme-dark .review-signal.is-warning strong { color: #f87171; }
@@ -835,7 +842,7 @@
                         <div class="glossary-status" id="glossaryStatus">
                             <span id="glossaryStatusText" aria-live="polite"></span>
                             <button type="button" class="glossary-prompt-action" id="copyGlossaryPromptBtn" hidden>Copy frontier prompt</button>
-                            <button type="button" class="glossary-prompt-action" id="verifyGlossaryFrontierBtn" hidden>Verify automatically</button>
+                            <button type="button" class="glossary-prompt-action" id="verifyGlossaryFrontierBtn" hidden>Verify automatically ($)</button>
                         </div>
                         <section class="frontier-review" id="frontierReview" aria-labelledby="frontierReviewTitle" hidden>
                             <div class="frontier-review-head">
@@ -1156,8 +1163,12 @@
                     <div class="eyebrow">Chunk review</div>
                     <h2 id="reviewDeskTitle">Review desk</h2>
                 </div>
-                <p class="review-summary" id="reviewSummary">Loading review chunks…</p>
+                <div class="review-summary-group">
+                    <p class="review-summary" id="reviewSummary">Loading review chunks…</p>
+                    <div class="review-cloud-status" id="reviewCloudStatus" role="status" aria-live="polite"></div>
+                </div>
                 <div class="review-header-controls">
+                    <button type="button" class="header-action review-cloud-all" id="reviewCloudAllBtn">Review all automatically ($)</button>
                     <fieldset class="review-filter" aria-label="Filter review chunks">
                         <button type="button" id="reviewNeedsFilter" aria-pressed="true">Needs review</button>
                         <button type="button" id="reviewAllFilter" aria-pressed="false">All chunks</button>
@@ -1202,6 +1213,7 @@
                                 <textarea class="review-final-text" id="reviewFinalText" spellcheck="true"></textarea>
                                 <div class="review-actions">
                                     <button type="button" class="review-action" id="reviewApplyAllBtn" aria-label="Apply all proposed fixes to Final" disabled>Apply proposed fixes</button>
+                                    <button type="button" class="review-action" id="reviewCloudChunkBtn" disabled>Review chunk automatically</button>
                                     <button type="button" class="review-action is-primary" id="reviewSaveBtn" disabled>Save final</button>
                                     <label class="sr-only" for="reviewAlternativeCount">Number of alternatives</label>
                                     <select class="review-count" id="reviewAlternativeCount">
@@ -1237,8 +1249,8 @@
             </div>
         </section>
         <footer class="footer-note">
-            <strong>Disclaimer</strong>
-            <p>Tolmach Book Translator is free and open-source software released under the GNU Affero General Public License version 3 only (AGPL-3.0-only). Copyright (C) 2024-2026 Artem Kazakov Kozlov. Tolmach does not claim ownership of your source texts or of any generated output.</p>
+            <strong>Copyright (C) 2024-2026 Artem Kazakov Kozlov</strong>
+            <p>Tolmach Book Translator is free and open-source software released under the GNU Affero General Public License version 3 only (AGPL-3.0-only). Tolmach does not claim ownership of your source texts or of any generated output.</p>
             <p>You are solely responsible for ensuring that you have the legal right to use, translate, edit, and publish the source text, and for complying with all applicable copyright and intellectual-property laws.</p>
             <div class="footer-note-compact">
                 <p>You are also responsible for reviewing and complying with the licenses, terms of service, and usage restrictions of all models and third-party dependencies (including commercial APIs), as well as any limitations on the use of generated output. Tolmach does not verify or guarantee compliance with any third-party terms.</p>
@@ -1246,6 +1258,7 @@
                 <p>Tolmach is provided “as is”, without warranties of any kind. The author (KazKozDev) and contributors accept no liability for any use of the software or its output. Tolmach is not affiliated with or endorsed by the providers of any third-party models; all trademarks belong to their respective owners.</p>
                 <p>Source code: <a href="https://github.com/KazKozDev/book-translator" target="_blank" rel="noopener noreferrer">https://github.com/KazKozDev/book-translator</a></p>
             </div>
+            <p>The ($) marker means an optional paid request to the external frontier model selected in Settings. It works only after you choose a provider and enter a valid API key; the provider may charge your account under its own pricing. These are the two points where a frontier model adds the most value: Verify automatically ($) checks the glossary before translation, improving terminology consistency across the entire book, while Review all automatically ($) evaluates the proposed refinement fixes for every open chunk and saves substantial manual review time. You should still review the final text.</p>
         </footer>
     </div>
 
@@ -1281,6 +1294,7 @@
         let reviewIsDirty = false;
         let reviewIsSaving = false;
         let reviewIsGenerating = false;
+        let reviewIsCloudDeciding = false;
         let reviewIsApplyingFixes = false;
         let reviewAppliedIssueIndexes = new Set();
         let reviewLoadToken = 0;
@@ -1396,6 +1410,62 @@
                     console.warn('Could not save this book\'s glossary:', error);
                 }
             }, 350);
+        }
+
+        // A translation reopened from history — or restored after a reload,
+        // which is the same code path — has no File behind it, so the glossary
+        // cannot be found by fingerprinting bytes this tab no longer holds.
+        // The job recorded its book's fingerprint instead: rebind the editable
+        // draft through that, so the terminology is both visible and still
+        // saved as it is edited. Jobs started from pasted text, and jobs from
+        // before the column existed, fall back to the terms stored with them —
+        // visible, but with nothing to bind an autosave to.
+        async function loadWorkspaceGlossaryForTranslation(translation) {
+            const glossaryField = document.getElementById('glossary');
+            const loadToken = ++workspaceGlossaryLoadToken;
+            const approvedGlossary = translation.glossary || '';
+            const fingerprint = translation.document_fingerprint;
+
+            if (!fingerprint || !translation.source_lang || !translation.target_lang) {
+                glossaryField.value = approvedGlossary;
+                clearFrontierReview();
+                updateGlossaryStatus();
+                return;
+            }
+
+            const context = {
+                documentFingerprint: fingerprint,
+                sourceLanguage: translation.source_lang,
+                targetLanguage: translation.target_lang,
+            };
+            selectedDocumentFingerprint = fingerprint;
+            workspaceGlossaryContext = context;
+            let draft = null;
+            try {
+                const response = await fetch(workspaceGlossaryUrl(context));
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
+                if (data.found) draft = data.glossary || '';
+            } catch (error) {
+                console.warn('Could not load this book\'s glossary:', error);
+            }
+            if (loadToken !== workspaceGlossaryLoadToken) return;
+            glossaryField.value = draft !== null ? draft : approvedGlossary;
+            clearFrontierReview();
+            updateGlossaryStatus();
+        }
+
+        // Same book, different language pair, no File in this tab: keep the
+        // binding on the fingerprint and show whatever draft that new pair has.
+        async function rebindWorkspaceGlossaryToCurrentLanguages() {
+            const fingerprint = selectedDocumentFingerprint;
+            if (!fingerprint) return;
+            await loadWorkspaceGlossaryForTranslation({
+                document_fingerprint: fingerprint,
+                source_lang: document.getElementById('sourceLanguage').value,
+                target_lang: document.getElementById('targetLanguage').value,
+                glossary: '',
+            });
         }
 
         async function loadWorkspaceGlossaryForSelectedDocument() {
@@ -1842,6 +1912,12 @@
             status.className = `review-action-status${tone ? ` ${tone}` : ''}`;
         }
 
+        function setReviewCloudStatus(message, tone = '') {
+            const status = document.getElementById('reviewCloudStatus');
+            status.textContent = message || '';
+            status.className = `review-cloud-status${tone ? ` ${tone}` : ''}`;
+        }
+
         function reviewIssueReplacement(issue, currentText) {
             if (!issue || typeof issue.span !== 'string' || typeof issue.replacement !== 'string') {
                 return null;
@@ -1870,26 +1946,43 @@
             const applyAllButton = document.getElementById('reviewApplyAllBtn');
             const saveButton = document.getElementById('reviewSaveBtn');
             const generateButton = document.getElementById('reviewGenerateBtn');
+            const cloudChunkButton = document.getElementById('reviewCloudChunkBtn');
+            const cloudAllButton = document.getElementById('reviewCloudAllBtn');
             const countSelect = document.getElementById('reviewAlternativeCount');
-            const applyBlocked = !hasChunk || reviewIsSaving || reviewIsGenerating;
+            const applyBlocked = !hasChunk || reviewIsSaving || reviewIsGenerating || reviewIsCloudDeciding;
             const currentText = textarea.value;
             const issues = Array.isArray(chunk?.issues) ? chunk.issues : [];
             const hasApplicableIssue = issues.some((issue, index) =>
                 reviewIssueCanApply(issue, currentText, index)
             );
+            const hasOpenCloudCases = (reviewData?.chunks || []).some(candidate =>
+                candidate.review_status !== 'resolved'
+                && (candidate.issues || []).some(issue =>
+                    reviewIssueReplacement(issue, candidate.final || '') !== null
+                )
+            );
 
             textarea.disabled = !hasChunk || reviewIsSaving;
             applyAllButton.disabled = applyBlocked || !hasApplicableIssue;
-            saveButton.disabled = !hasChunk || !reviewIsDirty || reviewIsSaving || reviewIsGenerating;
-            generateButton.disabled = !hasChunk || reviewIsDirty || reviewIsSaving || reviewIsGenerating;
-            countSelect.disabled = !hasChunk || reviewIsDirty || reviewIsSaving || reviewIsGenerating;
+            cloudChunkButton.disabled = !hasChunk || reviewIsDirty
+                || reviewIsSaving || reviewIsGenerating || reviewIsCloudDeciding
+                || chunk.review_status === 'resolved' || !hasApplicableIssue;
+            cloudAllButton.disabled = reviewIsDirty || reviewIsSaving
+                || reviewIsGenerating || reviewIsCloudDeciding || !hasOpenCloudCases;
+            saveButton.disabled = !hasChunk || !reviewIsDirty || reviewIsSaving
+                || reviewIsGenerating || reviewIsCloudDeciding;
+            generateButton.disabled = !hasChunk || reviewIsDirty || reviewIsSaving
+                || reviewIsGenerating || reviewIsCloudDeciding;
+            countSelect.disabled = !hasChunk || reviewIsDirty || reviewIsSaving
+                || reviewIsGenerating || reviewIsCloudDeciding;
             document.querySelectorAll('.review-signal-apply').forEach(button => {
                 const issueIndex = Number(button.dataset.issueIndex);
                 button.disabled = applyBlocked
                     || !reviewIssueCanApply(issues[issueIndex], currentText, issueIndex);
             });
             document.querySelectorAll('.review-use-btn').forEach(button => {
-                button.disabled = reviewIsDirty || reviewIsSaving || reviewIsGenerating;
+                button.disabled = reviewIsDirty || reviewIsSaving
+                    || reviewIsGenerating || reviewIsCloudDeciding;
             });
             syncExportButtons();
         }
@@ -1901,6 +1994,7 @@
             reviewIsDirty = false;
             reviewIsSaving = false;
             reviewIsGenerating = false;
+            reviewIsCloudDeciding = false;
             reviewAppliedIssueIndexes = new Set();
             document.getElementById('reviewDesk').hidden = true;
             document.getElementById('reviewDeskBody').hidden = false;
@@ -1913,6 +2007,7 @@
             document.getElementById('reviewAlternatives').hidden = true;
             setReviewEditorStatus('');
             setReviewActionStatus('');
+            setReviewCloudStatus('');
             syncExportButtons();
         }
 
@@ -2231,6 +2326,7 @@
                 reviewIsDirty = false;
                 reviewIsSaving = false;
                 reviewIsGenerating = false;
+                reviewIsCloudDeciding = false;
                 // The Progress rail's refinement and glossary counters live in
                 // the translation stream, which a reopened translation never
                 // had. This payload carries the same numbers back, so they
@@ -2251,6 +2347,7 @@
                 reviewIsDirty = false;
                 reviewIsSaving = false;
                 reviewIsGenerating = false;
+                reviewIsCloudDeciding = false;
                 document.getElementById('reviewDesk').hidden = false;
                 document.getElementById('reviewSummary').textContent = 'Review chunks unavailable';
                 document.getElementById('reviewVisibleCount').textContent = '0 shown';
@@ -2426,6 +2523,110 @@
             } catch (error) {
                 reviewIsGenerating = false;
                 setReviewActionStatus(error.message, 'is-error');
+                syncReviewControls();
+            }
+        }
+
+        function frontierReviewSettings() {
+            const provider = localStorage.getItem('frontierProvider') || 'openai';
+            return {
+                provider,
+                apiKey: sessionStorage.getItem(`frontierApiKey:${provider}`) || '',
+                model: localStorage.getItem(`frontierModel:${provider}`) || '',
+            };
+        }
+
+        async function applyCloudReviewDecision(translationId, decision) {
+            const response = await fetch(
+                `${API_URL}/translations/${translationId}/review-chunks/${Number(decision.chunk_index)}`,
+                {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        text: decision.text,
+                        expected_revision: Number(decision.revision || 0),
+                    }),
+                }
+            );
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                const error = new Error(data.error || `Chunk ${Number(decision.chunk_index) + 1} could not be saved`);
+                error.status = response.status;
+                throw error;
+            }
+            return data;
+        }
+
+        async function reviewWithCloud({ all = false } = {}) {
+            const chunk = currentReviewChunk();
+            if (
+                reviewIsDirty || reviewIsSaving || reviewIsGenerating
+                || reviewIsCloudDeciding || (!all && !chunk)
+            ) return;
+
+            const translationId = Number(currentTranslationId);
+            const selectedIndex = chunk ? Number(chunk.index) : null;
+            const button = document.getElementById(
+                all ? 'reviewCloudAllBtn' : 'reviewCloudChunkBtn'
+            );
+            const originalLabel = button.textContent;
+            const decisionUrl = all
+                ? `${API_URL}/translations/${translationId}/review-chunks/frontier-decisions`
+                : `${API_URL}/translations/${translationId}/review-chunks/${selectedIndex}/frontier-decision`;
+
+            reviewIsCloudDeciding = true;
+            button.textContent = all ? 'Reviewing all…' : 'Reviewing…';
+            if (all) {
+                setReviewCloudStatus('Cloud provider is deciding every open proposed fix…');
+            } else {
+                setReviewActionStatus('Cloud provider is deciding which proposed fixes to apply…');
+            }
+            syncReviewControls();
+
+            try {
+                const response = await fetch(decisionUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(frontierReviewSettings()),
+                });
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok || !Array.isArray(data.decisions)) {
+                    throw new Error(data.error || 'Cloud Review Desk decision failed');
+                }
+
+                let applied = 0;
+                let kept = 0;
+                let saved = 0;
+                for (const decision of data.decisions) {
+                    if (all) {
+                        setReviewCloudStatus(
+                            `Applying cloud decision ${saved + 1} of ${data.decisions.length}…`
+                        );
+                    }
+                    await applyCloudReviewDecision(translationId, decision);
+                    applied += (decision.applied_issue_indexes || []).length;
+                    kept += (decision.kept_issue_indexes || []).length;
+                    saved += 1;
+                }
+
+                reviewIsCloudDeciding = false;
+                await loadTranslationIntoWorkspace(translationId, {
+                    scroll: false,
+                    silent: true,
+                    reviewSelection: selectedIndex,
+                });
+                const provider = `${data.provider_label || data.provider} · ${data.model}`;
+                const message = `${provider}: ${applied} applied · ${kept} kept · ${saved} chunk${saved === 1 ? '' : 's'} resolved`;
+                if (all) setReviewCloudStatus(message, 'is-saved');
+                else setReviewActionStatus(message);
+                showCopyToast('Cloud Review Desk decisions applied and saved.');
+            } catch (error) {
+                reviewIsCloudDeciding = false;
+                if (all) setReviewCloudStatus(error.message, 'is-error');
+                else setReviewActionStatus(error.message, 'is-error');
+                syncReviewControls();
+            } finally {
+                button.textContent = originalLabel;
                 syncReviewControls();
             }
         }
@@ -2837,6 +3038,11 @@
                     rememberWorkspaceField(id);
                     updateGlossaryPlaceholder();
                     if (selectedFile) loadWorkspaceGlossaryForSelectedDocument();
+                    // A glossary bound to a reopened job belongs to that job's
+                    // language pair. Once the pair changes, rebind — otherwise
+                    // the next keystroke would save these terms over the draft
+                    // of the pair the user just left.
+                    else if (workspaceGlossaryContext) rebindWorkspaceGlossaryToCurrentLanguages();
                 });
             });
             document.getElementById('genre').addEventListener('change', () => {
@@ -2910,6 +3116,14 @@
                 }
             });
             document.getElementById('reviewApplyAllBtn').addEventListener('click', applyAllReviewIssues);
+            document.getElementById('reviewCloudChunkBtn').addEventListener(
+                'click',
+                () => reviewWithCloud(),
+            );
+            document.getElementById('reviewCloudAllBtn').addEventListener(
+                'click',
+                () => reviewWithCloud({ all: true }),
+            );
             document.getElementById('reviewSaveBtn').addEventListener('click', () => saveReviewChunk());
             document.getElementById('reviewGenerateBtn').addEventListener('click', generateReviewAlternatives);
             document.getElementById('reviewAlternativeCount').addEventListener('change', (event) => {
@@ -3401,6 +3615,18 @@
             // Persist that fact with the job rather than leaving every term
             // marked "proposed" after the user has launched translation.
             formData.append('glossaryApproved', 'true');
+            // The job carries the book's identity so that reopening it later
+            // finds this same glossary draft again, in an editor still bound
+            // to it. Pasted text has no fingerprint; that job falls back to
+            // the terms stored with it.
+            const fingerprintForJob = selectedFile
+                ? (selectedDocumentFingerprint
+                    || await documentFingerprint(selectedFile).catch(() => null))
+                : null;
+            if (fingerprintForJob) {
+                selectedDocumentFingerprint = fingerprintForJob;
+                formData.append('documentFingerprint', fingerprintForJob);
+            }
 
             const translateBtn = document.getElementById('translateBtn');
             const refineHeaderBtn = document.getElementById('refineHeaderBtn');
@@ -3823,6 +4049,9 @@
                 if (t.genre) document.getElementById('genre').value = t.genre;
                 setPrepareEnabled(false);
                 updateModelNote();
+                // After the languages are in place: the glossary is scoped to
+                // this job's own pair, not to whatever the form was left at.
+                loadWorkspaceGlossaryForTranslation(t);
 
                 document.getElementById('originalText').textContent = t.original_text || 'No content yet';
                 document.getElementById('machineTranslation').textContent = t.machine_translation || 'No content yet';

@@ -107,6 +107,111 @@ def test_review_route_returns_exact_stage2_issues_and_chunk_quality_signals(revi
     }
 
 
+def test_frontier_review_routes_send_one_chunk_or_all_open_cases(
+    review_app, monkeypatch,
+):
+    client, translation_id, database_path = review_app
+    calls = []
+    with sqlite3.connect(database_path) as conn:
+        conn.execute(
+            '''
+            UPDATE chunk_reviews
+            SET review_details = ?
+            WHERE translation_id = ? AND chunk_index = 1
+            ''',
+            (
+                json.dumps({
+                    'issues': [{
+                        'span': 'Финал 2',
+                        'replacement': 'Исправленный фрагмент',
+                        'type': 'mistranslation',
+                        'severity': 'major',
+                    }],
+                }, ensure_ascii=False),
+                translation_id,
+            ),
+        )
+
+    def scripted_decision(provider, cases, api_key, model):
+        calls.append((provider, cases, api_key, model))
+        decisions = [{
+            'chunk_index': case['chunk_index'],
+            'revision': case['revision'],
+            'text': case['final'].replace('Финал 2', 'Исправленный фрагмент'),
+            'applied_issue_indexes': [0],
+            'kept_issue_indexes': [],
+            'choices': [{
+                'issue_index': 0,
+                'apply': True,
+                'reason': 'The source supports the proposed correction.',
+            }],
+        } for case in cases]
+        return SimpleNamespace(
+            provider=provider,
+            provider_label='OpenAI',
+            model=model,
+            decisions=decisions,
+        )
+
+    monkeypatch.setattr(app_module, 'decide_review_cases', scripted_decision)
+    request_body = {
+        'provider': 'openai',
+        'apiKey': 'session-key',
+        'model': 'gpt-5.4-mini',
+    }
+
+    one = client.post(
+        f'/translations/{translation_id}/review-chunks/1/frontier-decision',
+        json=request_body,
+    )
+    all_open = client.post(
+        f'/translations/{translation_id}/review-chunks/frontier-decisions',
+        json=request_body,
+    )
+
+    assert one.status_code == 200
+    assert all_open.status_code == 200
+    assert [case['chunk_index'] for case in calls[0][1]] == [1]
+    assert [case['chunk_index'] for case in calls[1][1]] == [1]
+    sent = calls[0][1][0]
+    assert sent['source'] == 'Two'
+    assert sent['final'] == 'Финал 2'
+    assert sent['revision'] == 2
+    assert sent['issues'][0]['span'] == 'Финал 2'
+    assert calls[0][0::3] == ('openai', 'gpt-5.4-mini')
+    decision = one.get_json()['decisions'][0]
+    assert decision['text'] == 'Исправленный фрагмент'
+
+    saved = client.patch(
+        f'/translations/{translation_id}/review-chunks/1',
+        json={
+            'text': decision['text'],
+            'expected_revision': decision['revision'],
+        },
+    )
+    assert saved.status_code == 200
+    with sqlite3.connect(database_path) as conn:
+        final_chunks = json.loads(conn.execute(
+            'SELECT final_chunks FROM translations WHERE id = ?',
+            (translation_id,),
+        ).fetchone()[0])
+    assert final_chunks[1] == 'Исправленный фрагмент'
+
+
+def test_frontier_review_rejects_chunks_without_applicable_manual_fixes(
+    review_app,
+):
+    client, translation_id, _ = review_app
+
+    response = client.post(
+        f'/translations/{translation_id}/review-chunks/0/frontier-decision',
+        json={'provider': 'openai'},
+    )
+
+    assert response.status_code == 400
+    assert 'no applicable proposed fixes' in response.get_json()['error'].lower()
+
+
 def test_manual_edit_atomically_rebuilds_text_and_epub_and_invalidates_only_final_checks(review_app):
     client, translation_id, database_path = review_app
 
