@@ -6,6 +6,12 @@ Professional literary translation software for translating entire TXT, EPUB, and
 git clone https://github.com/KazKozDev/book-translator.git && cd book-translator && python3 launch.py
 ```
 
+<p align="center">
+  <a href="Launch%20Book-Translator.command"><img src="assets/badges/macos.png" alt="macOS" height="36"></a>
+  <a href="Launch%20Book-Translator.sh"><img src="assets/badges/linux.png" alt="Linux" height="36"></a>
+  <a href="Launch%20Book-Translator.bat"><img src="assets/badges/windows.png" alt="Windows" height="36"></a>
+</p>
+
 ![Tolmach offline AI book translator for EPUB, PDF, and novels](assets/demo-polished.gif)
 
 Open source · Local by default · No API key required
@@ -155,7 +161,8 @@ Glossary   Ollama   Verifier
 
 </details>
 
-## Configuration
+<details>
+<summary>Configuration</summary>
 
 | Setting | Default | What it means |
 |---|---|---|
@@ -173,7 +180,10 @@ Glossary   Ollama   Verifier
 | Glossary verification | Off | Optional: configure `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, or `GEMINI_API_KEY` |
 | COMET-Kiwi access | Off | Optional: set `HF_TOKEN` after receiving access to the gated model |
 
-## Requirements
+</details>
+
+<details>
+<summary>Requirements</summary>
 
 - **macOS or Linux** for the one-command installer. Windows users can run the repository launcher.
 - **Ollama** running on the same computer.
@@ -183,6 +193,8 @@ Glossary   Ollama   Verifier
 - Supported languages: English, Russian, Spanish, French, German, Italian, Portuguese, Chinese, Japanese, and Korean.
 
 The installer uses an existing Python 3.10+ installation when available. Otherwise, it installs Python 3.12 through `uv`.
+
+</details>
 
 ## Limitations
 
