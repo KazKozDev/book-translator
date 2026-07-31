@@ -1,0 +1,41 @@
+<template>
+  <div
+    id="root"
+    data-composition-id="03-product-intro"
+    data-start="0"
+    data-duration="5.769"
+    data-width="1920"
+    data-height="1080"
+  >
+    <style>
+      #root {
+        position: relative;
+        width: 1920px;
+        height: 1080px;
+        overflow: hidden;
+        font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+        color: #111827;
+      }
+      
+      .f03-bg { position:absolute; inset:0; background:#F7F8F9; }
+      .f03-logo { position:absolute; left:50%; top:120px; width:1100px; margin-left:-550px; height:auto; display:block; }
+      .f03-tag { position:absolute; left:50%; top:720px; width:900px; margin-left:-450px; text-align:center; font-size:28px; font-weight:600; letter-spacing:0.14em; color:#6B7280; }
+
+    </style>
+    
+    <div id="clip" class="clip f03-bg" data-start="0" data-duration="5.769" data-track-index="0"></div>
+    <img id="clip" class="clip f03-logo" data-start="0" data-duration="5.769" data-track-index="1" src="assets/social-preview.png" alt="" />
+    <div id="clip" class="clip f03-tag" data-start="0" data-duration="5.769" data-track-index="2">LOCAL · WHOLE BOOK · NO API KEY</div>
+
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <script>
+      window.__timelines = window.__timelines || {};
+      const tl = gsap.timeline({ paused: true });
+      
+      tl.fromTo(".f03-logo", {opacity:0, scale:0.94}, {opacity:1, scale:1, duration:0.7, ease:"power3.out"}, 0.05);
+      tl.fromTo(".f03-tag", {opacity:0, y:16}, {opacity:1, y:0, duration:0.45, ease:"power3.out"}, 1.7);
+
+      window.__timelines["03-product-intro"] = tl;
+    </script>
+  </div>
+</template>

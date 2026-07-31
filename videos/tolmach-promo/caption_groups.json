@@ -1,0 +1,301 @@
+{
+  "total_duration_s": 36.971,
+  "width": 1920,
+  "height": 1080,
+  "groups": [
+    {
+      "id": "caption-group-0",
+      "frame": 4,
+      "start": 13.058,
+      "end": 15.208,
+      "text": "Upload the whole TXT",
+      "words": [
+        {
+          "id": "caption-word-0-0",
+          "text": "Upload",
+          "start": 13.058,
+          "end": 13.738
+        },
+        {
+          "id": "caption-word-0-1",
+          "text": "the",
+          "start": 13.738,
+          "end": 14.128
+        },
+        {
+          "id": "caption-word-0-2",
+          "text": "whole",
+          "start": 14.138,
+          "end": 14.808
+        },
+        {
+          "id": "caption-word-0-3",
+          "text": "TXT",
+          "start": 14.808,
+          "end": 15.198
+        }
+      ]
+    },
+    {
+      "id": "caption-group-1",
+      "frame": 4,
+      "start": 15.208,
+      "end": 16.728,
+      "text": "EPUB or PDF.",
+      "words": [
+        {
+          "id": "caption-word-1-0",
+          "text": "EPUB",
+          "start": 15.208,
+          "end": 15.738
+        },
+        {
+          "id": "caption-word-1-1",
+          "text": "or",
+          "start": 15.738,
+          "end": 16.008
+        },
+        {
+          "id": "caption-word-1-2",
+          "text": "PDF.",
+          "start": 16.008,
+          "end": 16.608
+        }
+      ]
+    },
+    {
+      "id": "caption-group-2",
+      "frame": 4,
+      "start": 16.738,
+      "end": 17.748,
+      "text": "The draft streams",
+      "words": [
+        {
+          "id": "caption-word-2-0",
+          "text": "The",
+          "start": 16.738,
+          "end": 16.828
+        },
+        {
+          "id": "caption-word-2-1",
+          "text": "draft",
+          "start": 16.908,
+          "end": 17.178
+        },
+        {
+          "id": "caption-word-2-2",
+          "text": "streams",
+          "start": 17.248,
+          "end": 17.748
+        }
+      ]
+    },
+    {
+      "id": "caption-group-3",
+      "frame": 4,
+      "start": 17.748,
+      "end": 18.728,
+      "text": "while it runs.",
+      "words": [
+        {
+          "id": "caption-word-3-0",
+          "text": "while",
+          "start": 17.748,
+          "end": 18.128
+        },
+        {
+          "id": "caption-word-3-1",
+          "text": "it",
+          "start": 18.128,
+          "end": 18.278
+        },
+        {
+          "id": "caption-word-3-2",
+          "text": "runs.",
+          "start": 18.278,
+          "end": 18.608
+        }
+      ]
+    },
+    {
+      "id": "caption-group-4",
+      "frame": 7,
+      "start": 27.825,
+      "end": 29.045,
+      "text": "same desk,",
+      "words": [
+        {
+          "id": "caption-word-4-0",
+          "text": "same",
+          "start": 27.825,
+          "end": 28.315
+        },
+        {
+          "id": "caption-word-4-1",
+          "text": "desk,",
+          "start": 28.315,
+          "end": 29.045
+        }
+      ]
+    },
+    {
+      "id": "caption-group-5",
+      "frame": 7,
+      "start": 29.045,
+      "end": 30.825,
+      "text": "nine target languages,",
+      "words": [
+        {
+          "id": "caption-word-5-0",
+          "text": "nine",
+          "start": 29.045,
+          "end": 29.385
+        },
+        {
+          "id": "caption-word-5-1",
+          "text": "target",
+          "start": 29.385,
+          "end": 29.895
+        },
+        {
+          "id": "caption-word-5-2",
+          "text": "languages,",
+          "start": 29.895,
+          "end": 30.815
+        }
+      ]
+    },
+    {
+      "id": "caption-group-6",
+      "frame": 7,
+      "start": 30.825,
+      "end": 31.755,
+      "text": "export EPUB,",
+      "words": [
+        {
+          "id": "caption-word-6-0",
+          "text": "export",
+          "start": 30.825,
+          "end": 31.285
+        },
+        {
+          "id": "caption-word-6-1",
+          "text": "EPUB,",
+          "start": 31.285,
+          "end": 31.655
+        }
+      ]
+    },
+    {
+      "id": "caption-group-7",
+      "frame": 7,
+      "start": 31.755,
+      "end": 32.465,
+      "text": "PDF,",
+      "words": [
+        {
+          "id": "caption-word-7-0",
+          "text": "PDF,",
+          "start": 31.755,
+          "end": 32.345
+        }
+      ]
+    },
+    {
+      "id": "caption-group-8",
+      "frame": 7,
+      "start": 32.465,
+      "end": 33.595,
+      "text": "or TXT.",
+      "words": [
+        {
+          "id": "caption-word-8-0",
+          "text": "or",
+          "start": 32.465,
+          "end": 32.835
+        },
+        {
+          "id": "caption-word-8-1",
+          "text": "TXT.",
+          "start": 32.835,
+          "end": 33.475
+        }
+      ]
+    },
+    {
+      "id": "caption-group-9",
+      "frame": 8,
+      "start": 33.635,
+      "end": 34.795,
+      "text": "Open source,",
+      "words": [
+        {
+          "id": "caption-word-9-0",
+          "text": "Open",
+          "start": 33.635,
+          "end": 33.965
+        },
+        {
+          "id": "caption-word-9-1",
+          "text": "source,",
+          "start": 33.965,
+          "end": 34.795
+        }
+      ]
+    },
+    {
+      "id": "caption-group-10",
+      "frame": 8,
+      "start": 34.795,
+      "end": 35.965,
+      "text": "local by default,",
+      "words": [
+        {
+          "id": "caption-word-10-0",
+          "text": "local",
+          "start": 34.795,
+          "end": 35.115
+        },
+        {
+          "id": "caption-word-10-1",
+          "text": "by",
+          "start": 35.155,
+          "end": 35.295
+        },
+        {
+          "id": "caption-word-10-2",
+          "text": "default,",
+          "start": 35.295,
+          "end": 35.945
+        }
+      ]
+    },
+    {
+      "id": "caption-group-11",
+      "frame": 8,
+      "start": 35.965,
+      "end": 36.905,
+      "text": "clone and run.",
+      "words": [
+        {
+          "id": "caption-word-11-0",
+          "text": "clone",
+          "start": 35.965,
+          "end": 36.305
+        },
+        {
+          "id": "caption-word-11-1",
+          "text": "and",
+          "start": 36.305,
+          "end": 36.525
+        },
+        {
+          "id": "caption-word-11-2",
+          "text": "run.",
+          "start": 36.525,
+          "end": 36.785
+        }
+      ]
+    }
+  ]
+}

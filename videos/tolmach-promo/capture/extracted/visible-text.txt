@@ -1,0 +1,8 @@
+Tolmach — AI Book Translator for EPUB, PDF, and Novels
+Open source · Local by default · No API key required
+Upload whole books (TXT, EPUB, PDF)
+Document glossary locks names (exact / inflectable / preferred)
+START drafts; CONTINUE refines with a verifier — guarded edits, not rewrites
+Side-by-side review desk · export TXT / PDF / EPUB
+Nine target languages, same translation desk
+github.com/KazKozDev/book-translator

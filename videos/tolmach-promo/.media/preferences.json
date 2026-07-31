@@ -1,0 +1,55 @@
+{
+  "version": 1,
+  "preferences": {
+    "destination": {
+      "value": "landscape-embed",
+      "confirmed_in": [
+        "tolmach-promo"
+      ],
+      "updated_at": "2026-07-31T15:24:35.720Z"
+    },
+    "aspect": {
+      "value": "1920x1080",
+      "confirmed_in": [
+        "tolmach-promo"
+      ],
+      "updated_at": "2026-07-31T15:24:35.759Z"
+    },
+    "language": {
+      "value": "en",
+      "confirmed_in": [
+        "tolmach-promo"
+      ],
+      "updated_at": "2026-07-31T15:24:35.797Z"
+    },
+    "flow": {
+      "value": "automation",
+      "confirmed_in": [
+        "tolmach-promo"
+      ],
+      "updated_at": "2026-07-31T15:24:35.838Z"
+    },
+    "storyboard": {
+      "value": "no",
+      "confirmed_in": [
+        "tolmach-promo"
+      ],
+      "updated_at": "2026-07-31T15:24:35.880Z"
+    },
+    "voice": {
+      "value": "am_michael",
+      "confirmed_in": [
+        "tolmach-promo"
+      ],
+      "updated_at": "2026-07-31T15:24:35.919Z"
+    },
+    "style_preset.product-launch-video": {
+      "value": "cartesian",
+      "confirmed_in": [
+        "tolmach-promo"
+      ],
+      "updated_at": "2026-07-31T15:24:50.234Z"
+    }
+  },
+  "sightings": {}
+}

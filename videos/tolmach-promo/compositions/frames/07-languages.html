@@ -1,0 +1,52 @@
+<template>
+  <div
+    id="root"
+    data-composition-id="07-languages"
+    data-start="0"
+    data-duration="6.26"
+    data-width="1920"
+    data-height="1080"
+  >
+    <style>
+      #root {
+        position: relative;
+        width: 1920px;
+        height: 1080px;
+        overflow: hidden;
+        font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+        color: #111827;
+      }
+      
+      .f07-bg { position:absolute; inset:0; background:#F7F8F9; }
+      .f07-title { position:absolute; left:64px; top:48px; font-size:28px; font-weight:700; letter-spacing:0.16em; color:#5B7C99; }
+      .f07-grid { position:absolute; left:50%; top:110px; width:1680px; margin-left:-840px; display:grid; grid-template-columns:repeat(4, 1fr); gap:28px; }
+      .f07-grid figure { margin:0; background:#fff; border:1px solid #E5E7EB; overflow:hidden; }
+      .f07-grid img { width:100%; height:520px; object-fit:cover; object-position:top; display:block; }
+      .f07-grid figcaption { padding:14px; text-align:center; font-size:16px; font-weight:600; letter-spacing:0.08em; color:#6B7280; }
+      .f07-export { position:absolute; left:50%; top:760px; width:500px; margin-left:-250px; text-align:center; font-size:24px; font-weight:700; letter-spacing:0.14em; border-bottom:3px solid #C62828; padding-bottom:12px; }
+
+    </style>
+    
+    <div id="clip" class="clip f07-bg" data-start="0" data-duration="6.26" data-track-index="0"></div>
+    <div id="clip" class="clip f07-title" data-start="0" data-duration="6.26" data-track-index="1">SAME DESK</div>
+    <div id="clip" class="clip f07-grid" data-start="0" data-duration="6.26" data-track-index="2">
+      <figure><img src="assets/thumb-ru.png" alt="" /><figcaption>ru_RU</figcaption></figure>
+      <figure><img src="assets/thumb-es.png" alt="" /><figcaption>es_ES</figcaption></figure>
+      <figure><img src="assets/thumb-de.png" alt="" /><figcaption>de_DE</figcaption></figure>
+      <figure><img src="assets/thumb-ja.png" alt="" /><figcaption>ja_JP</figcaption></figure>
+    </div>
+    <div id="clip" class="clip f07-export" data-start="0" data-duration="6.26" data-track-index="3">EPUB · PDF · TXT</div>
+
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <script>
+      window.__timelines = window.__timelines || {};
+      const tl = gsap.timeline({ paused: true });
+      
+      tl.fromTo(".f07-title", {opacity:0}, {opacity:1, duration:0.3}, 0);
+      tl.fromTo(".f07-grid figure", {opacity:0, y:28}, {opacity:1, y:0, duration:0.45, stagger:0.15, ease:"power3.out"}, 0.35);
+      tl.fromTo(".f07-export", {opacity:0, y:12}, {opacity:1, y:0, duration:0.4, ease:"power3.out"}, 3.5);
+
+      window.__timelines["07-languages"] = tl;
+    </script>
+  </div>
+</template>

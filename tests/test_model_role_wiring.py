@@ -110,6 +110,36 @@ def test_translation_default_matches_settings_when_no_preference_is_saved():
     assert "window.addEventListener('storage'," in main_page
 
 
+def test_continue_button_guards_against_stale_restore_after_start():
+    """Home must not let a late restore re-disable CONTINUE after Stage 1.
+
+    loadModels can finish after Start has already run. Restoring from
+    localStorage at that point used to apply a snapshot without draft_chunks
+    and grey out → 3 CONTINUE until the next full page load.
+    """
+    main_page = (
+        Path(__file__).resolve().parents[1] / 'src' / 'static' / 'index.html'
+    ).read_text(encoding='utf-8')
+
+    assert 'let workspaceLoadToken = 0;' in main_page
+    assert 'let draftReadyForRefine = false;' in main_page
+    assert 'const loadToken = workspaceLoadToken;' in main_page
+    assert 'if (loadToken !== workspaceLoadToken) return;' in main_page
+    assert 'let pendingRestoreId = null;' in main_page
+    assert 'loadModels().then(() => restoreActiveTranslation(pendingRestoreId));' in main_page
+    assert 'async function restoreActiveTranslation(expectedId)' in main_page
+    assert 'if (current !== expectedId) return;' in main_page
+    assert 'workspaceLoadToken += 1;' in main_page
+    assert 'function setContinueEnabled(enabled)' in main_page
+    assert 'function syncContinueAfterResume()' in main_page
+    assert "window.addEventListener('pageshow', syncContinueAfterResume);" in main_page
+    assert (
+        'await loadTranslationIntoWorkspace(currentTranslationId, '
+        '{ scroll: false, silent: true });'
+    ) in main_page
+    assert 'draftReadyForRefine && Number(t.id) === Number(currentTranslationId)' in main_page
+
+
 def test_each_pipeline_role_uses_its_own_requested_model(tmp_path, monkeypatch):
     database_path = tmp_path / 'translations.db'
     monkeypatch.setattr(app_module, 'DB_PATH', str(database_path))

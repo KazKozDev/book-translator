@@ -1,0 +1,244 @@
+{
+  "bgm": null,
+  "bgm_pending": false,
+  "voices": [
+    {
+      "frame": 1,
+      "path": "assets/voice/01.wav",
+      "duration_s": 3.008,
+      "words": []
+    },
+    {
+      "frame": 2,
+      "path": "assets/voice/02.wav",
+      "duration_s": 4.651,
+      "words": []
+    },
+    {
+      "frame": 3,
+      "path": "assets/voice/03.wav",
+      "duration_s": 5.269,
+      "words": []
+    },
+    {
+      "frame": 4,
+      "path": "assets/voice/04.wav",
+      "duration_s": 5.739,
+      "words": [
+        {
+          "id": "w0",
+          "text": "Upload",
+          "start": 0.13,
+          "end": 0.81
+        },
+        {
+          "id": "w1",
+          "text": "the",
+          "start": 0.81,
+          "end": 1.2
+        },
+        {
+          "id": "w2",
+          "text": "whole",
+          "start": 1.21,
+          "end": 1.88
+        },
+        {
+          "id": "w3",
+          "text": "TXT",
+          "start": 1.88,
+          "end": 2.27
+        },
+        {
+          "id": "w4",
+          "text": "EPUB",
+          "start": 2.28,
+          "end": 2.81
+        },
+        {
+          "id": "w5",
+          "text": "or",
+          "start": 2.81,
+          "end": 3.08
+        },
+        {
+          "id": "w6",
+          "text": "PDF.",
+          "start": 3.08,
+          "end": 3.68
+        },
+        {
+          "id": "w7",
+          "text": "The",
+          "start": 3.81,
+          "end": 3.9
+        },
+        {
+          "id": "w8",
+          "text": "draft",
+          "start": 3.98,
+          "end": 4.25
+        },
+        {
+          "id": "w9",
+          "text": "streams",
+          "start": 4.32,
+          "end": 4.82
+        },
+        {
+          "id": "w10",
+          "text": "while",
+          "start": 4.82,
+          "end": 5.2
+        },
+        {
+          "id": "w11",
+          "text": "it",
+          "start": 5.2,
+          "end": 5.35
+        },
+        {
+          "id": "w12",
+          "text": "runs.",
+          "start": 5.35,
+          "end": 5.68
+        }
+      ]
+    },
+    {
+      "frame": 5,
+      "path": "assets/voice/05.wav",
+      "duration_s": 5.163,
+      "words": []
+    },
+    {
+      "frame": 6,
+      "path": "assets/voice/06.wav",
+      "duration_s": 3.925,
+      "words": []
+    },
+    {
+      "frame": 7,
+      "path": "assets/voice/07.wav",
+      "duration_s": 5.76,
+      "words": [
+        {
+          "id": "w0",
+          "text": "same",
+          "start": 0.07,
+          "end": 0.56
+        },
+        {
+          "id": "w1",
+          "text": "desk,",
+          "start": 0.56,
+          "end": 1.29
+        },
+        {
+          "id": "w2",
+          "text": "nine",
+          "start": 1.29,
+          "end": 1.63
+        },
+        {
+          "id": "w3",
+          "text": "target",
+          "start": 1.63,
+          "end": 2.14
+        },
+        {
+          "id": "w4",
+          "text": "languages,",
+          "start": 2.14,
+          "end": 3.06
+        },
+        {
+          "id": "w5",
+          "text": "export",
+          "start": 3.07,
+          "end": 3.53
+        },
+        {
+          "id": "w6",
+          "text": "EPUB,",
+          "start": 3.53,
+          "end": 3.9
+        },
+        {
+          "id": "w7",
+          "text": "PDF,",
+          "start": 4,
+          "end": 4.59
+        },
+        {
+          "id": "w8",
+          "text": "or",
+          "start": 4.71,
+          "end": 5.08
+        },
+        {
+          "id": "w9",
+          "text": "TXT.",
+          "start": 5.08,
+          "end": 5.72
+        }
+      ]
+    },
+    {
+      "frame": 8,
+      "path": "assets/voice/08.wav",
+      "duration_s": 3.456,
+      "words": [
+        {
+          "id": "w0",
+          "text": "Open",
+          "start": 0.12,
+          "end": 0.45
+        },
+        {
+          "id": "w1",
+          "text": "source,",
+          "start": 0.45,
+          "end": 1.28
+        },
+        {
+          "id": "w2",
+          "text": "local",
+          "start": 1.28,
+          "end": 1.6
+        },
+        {
+          "id": "w3",
+          "text": "by",
+          "start": 1.64,
+          "end": 1.78
+        },
+        {
+          "id": "w4",
+          "text": "default,",
+          "start": 1.78,
+          "end": 2.43
+        },
+        {
+          "id": "w5",
+          "text": "clone",
+          "start": 2.45,
+          "end": 2.79
+        },
+        {
+          "id": "w6",
+          "text": "and",
+          "start": 2.79,
+          "end": 3.01
+        },
+        {
+          "id": "w7",
+          "text": "run.",
+          "start": 3.01,
+          "end": 3.27
+        }
+      ]
+    }
+  ],
+  "sfx": []
+}

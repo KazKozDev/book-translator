@@ -213,6 +213,7 @@ The installer uses an existing Python 3.10+ installation when available. Otherwi
 
 ## Limitations
 
+- Tolmach is not a one-prompt translator. A finished book needs the staged workflow (glossary → START → CONTINUE → review) and several local model roles working in sequence; expecting chat-app turnaround will disappoint.
 - Tolmach accepts TXT, EPUB, and PDF input. It does not import DOCX files. A PDF contributes text only — layout, images, and chapter structure are not preserved, and a scanned PDF without a text layer is refused rather than translated.
 - Translating a complete book can take 10–15 hours on local hardware.
 - Translation and review models can still miss errors or make good text worse. Proofread the final book before publishing it.

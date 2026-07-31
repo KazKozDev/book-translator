@@ -1300,6 +1300,15 @@
         let reviewIsApplyingFixes = false;
         let reviewAppliedIssueIndexes = new Set();
         let reviewLoadToken = 0;
+        // Invalidates in-flight loadTranslationIntoWorkspace calls so a late
+        // restore (after slow loadModels) cannot re-disable CONTINUE once
+        // Start has already finished and enabled it.
+        let workspaceLoadToken = 0;
+        // Once Stage 1 finishes for the active job, CONTINUE must stay on.
+        // Switching to Guide/Settings and back "wakes" the button because a
+        // fresh restore sees draft_chunks; this latch keeps the same state
+        // without leaving the page.
+        let draftReadyForRefine = false;
         const ACTIVE_TRANSLATION_KEY = 'activeTranslationId';
         const LEGACY_WORKSPACE_GLOSSARY_KEY = 'workspaceGlossary';
         let workspaceGlossaryContext = null;
@@ -1314,15 +1323,38 @@
         }
 
         function forgetActiveTranslation() {
+            workspaceLoadToken += 1;
+            draftReadyForRefine = false;
             currentTranslationId = null;
             try { localStorage.removeItem(ACTIVE_TRANSLATION_KEY); } catch (e) {}
         }
 
-        async function restoreActiveTranslation() {
-            let savedId;
-            try { savedId = Number(localStorage.getItem(ACTIVE_TRANSLATION_KEY)); } catch (e) { return; }
-            if (!Number.isInteger(savedId) || savedId < 1) return;
-            await loadTranslationIntoWorkspace(savedId, { scroll: false, silent: true });
+        function setContinueEnabled(enabled) {
+            const btn = document.getElementById('refineHeaderBtn');
+            if (btn) btn.disabled = !enabled;
+            setTestButtonsEnabled('1', enabled);
+            if (enabled) draftReadyForRefine = true;
+        }
+
+        // Same effect as the Guide/Settings round-trip: if this session
+        // already produced a draft, keep CONTINUE clickable.
+        function syncContinueAfterResume() {
+            syncModelsFromSettings();
+            if (draftReadyForRefine && currentTranslationId) {
+                setContinueEnabled(true);
+            }
+        }
+
+        // expectedId is the active translation captured at DOMContentLoaded —
+        // before await loadModels — so a Start that ran while models were
+        // still loading cannot be mistaken for the session to restore.
+        async function restoreActiveTranslation(expectedId) {
+            if (!Number.isInteger(expectedId) || expectedId < 1) return;
+            let current;
+            try { current = Number(localStorage.getItem(ACTIVE_TRANSLATION_KEY)); } catch (e) { return; }
+            // New / Start / file pick already moved on — do not clobber them.
+            if (current !== expectedId) return;
+            await loadTranslationIntoWorkspace(expectedId, { scroll: false, silent: true });
         }
 
         // The fields a person filled in by hand, kept across a reload of Home.
@@ -2976,7 +3008,16 @@
 
         // Initialize
         document.addEventListener('DOMContentLoaded', () => {
-            loadModels().then(restoreActiveTranslation);
+            // Capture before any await: loadModels can finish after the user
+            // has already pressed Start, and reading localStorage then would
+            // restore the in-progress job without draft_chunks — disabling
+            // CONTINUE just as Stage 1 enables it.
+            let pendingRestoreId = null;
+            try {
+                const raw = Number(localStorage.getItem(ACTIVE_TRANSLATION_KEY));
+                if (Number.isInteger(raw) && raw >= 1) pendingRestoreId = raw;
+            } catch (e) {}
+            loadModels().then(() => restoreActiveTranslation(pendingRestoreId));
             loadTranslations();
             loadStats();
             setupEventListeners();
@@ -3000,9 +3041,9 @@
                 syncModelsFromSettings();
             }
         });
-        window.addEventListener('pageshow', syncModelsFromSettings);
+        window.addEventListener('pageshow', syncContinueAfterResume);
         document.addEventListener('visibilitychange', () => {
-            if (!document.hidden) syncModelsFromSettings();
+            if (!document.hidden) syncContinueAfterResume();
         });
 
         // Follow the OS theme live, but only while the user hasn't picked one explicitly.
@@ -3765,8 +3806,13 @@
                 document.getElementById('deckStatus').textContent = 'Draft translation ready';
                 updateEta(100);
 
-                refineHeaderBtn.disabled = false;
-                setTestButtonsEnabled('1', true);
+                // Enable immediately so a slow workspace reload cannot leave
+                // CONTINUE stuck disabled; reload then syncs from draft_chunks.
+                setContinueEnabled(true);
+                await loadTranslationIntoWorkspace(currentTranslationId, { scroll: false, silent: true });
+                if (document.getElementById('refineHeaderBtn').disabled && currentTranslationId) {
+                    setContinueEnabled(true);
+                }
                 loadTranslations();
             } catch (error) {
                 console.error('Error:', error);
@@ -4055,6 +4101,7 @@
             silent = false,
             reviewSelection = null,
         } = {}) {
+            const loadToken = workspaceLoadToken;
             try {
                 const response = await fetch(`${API_URL}/translations/${id}`);
                 if (!response.ok) {
@@ -4062,6 +4109,10 @@
                     throw new Error(errorData.error || 'Translation not found');
                 }
                 const t = await response.json();
+                // Start / New / file pick bumped the token while this fetch was
+                // in flight — applying would re-disable CONTINUE from a stale
+                // snapshot that still lacked draft_chunks.
+                if (loadToken !== workspaceLoadToken) return;
 
                 // This translation is no longer tied to a freshly selected file.
                 sourcePreviewToken += 1;
@@ -4100,9 +4151,19 @@
                     violations: 0,
                 });
 
-                document.getElementById('refineHeaderBtn').disabled = !t.draft_chunks;
+                document.getElementById('refineHeaderBtn').disabled = !(
+                    t.draft_chunks
+                    || t.status === 'stage1_completed'
+                    || t.status === 'completed'
+                    // Stale in-progress snapshot must not grey out CONTINUE
+                    // after this session already finished Stage 1 for this id.
+                    || (draftReadyForRefine && Number(t.id) === Number(currentTranslationId))
+                );
+                if (!document.getElementById('refineHeaderBtn').disabled) {
+                    draftReadyForRefine = true;
+                }
                 setExportButtonsEnabled(t.status === 'completed' && !!canonicalSavedFinal);
-                setTestButtonsEnabled('1', !!t.draft_chunks);
+                setTestButtonsEnabled('1', !document.getElementById('refineHeaderBtn').disabled);
                 setTestButtonsEnabled('2', t.status === 'completed');
                 applySavedEvaluationResults(t.evaluation_results);
 
