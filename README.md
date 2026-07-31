@@ -21,13 +21,14 @@ py -3 launch.py
 <p align="center">Launchers after clone — double-click <code>.command</code> / <code>.bat</code>, or run <code>.sh</code>.</p>
 
 <p align="center">
-  <a href="https://www.youtube.com/watch?v=-lMNAKOp1Kc">
-    <img src="assets/youtube-thumbnail.jpg" alt="Watch Tolmach launch video — offline AI book translator for EPUB, PDF, and novels" width="800">
-  </a>
+  <video src="https://github.com/user-attachments/assets/eae8eae5-6ca9-4b2c-8f67-cf7a39848794" controls muted playsinline width="820">
+    Your browser does not support inline video.
+    <a href="https://www.youtube.com/watch?v=-lMNAKOp1Kc">Watch on YouTube</a>
+  </video>
 </p>
 
 <p align="center">
-  <a href="https://www.youtube.com/watch?v=-lMNAKOp1Kc">▶ Watch on YouTube</a>
+  <a href="https://www.youtube.com/watch?v=-lMNAKOp1Kc">▶ Full video on YouTube</a>
   · Open source · Local by default · No API key required
 </p>
 
