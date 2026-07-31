@@ -257,8 +257,6 @@ The test suite does not require Ollama, downloaded models, or network access.
 
 Tolmach Book Translator is free and open-source software licensed under the [GNU Affero General Public License version 3 only](LICENSE) (`AGPL-3.0-only`).
 
-Copyright (C) 2024-2026 Artem Kazakov Kozlov.
-
 <br><br>
 
 <p align="center">
