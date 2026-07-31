@@ -20,9 +20,12 @@ py -3 launch.py
 
 <p align="center">Launchers after clone — double-click <code>.command</code> / <code>.bat</code>, or run <code>.sh</code>.</p>
 
-![Tolmach offline AI book translator for EPUB, PDF, and novels](assets/demo-polished.gif)
+![Tolmach launch video — offline AI book translator](assets/demo-readme.mp4)
 
-Open source · Local by default · No API key required
+<p align="center">
+  <a href="https://www.youtube.com/watch?v=-lMNAKOp1Kc">▶ Full video on YouTube</a>
+  · Open source · Local by default · No API key required
+</p>
 
 ---
 
