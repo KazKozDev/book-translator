@@ -43,6 +43,28 @@ Click **→ 2 START** to create the draft translation. Finished sections appear 
 
 The job is saved locally, so you can reopen it from the Archive. A complete book can take 10–15 hours; the actual time depends on its length, your models, and your computer.
 
+## Same desk, nine target languages
+
+The translation desk stays the same across targets. Click a thumbnail for the full screenshot.
+
+<table>
+  <tr>
+    <td align="center"><a href="assets/locales/ru_RU.png"><img src="assets/locales/thumbs/ru_RU.png" alt="Tolmach translating English to Russian" width="260"></a><br><code>ru_RU</code></td>
+    <td align="center"><a href="assets/locales/es_ES.png"><img src="assets/locales/thumbs/es_ES.png" alt="Tolmach translating English to Spanish" width="260"></a><br><code>es_ES</code></td>
+    <td align="center"><a href="assets/locales/fr_FR.png"><img src="assets/locales/thumbs/fr_FR.png" alt="Tolmach translating English to French" width="260"></a><br><code>fr_FR</code></td>
+  </tr>
+  <tr>
+    <td align="center"><a href="assets/locales/de_DE.png"><img src="assets/locales/thumbs/de_DE.png" alt="Tolmach translating English to German" width="260"></a><br><code>de_DE</code></td>
+    <td align="center"><a href="assets/locales/it_IT.png"><img src="assets/locales/thumbs/it_IT.png" alt="Tolmach translating English to Italian" width="260"></a><br><code>it_IT</code></td>
+    <td align="center"><a href="assets/locales/pt_BR.png"><img src="assets/locales/thumbs/pt_BR.png" alt="Tolmach translating English to Portuguese" width="260"></a><br><code>pt_BR</code></td>
+  </tr>
+  <tr>
+    <td align="center"><a href="assets/locales/zh_CN.png"><img src="assets/locales/thumbs/zh_CN.png" alt="Tolmach translating English to Chinese" width="260"></a><br><code>zh_CN</code></td>
+    <td align="center"><a href="assets/locales/ja_JP.png"><img src="assets/locales/thumbs/ja_JP.png" alt="Tolmach translating English to Japanese" width="260"></a><br><code>ja_JP</code></td>
+    <td align="center"><a href="assets/locales/ko_KR.png"><img src="assets/locales/thumbs/ko_KR.png" alt="Tolmach translating English to Korean" width="260"></a><br><code>ko_KR</code></td>
+  </tr>
+</table>
+
 ## Use an AI book translator with a glossary
 
 After uploading the book, click **→ PREPARE**. Tolmach scans the complete source and creates an editable glossary of recurring names, places, organisations, and terms.
@@ -94,7 +116,7 @@ Book → Glossary → Draft translation → Verified refinement → Human review
 1. **Upload** — the Flask backend reads TXT, EPUB, or PDF and stores the source in `uploads/`. A PDF is read as text only: its printed lines are rejoined into paragraphs and it then follows the same path as a TXT book.
 2. **Prepare** — deterministic text harvesting and GLiNER collect entity candidates. BGE-M3 groups likely spelling variants, then the selected instruct model resolves ambiguous groups and proposes target renderings. The editable glossary is stored for this document fingerprint and language pair.
 3. **Start** — the source is split into chunks of about 1200 characters at paragraph and sentence boundaries. The Translation model receives each chunk with its genre, glossary constraints, and previous-paragraph context. Completed chunks are written to SQLite and streamed to the browser.
-4. **Continue** — the Refinement model returns located edits instead of rewriting an entire chunk. Python applies only those replacements. The Verifier compares each patched version with the source, checks the alternatives in both orders, and retries without ordered A/B versions when it detects position bias.
+4. **Continue** — unlike a typical LLM “improve this” pass that rewrites the whole chunk and can replace already-good wording, the Refinement model returns located edits instead of rewriting an entire chunk. Python applies only those replacements. The Verifier compares each patched version with the source, checks the alternatives in both orders, and retries without ordered A/B versions when it detects position bias.
 5. **Review and export** — Review desk keeps Source, Draft, and editable Final text aligned. Exporters write the accepted final text as TXT, PDF, or EPUB.
 
 ```text
@@ -227,9 +249,9 @@ Copyright (C) 2024-2026 Artem Kazakov Kozlov.
 
 <p align="center">
   <a href="https://github.com/KazKozDev/book-translator/issues">Issues</a> ·
-  <a href="https://github.com/KazKozDev/book-translator/blob/main/CHANGELOG.md">CHANGELOG</a> ·
-  <a href="https://github.com/KazKozDev/book-translator/blob/main/CONTRIBUTING.md">CONTRIBUTING</a> ·
+  <a href="https://github.com/KazKozDev/book-translator/blob/main/CHANGELOG.md">Changelog</a> ·
+  <a href="https://github.com/KazKozDev/book-translator/blob/main/CONTRIBUTING.md">Contributing</a> ·
   <a href="https://github.com/KazKozDev/book-translator/blob/main/LICENSE">LICENSE</a> ·
-  <a href="https://github.com/KazKozDev/book-translator/blob/main/DISCLAIMER.md"><strong>DISCLAIMER</strong></a> ·
+  <a href="https://github.com/KazKozDev/book-translator/blob/main/DISCLAIMER.md">DISCLAIMER</a> ·
   <a href="https://www.linkedin.com/in/kazkozdev/">LinkedIn</a>
 </p>
