@@ -23,13 +23,12 @@ py -3 launch.py
 <p align="center">
   <video src="https://github.com/user-attachments/assets/eae8eae5-6ca9-4b2c-8f67-cf7a39848794" controls muted playsinline width="820">
     Your browser does not support inline video.
-    <a href="https://www.youtube.com/watch?v=-lMNAKOp1Kc">Watch on YouTube</a>
+    <a href="https://www.youtube.com/watch?v=-lMNAKOp1Kc" target="_blank" rel="noopener noreferrer">Watch on YouTube</a>
   </video>
 </p>
 
 <p align="center">
-  <a href="https://www.youtube.com/watch?v=-lMNAKOp1Kc">▶ Full video on YouTube</a>
-  · Open source · Local by default · No API key required
+  <a href="https://www.youtube.com/watch?v=-lMNAKOp1Kc" target="_blank" rel="noopener noreferrer">▶ Full video on YouTube</a>
 </p>
 
 ---
