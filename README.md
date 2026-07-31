@@ -13,12 +13,12 @@ py -3 launch.py
 ```
 
 <p align="center">
-  <a href="Launch%20Book-Translator.command"><img src="assets/badges/macos.png" alt="macOS" height="30"></a>
-  <a href="Launch%20Book-Translator.bat"><img src="assets/badges/windows.png" alt="Windows" height="30"></a>
-  <a href="Launch%20Book-Translator.sh"><img src="assets/badges/linux.png" alt="Linux" height="30"></a>
+  <a href="Launch%20Book-Translator.command"><img src="assets/badges/macos.png" alt="macOS" height="36"></a>
+  <a href="Launch%20Book-Translator.bat"><img src="assets/badges/windows.png" alt="Windows" height="36"></a>
+  <a href="Launch%20Book-Translator.sh"><img src="assets/badges/linux.png" alt="Linux" height="36"></a>
 </p>
 
-<p align="center">Launchers after clone — not App Store downloads. Double-click <code>.command</code> / <code>.bat</code>, or run <code>.sh</code>.</p>
+<p align="center">Launchers after clone — double-click <code>.command</code> / <code>.bat</code>, or run <code>.sh</code>.</p>
 
 ![Tolmach offline AI book translator for EPUB, PDF, and novels](assets/demo-polished.gif)
 
