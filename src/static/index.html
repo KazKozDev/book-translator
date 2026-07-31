@@ -472,7 +472,7 @@
            be reviewed without squeezing the existing three-panel workspace. */
         .review-desk { margin-top: 34px; padding-top: 24px; border-top: 1px solid var(--line); }
         .review-desk[hidden], .review-desk-body[hidden], .review-alternatives[hidden] { display: none; }
-        .review-desk-header { display: flex; align-items: flex-end; justify-content: space-between; gap: 22px; margin-bottom: 14px; }
+        .review-desk-header { position: relative; z-index: 1; display: flex; align-items: flex-end; justify-content: space-between; gap: 22px; margin-bottom: -1px; }
         .review-heading { min-width: 170px; }
         .review-heading h2 { margin: 5px 0 0; color: var(--ink); font-size: 1.15rem; font-weight: 700; letter-spacing: -.01em; }
         .review-summary-group { flex: 0 0 auto; min-width: 0; margin-left: auto; }
@@ -651,7 +651,8 @@
         @media (max-width: 820px) {
             .toolbar .form-group { flex: 1 1 160px; }
             .review-desk-header { align-items: flex-start; flex-wrap: wrap; }
-            .review-summary-group { order: 3; flex-basis: 100%; }
+            .review-summary-group { order: 2; flex-basis: 100%; }
+            .review-header-controls { order: 3; flex-basis: 100%; }
             .review-workbench { grid-template-columns: 1fr; }
             .review-nav { border-right: none; border-bottom: 1px solid var(--line); }
             .review-chunk-list { max-height: 228px; }
@@ -682,6 +683,7 @@
             .review-desk { margin-top: 26px; padding-top: 20px; }
             .review-heading { min-width: 0; }
             .review-header-controls { width: 100%; justify-content: space-between; gap: 12px; }
+            .review-filter { order: 3; flex-basis: 100%; justify-content: flex-end; }
             .review-workbench { min-height: 0; border-radius: 8px; }
             .review-editor-head, .review-editor-content { padding-left: 14px; padding-right: 14px; }
             .review-readonly-grid { margin-left: -14px; margin-right: -14px; }
@@ -2942,12 +2944,43 @@
             return new File([new Blob([text], { type: 'text/plain' })], 'pasted_text.txt', { type: 'text/plain' });
         }
 
+        function setupReviewDeskScrollAssist() {
+            const reviewDesk = document.getElementById('reviewDesk');
+            const allowed = window.matchMedia('(min-width: 821px) and (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference)');
+            let lastScrollY = window.scrollY;
+            let direction = 0;
+            let assisting = false;
+
+            window.addEventListener('scroll', () => {
+                const currentScrollY = window.scrollY;
+                direction = Math.sign(currentScrollY - lastScrollY);
+                lastScrollY = currentScrollY;
+            }, { passive: true });
+
+            document.addEventListener('scrollend', (event) => {
+                if (event.target !== document) return;
+                if (assisting) {
+                    assisting = false;
+                    return;
+                }
+                if (!allowed.matches || reviewDesk.hidden || direction !== 1) return;
+
+                const targetScrollY = reviewDesk.getBoundingClientRect().top + window.scrollY - 20;
+                const remaining = targetScrollY - window.scrollY;
+                if (remaining < 1 || remaining > 48) return;
+
+                assisting = true;
+                window.scrollTo({ top: targetScrollY, behavior: 'smooth' });
+            });
+        }
+
         // Initialize
         document.addEventListener('DOMContentLoaded', () => {
             loadModels().then(restoreActiveTranslation);
             loadTranslations();
             loadStats();
             setupEventListeners();
+            setupReviewDeskScrollAssist();
             // Before restoreActiveTranslation, which awaits the server: an
             // opened translation carries its own languages and genre, and
             // those should win over whatever the form was last left at.
