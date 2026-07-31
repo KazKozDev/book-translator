@@ -472,22 +472,22 @@
            be reviewed without squeezing the existing three-panel workspace. */
         .review-desk { margin-top: 34px; padding-top: 24px; border-top: 1px solid var(--line); }
         .review-desk[hidden], .review-desk-body[hidden], .review-alternatives[hidden] { display: none; }
-        .review-desk-header { position: relative; z-index: 1; display: flex; align-items: flex-end; justify-content: space-between; gap: 22px; margin-bottom: -1px; }
+        .review-desk-header { position: relative; z-index: 1; display: flex; align-items: flex-end; justify-content: space-between; gap: 22px; margin-bottom: 14px; }
         .review-heading { min-width: 170px; }
         .review-heading h2 { margin: 5px 0 0; color: var(--ink); font-size: 1.15rem; font-weight: 700; letter-spacing: -.01em; }
-        .review-summary-group { flex: 0 0 auto; min-width: 0; margin-left: auto; }
-        .review-summary { margin: 0; color: var(--muted); font-size: .78rem; }
-        .review-header-controls { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 18px; }
-        .review-cloud-all { flex: none; font-size: .74rem; }
-        .review-cloud-status { min-height: 1em; margin-top: 4px; color: var(--muted); font-size: .72rem; }
+        .review-header-actions { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; margin-left: auto; min-width: 0; }
+        .review-header-controls { display: flex; align-items: center; justify-content: flex-end; flex-wrap: nowrap; gap: 18px; }
+        .review-summary { margin: 0; color: var(--muted); font-size: .78rem; line-height: 1.2; white-space: nowrap; }
+        .review-cloud-all { flex: none; font-size: .78rem; line-height: 1.2; }
+        .review-cloud-status { min-height: 1em; color: var(--muted); font-size: .72rem; text-align: right; }
         .review-cloud-status:empty { display: none; }
         .review-cloud-status.is-error { color: #b91c1c; font-weight: 600; }
         .review-cloud-status.is-saved { color: var(--accent); font-weight: 600; }
-        .review-filter { display: flex; gap: 12px; margin: 0; padding: 0; border: 0; }
-        .review-filter button { padding: 4px 0; border: none; border-bottom: 1px solid transparent; background: transparent; color: var(--muted); font: inherit; font-size: .78rem; cursor: pointer; }
+        .review-filter { display: flex; align-items: center; gap: 12px; margin: 0; padding: 0; border: 0; }
+        .review-filter button { padding: 0; border: none; border-bottom: 1px solid transparent; background: transparent; color: var(--muted); font: inherit; font-size: .78rem; line-height: 1.2; cursor: pointer; }
         .review-filter button:hover { color: var(--ink); }
         .review-filter button[aria-pressed="true"] { border-bottom-color: var(--accent); color: var(--ink); font-weight: 600; }
-        .review-collapse { color: var(--muted); font-size: .78rem; font-weight: 500; letter-spacing: 0; }
+        .review-collapse { color: var(--muted); font-size: .78rem; font-weight: 500; letter-spacing: 0; line-height: 1.2; }
 
         .review-workbench { display: grid; grid-template-columns: 272px minmax(0, 1fr); min-height: 560px; border: 1px solid var(--line); border-radius: 10px; background: var(--paper); overflow: hidden; }
         .review-nav { min-width: 0; border-right: 1px solid var(--line); background: #f1f2f4; }
@@ -651,8 +651,8 @@
         @media (max-width: 820px) {
             .toolbar .form-group { flex: 1 1 160px; }
             .review-desk-header { align-items: flex-start; flex-wrap: wrap; }
-            .review-summary-group { order: 2; flex-basis: 100%; }
-            .review-header-controls { order: 3; flex-basis: 100%; }
+            .review-header-actions { order: 2; flex-basis: 100%; align-items: stretch; }
+            .review-header-controls { flex-wrap: wrap; justify-content: flex-start; }
             .review-workbench { grid-template-columns: 1fr; }
             .review-nav { border-right: none; border-bottom: 1px solid var(--line); }
             .review-chunk-list { max-height: 228px; }
@@ -893,7 +893,7 @@
                         <span class="panel-title">Original text</span>
                         <button type="button" class="header-action" id="uploadHeaderBtn">→ 1 UPLOAD</button>
                     </h3>
-                    <input type="file" id="fileInput" class="file-input" accept=".txt,.epub,.pdf" hidden>
+                    <input type="file" id="fileInput" class="file-input" accept=".txt,.epub,.pdf,.docx" hidden>
                     <div class="text-panel-content is-placeholder" id="originalText">No content yet</div>
                 </div>
                 <div class="text-panel panel-draft">
@@ -1165,17 +1165,17 @@
                     <div class="eyebrow">Chunk review</div>
                     <h2 id="reviewDeskTitle">Review desk</h2>
                 </div>
-                <div class="review-summary-group">
-                    <p class="review-summary" id="reviewSummary">Loading review chunks…</p>
+                <div class="review-header-actions">
+                    <div class="review-header-controls">
+                        <p class="review-summary" id="reviewSummary">Loading review chunks…</p>
+                        <button type="button" class="header-action review-cloud-all" id="reviewCloudAllBtn">Review all automatically ($)</button>
+                        <fieldset class="review-filter" aria-label="Filter review chunks">
+                            <button type="button" id="reviewNeedsFilter" aria-pressed="true">Needs review</button>
+                            <button type="button" id="reviewAllFilter" aria-pressed="false">All chunks</button>
+                        </fieldset>
+                        <button type="button" class="header-action review-collapse" id="reviewCollapseBtn" aria-expanded="true" aria-controls="reviewDeskBody">Collapse ↑</button>
+                    </div>
                     <div class="review-cloud-status" id="reviewCloudStatus" role="status" aria-live="polite"></div>
-                </div>
-                <div class="review-header-controls">
-                    <button type="button" class="header-action review-cloud-all" id="reviewCloudAllBtn">Review all automatically ($)</button>
-                    <fieldset class="review-filter" aria-label="Filter review chunks">
-                        <button type="button" id="reviewNeedsFilter" aria-pressed="true">Needs review</button>
-                        <button type="button" id="reviewAllFilter" aria-pressed="false">All chunks</button>
-                    </fieldset>
-                    <button type="button" class="header-action review-collapse" id="reviewCollapseBtn" aria-expanded="true" aria-controls="reviewDeskBody">Collapse ↑</button>
                 </div>
             </header>
 
@@ -1333,7 +1333,7 @@
             const btn = document.getElementById('refineHeaderBtn');
             if (btn) btn.disabled = !enabled;
             setTestButtonsEnabled('1', enabled);
-            if (enabled) draftReadyForRefine = true;
+            draftReadyForRefine = !!enabled;
         }
 
         // Same effect as the Guide/Settings round-trip: if this session
@@ -3366,7 +3366,11 @@
             const previewToken = ++sourcePreviewToken;
 
             if (needsServerSidePreview(file)) {
-                const format = file.name.toLowerCase().endsWith('.pdf') ? 'PDF' : 'EPUB';
+                const format = file.name.toLowerCase().endsWith('.pdf')
+                    ? 'PDF'
+                    : file.name.toLowerCase().endsWith('.docx')
+                        ? 'DOCX'
+                        : 'EPUB';
                 originalPanel.textContent = `Loading ${format} source preview…`;
                 updatePanelMeta('originalText');
                 try {
@@ -3427,13 +3431,12 @@
             reader.readAsText(file.slice(0, SOURCE_PREVIEW_LIMIT));
         }
 
-        // EPUB is a zip and PDF is its own binary container, so neither can be
-        // read by FileReader in the browser. Both go to /source-preview, which
-        // is the same reader Start uses — the preview cannot disagree with what
-        // gets translated.
+        // EPUB is a zip, PDF is its own binary container, and DOCX is also a
+        // zip — none can be read by FileReader as book text. All three go to
+        // /source-preview, which is the same reader Start uses.
         function needsServerSidePreview(file) {
             const name = file.name.toLowerCase();
-            return name.endsWith('.epub') || name.endsWith('.pdf');
+            return name.endsWith('.epub') || name.endsWith('.pdf') || name.endsWith('.docx');
         }
 
         function formatFileSize(bytes) {
@@ -3654,12 +3657,14 @@
                     </div>
                     <div class="history-actions">
                         <button class="header-action" onclick="loadTranslationIntoWorkspace(${t.id})">Open</button>
-                        ${t.status === 'completed' ?
+                        ${                            t.status === 'completed' ?
                             `<button class="header-action history-download-btn" data-translation-id="${t.id}" onclick="downloadTranslation(${t.id})">Download</button>` :
                             t.status === 'stage1_completed' ?
                             `<button class="header-action" onclick="continueRefinementFromHistory(${t.id})">Continue</button>` :
-                            t.status === 'error' ?
-                            `<button class="header-action" onclick="retryTranslation(${t.id})">Retry</button>` :
+                            (t.status === 'interrupted' || t.status === 'error') ?
+                            `<button class="header-action" onclick="resumeTranslationFromHistory(${t.id})">Resume</button>` :
+                            t.running ?
+                            `<button class="header-action" onclick="attachLiveTranslation(${t.id})">Watch</button>` :
                             ''
                         }
                         <button class="header-action history-delete-action" onclick="deleteTranslation(${t.id}, this)" aria-label="Delete ${t.filename || 'translation'}">Delete</button>
@@ -4093,6 +4098,117 @@
             handleRefine();
         }
 
+        // Continue Stage 1 from the last finished chunk after an overnight
+        // interrupt or server restart — does not start the book over.
+        async function resumeTranslationFromHistory(id) {
+            await loadTranslationIntoWorkspace(id, { scroll: true, silent: false });
+            await streamStage1Job(`${API_URL}/resume-translation/${id}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: '{}',
+            });
+        }
+
+        // Re-attach to a job that is still running after a page reload.
+        async function attachLiveTranslation(id, { silent = false } = {}) {
+            await loadTranslationIntoWorkspace(id, { scroll: !silent, silent });
+            await streamStage1Job(`${API_URL}/translations/${id}/stream`, {
+                method: 'GET',
+            });
+        }
+
+        // Shared SSE reader for Start / Resume / Watch — keeps CONTINUE gated
+        // until Stage 1 actually completes.
+        async function streamStage1Job(url, fetchInit) {
+            const translateBtn = document.getElementById('translateBtn');
+            const refineHeaderBtn = document.getElementById('refineHeaderBtn');
+            const progressSection = document.getElementById('progressSection');
+
+            translateBtn.disabled = true;
+            refineHeaderBtn.disabled = true;
+            draftReadyForRefine = false;
+            setTestButtonsEnabled('1', false);
+            setTestButtonsEnabled('2', false);
+            progressSection.style.display = 'block';
+            document.getElementById('deckStatus').textContent = 'Translating…';
+            translationStartTime = Date.now();
+            updateEta(0);
+
+            try {
+                const response = await fetch(url, fetchInit);
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({}));
+                    throw new Error(errorData.error || 'Could not resume translation');
+                }
+
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let buffer = '';
+                let lastData = null;
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+
+                    buffer += decoder.decode(value, { stream: true });
+                    const lines = buffer.split('\n');
+                    buffer = lines.pop() || '';
+
+                    for (const line of lines) {
+                        if (!line.startsWith('data: ')) continue;
+                        try {
+                            const data = JSON.parse(line.substring(6).trim());
+                            lastData = data;
+                            if (data.translation_id) rememberActiveTranslation(data.translation_id);
+
+                            if (typeof data.progress === 'number') {
+                                document.getElementById('progressBar').style.width = data.progress + '%';
+                                document.getElementById('progressInfo').textContent = data.warning
+                                    ? `⚠ batch ${data.batch_index || data.current_chunk || 0}/${data.total_chunks || 0}: ${data.warning}`
+                                    : (data.message ||
+                                        `${formatStage(data.stage)} · batch ${data.batch_index || data.current_chunk || 0}/${data.total_chunks || 0} · ${Math.round(data.progress)}%`);
+                                updateEta(data.progress);
+                            }
+                            if (data.terminology) updateTerminologyStatus(data.terminology);
+                            if (data.machine_translation_chunk) {
+                                appendPanelPreview('machineTranslation', withWarningMarker(data.machine_translation_chunk, data.warning));
+                            }
+                            if (data.machine_translation && !translationPreviews.machineTranslation) {
+                                appendPanelPreview('machineTranslation', data.machine_translation);
+                            }
+                            if (data.status === 'stage1_completed') {
+                                setContinueEnabled(true);
+                            }
+                        } catch (e) {
+                            // Ignore JSON errors, continue
+                        }
+                    }
+                }
+
+                if (lastData && lastData.error) throw new Error(lastData.error);
+                if (!currentTranslationId) throw new Error('Server did not return a translation id');
+
+                document.getElementById('progressBar').style.width = '100%';
+                document.getElementById('progressInfo').textContent = 'Draft ready — Press CONTINUE to refine';
+                document.getElementById('deckStatus').textContent = 'Draft translation ready';
+                updateEta(100);
+                setContinueEnabled(true);
+                await loadTranslationIntoWorkspace(currentTranslationId, { scroll: false, silent: true });
+                if (document.getElementById('refineHeaderBtn').disabled && currentTranslationId) {
+                    setContinueEnabled(true);
+                }
+                loadTranslations();
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Translation failed: ' + error.message);
+                translationStartTime = null;
+                updateEta(0);
+                loadTranslations();
+            } finally {
+                translateBtn.disabled = false;
+            }
+        }
+
         // Pulls a past (or in-progress) translation back into the three
         // work panels, so its text can be reviewed, downloaded, or continued
         // without re-uploading the source file.
@@ -4152,12 +4268,15 @@
                 });
 
                 document.getElementById('refineHeaderBtn').disabled = !(
-                    t.draft_chunks
-                    || t.status === 'stage1_completed'
+                    t.status === 'stage1_completed'
                     || t.status === 'completed'
                     // Stale in-progress snapshot must not grey out CONTINUE
                     // after this session already finished Stage 1 for this id.
-                    || (draftReadyForRefine && Number(t.id) === Number(currentTranslationId))
+                    || (draftReadyForRefine
+                        && Number(t.id) === Number(currentTranslationId)
+                        && t.status !== 'interrupted'
+                        && t.status !== 'error'
+                        && t.status !== 'in_progress')
                 );
                 if (!document.getElementById('refineHeaderBtn').disabled) {
                     draftReadyForRefine = true;
@@ -4172,15 +4291,27 @@
                 document.getElementById('progressInfo').textContent =
                     t.status === 'completed' ? 'Completed' :
                     t.status === 'stage1_completed' ? 'Draft ready — Press CONTINUE to refine' :
+                    t.status === 'interrupted' ? (t.error_message || 'Interrupted — press Resume to continue') :
                     t.status === 'error' ? `Error: ${t.error_message || 'unknown error'}` :
+                    t.running ? `Running… ${Math.round(t.progress || 0)}%` :
                     `Status: ${t.status}`;
                 document.getElementById('deckStatus').textContent =
                     t.status === 'completed' ? 'Translation completed' :
                     t.status === 'stage1_completed' ? 'Draft translation ready' :
+                    t.status === 'interrupted' ? 'Interrupted — Resume to continue' :
                     t.status === 'error' ? 'Translation failed' :
+                    t.running ? 'Translation running' :
                     `Loaded from history (${t.status})`;
                 translationStartTime = null;
                 updateEta(t.status === 'completed' || t.status === 'stage1_completed' ? 100 : 0);
+
+                if (t.status === 'interrupted' || t.status === 'error') {
+                    setContinueEnabled(false);
+                }
+
+                if (t.running) {
+                    attachLiveTranslation(t.id, { silent: true });
+                }
 
                 if (t.status === 'completed' && t.translated_text) {
                     await loadReviewChunks(t.id, { selectedIndex: reviewSelection });

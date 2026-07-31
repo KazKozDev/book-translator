@@ -75,9 +75,8 @@
                     <div class="neural-row"><div><div class="neural-name">COMET-Kiwi</div><p class="neural-role">Runs only when you start a COMET-Kiwi Quality Check. It estimates translation quality without a reference translation; separate tests score the Start draft and Continue result. Its score is diagnostic and does not edit or block export. The checkpoint is gated and multi-gigabyte: request access on Hugging Face, then run <code>huggingface-cli login</code> or set <code>HF_TOKEN</code>; there is no in-app login. It downloads on first test use. <a href="https://huggingface.co/Unbabel/wmt22-cometkiwi-da" target="_blank" rel="noopener">Model page on Hugging Face</a>.</p></div><span class="neural-kind">Quality estimate</span></div>
                 </div>
             </section>
-            <section class="card" aria-labelledby="frontierSettingsTitle">
+            <section class="card" aria-label="Frontier verification">
                 <div class="section-kicker">Frontier verification</div>
-                <h2 id="frontierSettingsTitle">Cloud review API</h2>
                 <p>Used by <strong>Verify automatically</strong> in the Glossary and <strong>Review automatically</strong> in Review desk. Glossary verification uses web search and waits for your approval. Review desk sends Source, Draft, Final, and the proposed fixes; the provider chooses apply or keep and Tolmach saves those decisions automatically.</p>
                 <div class="form-group">
                     <label class="role-heading" for="frontierProvider">Provider</label>

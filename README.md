@@ -1,6 +1,6 @@
 # Tolmach — AI Book Translator for EPUB, PDF, and Novels
 
-Professional literary translation software for translating entire TXT, EPUB, and PDF books with local Ollama models, document glossaries, guarded refinement, and side-by-side review.
+Professional literary translation software for translating entire TXT, EPUB, PDF, and DOCX books with local Ollama models, document glossaries, guarded refinement, and side-by-side review.
 
 ```bash
 # macOS / Linux
@@ -54,11 +54,11 @@ Choose the source language, target language, and text genre. Click **→ 1 UPLOA
 ```text
 Source language: English
 Target language: Russian
-Input:           TXT, EPUB, or PDF
+Input:           TXT, EPUB, PDF, or DOCX
 Download:        TXT, PDF, or EPUB
 ```
 
-A PDF is read for its text only. Tolmach removes running heads and page numbers and rejoins the printed lines back into paragraphs, then translates the result exactly as it would a TXT book — layout, images, and chapter structure are not carried over. A scanned PDF with no text layer is refused at upload instead of being translated as an empty book; run OCR on it first, or use the TXT or EPUB edition.
+A PDF is read for its text only. Tolmach removes running heads and page numbers and rejoins the printed lines back into paragraphs; bookmarks or clear chapter headings become chapter breaks when detected. Layout and images are not carried over. A scanned PDF with no text layer is refused — run OCR first, or use TXT, EPUB, or DOCX. A DOCX keeps Heading 1 sections as chapters when present.
 
 Click **→ 2 START** to create the draft translation. Finished sections appear in the Translation panel while the rest of the book continues processing. Click **→ 3 CONTINUE** when you want Tolmach to refine that draft into the final version.
 
@@ -119,7 +119,7 @@ Optional quality checks flag possible terminology errors, missing text, changed 
 
 ## How it works
 
-The browser sends your TXT, EPUB, or PDF to a Flask server running on your computer.<br>
+The browser sends your TXT, EPUB, PDF, or DOCX to a Flask server running on your computer.<br>
 **PREPARE** scans the whole book and builds a glossary for that document.<br>
 **START** splits the book into chunks and translates them with the selected Ollama model.<br>
 **CONTINUE** proposes small edits, and a separate verifier checks each edit against the source.<br>
@@ -134,7 +134,7 @@ Book → Glossary → Draft translation → Verified refinement → Human review
 
 ### Translation pipeline
 
-1. **Upload** — the Flask backend reads TXT, EPUB, or PDF and stores the source in `uploads/`. A PDF is read as text only: its printed lines are rejoined into paragraphs and it then follows the same path as a TXT book.
+1. **Upload** — the Flask backend reads TXT, EPUB, PDF, or DOCX and stores the source in `uploads/`. A PDF is read as text (with chapter breaks from bookmarks/headings when detected); a DOCX uses Heading 1 sections as chapters when present.
 2. **Prepare** — deterministic text harvesting and GLiNER collect entity candidates. BGE-M3 groups likely spelling variants, then the selected instruct model resolves ambiguous groups and proposes target renderings. The editable glossary is stored for this document fingerprint and language pair.
 3. **Start** — the source is split into chunks of about 1200 characters at paragraph and sentence boundaries. The Translation model receives each chunk with its genre, glossary constraints, and previous-paragraph context. Completed chunks are written to SQLite and streamed to the browser.
 4. **Continue** — unlike a typical LLM “improve this” pass that rewrites the whole chunk and can replace already-good wording, the Refinement model returns located edits instead of rewriting an entire chunk. Python applies only those replacements. The Verifier compares each patched version with the source, checks the alternatives in both orders, and retries without ordered A/B versions when it detects position bias.
@@ -214,7 +214,8 @@ The installer uses an existing Python 3.10+ installation when available. Otherwi
 ## Limitations
 
 - Tolmach is not a one-prompt translator. A finished book needs the staged workflow (glossary → START → CONTINUE → review) and several local model roles working in sequence; expecting chat-app turnaround will disappoint.
-- Tolmach accepts TXT, EPUB, and PDF input. It does not import DOCX files. A PDF contributes text only — layout, images, and chapter structure are not preserved, and a scanned PDF without a text layer is refused rather than translated.
+- A long Start run keeps going if you close the browser tab; use **Resume** in History to continue from the last finished chunk after an interrupt or server restart. A full machine sleep or Ollama crash still stops the model calls themselves.
+- Tolmach accepts TXT, EPUB, PDF, and DOCX. A scanned PDF without a text layer is refused; layout/images are not preserved.
 - Translating a complete book can take 10–15 hours on local hardware.
 - Translation and review models can still miss errors or make good text worse. Proofread the final book before publishing it.
 - Large Ollama models need substantial memory and disk space; Tolmach cannot make a model fit hardware that is too small.

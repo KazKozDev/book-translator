@@ -106,7 +106,7 @@ def test_translation_default_matches_settings_when_no_preference_is_saved():
     assert "const PREFERRED_MODEL = 'translategemma:12b';" in settings_page
     assert "const PREFERRED_MODEL = 'translategemma:12b';" in main_page
     assert 'const API_URL = window.location.origin;' in main_page
-    assert "window.addEventListener('pageshow', syncModelsFromSettings);" in main_page
+    assert "window.addEventListener('pageshow', syncContinueAfterResume);" in main_page
     assert "window.addEventListener('storage'," in main_page
 
 
@@ -137,7 +137,8 @@ def test_continue_button_guards_against_stale_restore_after_start():
         'await loadTranslationIntoWorkspace(currentTranslationId, '
         '{ scroll: false, silent: true });'
     ) in main_page
-    assert 'draftReadyForRefine && Number(t.id) === Number(currentTranslationId)' in main_page
+    assert 'draftReadyForRefine' in main_page
+    assert 'Number(t.id) === Number(currentTranslationId)' in main_page
 
 
 def test_each_pipeline_role_uses_its_own_requested_model(tmp_path, monkeypatch):

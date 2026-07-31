@@ -6,8 +6,8 @@ book reaches the chunker as thousands of one-line paragraphs and the running
 head gets translated once per page. So these tests are about the shape of the
 text, not about whether the file opened.
 
-Nothing here touches the pipeline: a PDF arrives as plain text with no chapter
-list, exactly like a .txt upload.
+Nothing here touches the pipeline unless chapter headings appear: a plain PDF
+arrives as text with chapters None, exactly like a .txt upload.
 """
 
 from io import BytesIO
@@ -107,7 +107,7 @@ WRAPPED = [
 def test_wrapped_lines_come_back_as_one_paragraph(tmp_path):
     path = _written(tmp_path, 'book.pdf', _pdf([WRAPPED]))
 
-    text, _, _ = pdf_io.extract_pdf_book(path)
+    text, _, _, _ = pdf_io.extract_pdf_book(path)
 
     assert text == (
         'Mr Dursley was the director of a firm called Grunnings, which made '
@@ -121,7 +121,7 @@ def test_a_paragraph_broken_across_a_page_closes_over_the_break(tmp_path):
     way to learn that later — by then the sentence is already split in two."""
     path = _written(tmp_path, 'book.pdf', _pdf([WRAPPED[:2], WRAPPED[2:]]))
 
-    text, _, _ = pdf_io.extract_pdf_book(path)
+    text, _, _, _ = pdf_io.extract_pdf_book(path)
 
     assert 'he did have a very large moustache.' in text
 
@@ -132,7 +132,7 @@ def test_a_word_hyphenated_at_the_column_is_rejoined(tmp_path):
         'ache and said nothing at all.',
     ]]))
 
-    text, _, _ = pdf_io.extract_pdf_book(path)
+    text, _, _, _ = pdf_io.extract_pdf_book(path)
 
     assert 'moustache' in text
     assert 'moust- ache' not in text
@@ -146,7 +146,7 @@ def test_the_running_head_and_page_number_do_not_reach_the_text(tmp_path):
     ]
     path = _written(tmp_path, 'book.pdf', _pdf(pages))
 
-    text, _, _ = pdf_io.extract_pdf_book(path)
+    text, _, _, _ = pdf_io.extract_pdf_book(path)
 
     assert 'THE BOY WHO LIVED' not in text
     assert 'Mr Dursley' in text
@@ -161,7 +161,7 @@ def test_the_page_number_printed_inside_the_running_head_does_not_save_it(tmp_pa
     ]
     path = _written(tmp_path, 'book.pdf', _pdf(pages))
 
-    text, _, _ = pdf_io.extract_pdf_book(path)
+    text, _, _, _ = pdf_io.extract_pdf_book(path)
 
     assert 'THE BOY WHO LIVED' not in text
     assert 'Mr Dursley' in text
@@ -181,7 +181,7 @@ def test_a_narrow_section_is_measured_against_its_own_column(tmp_path):
     pages = [WRAPPED * 3] * 4 + [narrow * 3]
     path = _written(tmp_path, 'book.pdf', _pdf(pages))
 
-    text, _, _ = pdf_io.extract_pdf_book(path)
+    text, _, _, _ = pdf_io.extract_pdf_book(path)
 
     assert 'She had been standing there for a long time before anyone in the hall' in text
 
@@ -197,7 +197,7 @@ def test_a_phrase_repeated_inside_the_page_is_the_author_s_and_stays(tmp_path):
     ]
     path = _written(tmp_path, 'book.pdf', _pdf(pages))
 
-    text, _, _ = pdf_io.extract_pdf_book(path)
+    text, _, _, _ = pdf_io.extract_pdf_book(path)
 
     assert text.count('All work and no play.') == 8
 
@@ -205,7 +205,7 @@ def test_a_phrase_repeated_inside_the_page_is_the_author_s_and_stays(tmp_path):
 def test_metadata_is_read_when_the_producer_wrote_it(tmp_path):
     path = _written(tmp_path, 'book.pdf', _pdf([WRAPPED], title='Source Book', author='Source Author'))
 
-    _, title, author = pdf_io.extract_pdf_book(path)
+    _, _, title, author = pdf_io.extract_pdf_book(path)
 
     assert title == 'Source Book'
     assert author == 'Source Author'
@@ -214,7 +214,7 @@ def test_metadata_is_read_when_the_producer_wrote_it(tmp_path):
 def test_a_pdf_without_metadata_reports_none_rather_than_empty_strings(tmp_path):
     path = _written(tmp_path, 'book.pdf', _pdf([WRAPPED]))
 
-    _, title, author = pdf_io.extract_pdf_book(path)
+    _, _, title, author = pdf_io.extract_pdf_book(path)
 
     assert title is None
     assert author is None
@@ -225,7 +225,7 @@ def test_a_scan_yields_no_text_rather_than_a_plausible_empty_book(tmp_path):
     start a translation of an empty book and bill an hour of model time to it."""
     path = _written(tmp_path, 'scan.pdf', _pdf([[], []]))
 
-    text, _, _ = pdf_io.extract_pdf_book(path)
+    text, _, _, _ = pdf_io.extract_pdf_book(path)
 
     assert text == ''
 
@@ -247,9 +247,8 @@ def test_upload_reports_a_scan_instead_of_translating_nothing(tmp_path, monkeypa
 
 
 def test_a_pdf_enters_the_pipeline_as_plain_text_with_no_chapters(tmp_path, monkeypatch):
-    """The whole point of the format: chapters stay None, so chunking, refinement
-    and download take exactly the paths a .txt book takes. Only the recorded
-    source format differs, and every branch downstream asks about 'epub'."""
+    """A PDF without chapter headings stays on the plain-text path: chapters None,
+    same chunking as .txt. Only the recorded source format differs."""
     upload_folder = tmp_path / 'uploads'
     upload_folder.mkdir()
     monkeypatch.setattr(translator, 'UPLOAD_FOLDER', str(upload_folder))

@@ -79,7 +79,7 @@
         a:hover { text-decoration: underline; text-underline-offset: 2px; }
 
         .reference-group { margin-top: 24px; }
-        .reference-group:first-of-type { margin-top: 20px; }
+        .reference-group:first-of-type { margin-top: 0; }
         .reference-group > .section-title { margin-bottom: 4px; }
         .reference-row { padding: 14px 0; border-bottom: 1px solid var(--line-soft); }
         .reference-row:last-child { border-bottom: none; padding-bottom: 0; }
@@ -160,7 +160,7 @@
                             </li>
                             <li>
                                 <div class="step-title">Upload the source — <code>→ 1 UPLOAD</code></div>
-                                <p>Select or drop a <code>.txt</code>, <code>.epub</code> or <code>.pdf</code> file. A PDF is read as plain text — its lines are rejoined into paragraphs, and a scanned PDF with no text layer is refused. Choose source language, target language, and genre. The Original text panel shows a preview; Tolmach processes the full uploaded file.</p>
+                                <p>Select or drop a <code>.txt</code>, <code>.epub</code>, <code>.pdf</code>, or <code>.docx</code> file. A PDF is read as text — lines are rejoined into paragraphs, and chapter bookmarks or clear chapter headings become chapter breaks when they can be trusted. A scanned PDF with no text layer is refused. A DOCX keeps Heading&nbsp;1 sections as chapters when present. Choose source language, target language, and genre. The Original text panel shows a preview; Tolmach processes the full uploaded file.</p>
                             </li>
                             <li>
                                 <div class="step-title">Prepare and review the glossary — optional</div>
@@ -231,17 +231,13 @@
                         </div>
                         <div class="reference-row">
                             <div class="reference-head"><h3>Archive</h3><span class="reference-kind">Local SQLite</span></div>
-                            <p><strong>Open</strong> restores panels, review state, and saved checks. <strong>Continue</strong> resumes a draft. <strong>Retry</strong> restarts a failed job. <strong>Delete</strong> permanently removes the saved job and its chunks.</p>
+                            <p><strong>Open</strong> restores panels, review state, and saved checks. <strong>Continue</strong> resumes refinement on a finished draft. <strong>Resume</strong> continues an interrupted Stage 1 from the last finished chunk (closing the browser no longer kills a running job). <strong>Delete</strong> permanently removes the saved job and its chunks.</p>
                         </div>
                     </section>
                 </div>
 
                 <div class="guide-stack">
-                    <section class="card">
-                        <div class="section-title">Quality Check reference</div>
-                        <h2>Run only the evidence you need</h2>
-                        <p>Draft checks unlock after Start. Final checks unlock after Continue. Results are saved with the job. Tests not run provide no evidence.</p>
-
+                    <section class="card" aria-label="Quality checks">
                         <div class="reference-group">
                             <div class="section-title">Translation — after Start</div>
                             <div class="reference-row">

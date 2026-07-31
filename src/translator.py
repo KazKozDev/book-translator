@@ -1,7 +1,7 @@
 import json
 import requests
 import time
-from typing import List, Dict, Optional, Callable, Set, Tuple
+from typing import List, Dict, Optional, Callable, Set, Tuple, Iterator, Any
 import os
 # COMET pins SentencePiece below 0.2. Its generated protobuf bindings require
 # Python parsing mode; set this before any library can import SentencePiece.
@@ -18,6 +18,7 @@ from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
 from functools import wraps
 from pathlib import Path
+from queue import Empty, Queue
 
 try:
     import sacrebleu
@@ -103,6 +104,14 @@ cache = TranslationCache(CACHE_DB_PATH)
 ACTIVE_RUNS: Set[int] = set()
 ACTIVE_RUNS_LOCK = threading.Lock()
 
+# Progress events for a running job. The HTTP SSE response only *reads* this
+# queue — the work itself runs in a daemon thread — so closing the browser
+# tab no longer raises GeneratorExit inside Stage 1 / Stage 2 and kills the
+# overnight book mid-chunk.
+_PROGRESS_QUEUES: Dict[int, Queue] = {}
+_PROGRESS_QUEUES_LOCK = threading.Lock()
+_PROGRESS_SENTINEL = object()
+
 
 def claim_run(translation_id: int):
     with ACTIVE_RUNS_LOCK:
@@ -122,6 +131,100 @@ def is_run_active(translation_id: int) -> bool:
     """
     with ACTIVE_RUNS_LOCK:
         return translation_id in ACTIVE_RUNS
+
+
+def _progress_queue(translation_id: int) -> Queue:
+    with _PROGRESS_QUEUES_LOCK:
+        queue = _PROGRESS_QUEUES.get(translation_id)
+        if queue is None:
+            queue = Queue()
+            _PROGRESS_QUEUES[translation_id] = queue
+        return queue
+
+
+def _emit_progress(translation_id: int, event: Any) -> None:
+    _progress_queue(translation_id).put(event)
+
+
+def _clear_progress_queue(translation_id: int) -> None:
+    with _PROGRESS_QUEUES_LOCK:
+        _PROGRESS_QUEUES.pop(translation_id, None)
+
+
+def _sse_from_progress_queue(translation_id: int) -> Iterator[str]:
+    """Tail a job's progress queue until the worker posts the sentinel."""
+    queue = _progress_queue(translation_id)
+    while True:
+        try:
+            item = queue.get(timeout=20)
+        except Empty:
+            # Keep the connection warm; the worker may still be calling Ollama.
+            yield ': heartbeat\n\n'
+            continue
+        if item is _PROGRESS_SENTINEL:
+            break
+        yield f"data: {json.dumps(item, ensure_ascii=False)}\n\n"
+    if not is_run_active(translation_id):
+        _clear_progress_queue(translation_id)
+
+
+def _start_detached_job(translation_id: int, updates: Iterator[Dict]) -> None:
+    """Run a stage generator in a daemon thread; SSE clients only observe it."""
+
+    def runner():
+        try:
+            for update in updates:
+                if isinstance(update, dict):
+                    update.setdefault('translation_id', translation_id)
+                _emit_progress(translation_id, update)
+        except Exception as e:
+            logger.translation_logger.error(
+                "Detached job %s failed: %s", translation_id, e,
+            )
+            logger.translation_logger.error(traceback.format_exc())
+            _emit_progress(translation_id, {
+                'error': str(e),
+                'translation_id': translation_id,
+            })
+        finally:
+            _emit_progress(translation_id, _PROGRESS_SENTINEL)
+
+    threading.Thread(
+        target=runner,
+        name=f'tolmach-job-{translation_id}',
+        daemon=True,
+    ).start()
+
+
+def _effective_status(translation_id: int, status: str) -> str:
+    """Map abandoned in_progress rows to interrupted for the UI."""
+    if status == 'in_progress' and not is_run_active(translation_id):
+        return 'interrupted'
+    return status
+
+
+def _heal_orphaned_runs() -> None:
+    """Flip leftover in_progress rows to interrupted when nothing is streaming them."""
+    try:
+        with sqlite3.connect(DB_PATH) as conn:
+            rows = conn.execute(
+                "SELECT id FROM translations WHERE status = 'in_progress'"
+            ).fetchall()
+            for (translation_id,) in rows:
+                if not is_run_active(translation_id):
+                    conn.execute(
+                        '''UPDATE translations
+                           SET status = 'interrupted',
+                               error_message = COALESCE(
+                                   error_message,
+                                   'Interrupted — press Resume to continue from the last finished chunk.'
+                               ),
+                               updated_at = CURRENT_TIMESTAMP
+                           WHERE id = ? AND status = 'in_progress' ''',
+                        (translation_id,),
+                    )
+    except Exception as e:
+        logger.translation_logger.warning("Could not heal orphaned runs: %s", e)
 
 
 # Part of the Stage 2 cache key, so that changing what the refinement pass
@@ -349,9 +452,10 @@ from epub_io import (  # noqa: E402
     build_epub_from_chapters,
 )
 
-# PDF is read-only and for the same reason stands apart: it produces plain text
-# and nothing downstream knows a PDF was involved.
+# PDF and DOCX are read-only and for the same reason stand apart: they produce
+# plain text (and optional chapters) and nothing downstream knows the container.
 from pdf_io import is_pdf_filename, extract_pdf_book  # noqa: E402
+from docx_io import is_docx_filename, extract_docx_book  # noqa: E402
 
 
 # The Stage 3 quality tests are the other half of this class, kept in
@@ -1334,59 +1438,120 @@ class BookTranslator(QualityTests):
         genre: str = 'unknown',
         terminology: Optional[TerminologyManager] = None,
         chapters: Optional[List[str]] = None,
+        resume: bool = False,
     ):
         """STAGE 1 only: primary draft translation. Persists the draft chunks
         so a later, independent translate_stage2() call can refine them
-        without re-translating from scratch."""
+        without re-translating from scratch.
+
+        When resume=True, continues from draft_chunks already saved on the row
+        (overnight interrupt / server restart) instead of starting over.
+        """
         start_time = time.time()
         success = False
 
         try:
-            chunk_chapter_map = []
-            if chapters:
-                # Split each chapter on its own, so no chunk ever straddles a
-                # chapter boundary — that's what lets us reassemble a translated
-                # EPUB with the same chapter breaks as the original afterwards.
-                chunks = []
-                for chapter_index, chapter_text in enumerate(chapters):
-                    chapter_chunks = self.split_into_chunks(chapter_text) if chapter_text.strip() else ['']
-                    chunks.extend(chapter_chunks)
-                    chunk_chapter_map.extend([chapter_index] * len(chapter_chunks))
-            else:
-                chunks = self.split_into_chunks(text)
-                chunk_chapter_map = [0] * len(chunks)
-            total_chunks = len(chunks)
-            draft_translations = []
             self.terminology = terminology or TerminologyManager()
             glossary_fingerprint = self.terminology.fingerprint()
             used_terms = set()
             stage1_violation_count = 0
 
-            logger.translation_logger.info(f"Starting stage 1 for translation {translation_id} with {total_chunks} chunks (genre: {genre})")
+            if resume:
+                with sqlite3.connect(DB_PATH) as conn:
+                    conn.row_factory = sqlite3.Row
+                    row = conn.execute(
+                        "SELECT original_chunks, draft_chunks, chunk_chapter_map, "
+                        "original_text, genre FROM translations WHERE id = ?",
+                        (translation_id,),
+                    ).fetchone()
+                if not row or not row['original_chunks']:
+                    raise ValueError(
+                        'Nothing to resume — original chunks were never saved. Press Start again.'
+                    )
+                chunks = json.loads(row['original_chunks'])
+                draft_translations = json.loads(row['draft_chunks'] or '[]')
+                chunk_chapter_map = json.loads(row['chunk_chapter_map'] or '[]')
+                if len(chunk_chapter_map) != len(chunks):
+                    chunk_chapter_map = [0] * len(chunks)
+                if not text:
+                    text = row['original_text'] or ''
+                if row['genre']:
+                    genre = row['genre']
+                start_index = len(draft_translations)
+                if start_index >= len(chunks):
+                    raise ValueError('Draft is already complete — press Continue to refine.')
+            else:
+                chunk_chapter_map = []
+                if chapters:
+                    # Split each chapter on its own, so no chunk ever straddles a
+                    # chapter boundary — that's what lets us reassemble a translated
+                    # EPUB with the same chapter breaks as the original afterwards.
+                    chunks = []
+                    for chapter_index, chapter_text in enumerate(chapters):
+                        chapter_chunks = self.split_into_chunks(chapter_text) if chapter_text.strip() else ['']
+                        chunks.extend(chapter_chunks)
+                        chunk_chapter_map.extend([chapter_index] * len(chapter_chunks))
+                else:
+                    chunks = self.split_into_chunks(text)
+                    chunk_chapter_map = [0] * len(chunks)
+                draft_translations = []
+                start_index = 0
+
+            total_chunks = len(chunks)
+
+            logger.translation_logger.info(
+                "Starting stage 1 for translation %s with %s chunks (genre: %s, resume=%s, from=%s)",
+                translation_id, total_chunks, genre, resume, start_index + 1,
+            )
 
             with sqlite3.connect(DB_PATH) as conn:
-                conn.execute('''
-                    UPDATE translations
-                    SET total_chunks = ?, status = 'in_progress', genre = ?
-                    WHERE id = ?
-                ''', (total_chunks, genre, translation_id))
+                conn.execute(
+                    "UPDATE translations "
+                    "SET total_chunks = ?, status = 'in_progress', genre = ?, "
+                    "original_chunks = ?, chunk_chapter_map = ?, "
+                    "draft_chunks = ?, error_message = NULL, "
+                    "updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                    (
+                        total_chunks,
+                        genre,
+                        json.dumps(chunks, ensure_ascii=False),
+                        json.dumps(chunk_chapter_map),
+                        json.dumps(draft_translations, ensure_ascii=False),
+                        translation_id,
+                    ),
+                )
             claim_run(translation_id)
 
             # STAGE 1: Primary translation with context
             logger.translation_logger.info("Stage 1: Primary LLM translation")
-            for i, chunk in enumerate(chunks, 1):
+            for i in range(start_index, total_chunks):
+                chunk = chunks[i]
+                batch_index = i + 1
                 try:
                     if not chunk.strip():
                         # Empty chapter (e.g. a title page) — nothing to send to the model.
                         draft_translations.append('')
-                        progress = (i / total_chunks) * 100
+                        progress = (batch_index / total_chunks) * 100
+                        with sqlite3.connect(DB_PATH) as conn:
+                            conn.execute(
+                                "UPDATE translations "
+                                "SET progress = ?, machine_translation = ?, draft_chunks = ?, "
+                                "current_chunk = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                                (
+                                    progress,
+                                    '\n\n'.join(draft_translations),
+                                    json.dumps(draft_translations, ensure_ascii=False),
+                                    batch_index,
+                                    translation_id,
+                                ),
+                            )
                         yield {
                             'progress': progress,
                             'stage': 'primary_translation',
-                            'batch_index': i,
+                            'batch_index': batch_index,
                             'original_chunk': chunk,
                             'machine_translation_chunk': '',
-                            'current_chunk': i,
+                            'current_chunk': batch_index,
                             'total_chunks': total_chunks,
                             'terminology': {
                                 'total': len(self.terminology.terms),
@@ -1407,12 +1572,12 @@ class BookTranslator(QualityTests):
                     stage1_warning = None
                     if cached_result:
                         draft_translation = cached_result['machine_translation']
-                        logger.translation_logger.info(f"Cache hit for stage 1 chunk {i}")
+                        logger.translation_logger.info(f"Cache hit for stage 1 chunk {batch_index}")
                     else:
                         # Get previous context
                         previous_chunk = draft_translations[-1] if draft_translations else ""
 
-                        logger.translation_logger.info(f"Stage 1 translating chunk {i}/{total_chunks}")
+                        logger.translation_logger.info(f"Stage 1 translating chunk {batch_index}/{total_chunks}")
                         draft_translation, stage1_warning = self.stage1_primary_translation(
                             text=chunk,
                             source_lang=source_lang,
@@ -1442,7 +1607,7 @@ class BookTranslator(QualityTests):
                     if exact_replacements:
                         logger.translation_logger.info(
                             "Stage 1 enforced %s exact glossary source-form replacement(s) in chunk %s",
-                            sum(item['count'] for item in exact_replacements), i,
+                            sum(item['count'] for item in exact_replacements), batch_index,
                         )
 
                     draft_translations.append(draft_translation)
@@ -1451,28 +1616,27 @@ class BookTranslator(QualityTests):
                     )
                     stage1_violation_count += len(terminology_violations)
 
-                    progress = (i / total_chunks) * 100
+                    progress = (batch_index / total_chunks) * 100
                     with sqlite3.connect(DB_PATH) as conn:
-                        conn.execute('''
-                            UPDATE translations
-                            SET progress = ?,
-                                machine_translation = ?,
-                                current_chunk = ?,
-                                updated_at = CURRENT_TIMESTAMP
-                            WHERE id = ?
-                        ''', (
-                            progress,
-                            '\n\n'.join(draft_translations),
-                            i,
-                            translation_id
-                        ))
+                        conn.execute(
+                            "UPDATE translations "
+                            "SET progress = ?, machine_translation = ?, draft_chunks = ?, "
+                            "current_chunk = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                            (
+                                progress,
+                                '\n\n'.join(draft_translations),
+                                json.dumps(draft_translations, ensure_ascii=False),
+                                batch_index,
+                                translation_id,
+                            ),
+                        )
                     yield {
                         'progress': progress,
                         'stage': 'primary_translation',
-                        'batch_index': i,
+                        'batch_index': batch_index,
                         'original_chunk': chunk,
                         'machine_translation_chunk': draft_translation,
-                        'current_chunk': i,
+                        'current_chunk': batch_index,
                         'total_chunks': total_chunks,
                         'warning': stage1_warning,
                         'terminology': {
@@ -1483,7 +1647,7 @@ class BookTranslator(QualityTests):
                     }
 
                 except Exception as e:
-                    error_msg = f"Error in stage 1 chunk {i}: {str(e)}"
+                    error_msg = f"Error in stage 1 chunk {batch_index}: {str(e)}"
                     logger.translation_logger.error(error_msg)
                     logger.translation_logger.error(traceback.format_exc())
                     raise Exception(error_msg)
@@ -1491,21 +1655,18 @@ class BookTranslator(QualityTests):
             # Persist the draft so translate_stage2() can pick it up later,
             # independently of this request/generator.
             with sqlite3.connect(DB_PATH) as conn:
-                conn.execute('''
-                    UPDATE translations
-                    SET status = 'stage1_completed',
-                        progress = 100,
-                        original_chunks = ?,
-                        draft_chunks = ?,
-                        chunk_chapter_map = ?,
-                        updated_at = CURRENT_TIMESTAMP
-                    WHERE id = ?
-                ''', (
-                    json.dumps(chunks, ensure_ascii=False),
-                    json.dumps(draft_translations, ensure_ascii=False),
-                    json.dumps(chunk_chapter_map),
-                    translation_id,
-                ))
+                conn.execute(
+                    "UPDATE translations "
+                    "SET status = 'stage1_completed', progress = 100, "
+                    "original_chunks = ?, draft_chunks = ?, chunk_chapter_map = ?, "
+                    "error_message = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                    (
+                        json.dumps(chunks, ensure_ascii=False),
+                        json.dumps(draft_translations, ensure_ascii=False),
+                        json.dumps(chunk_chapter_map),
+                        translation_id,
+                    ),
+                )
 
             success = True
             yield {
@@ -1519,12 +1680,12 @@ class BookTranslator(QualityTests):
             }
 
         except GeneratorExit:
-            # The client stopped reading the stream — a closed tab, a dropped
-            # connection. The draft is incomplete and no longer being written,
-            # so the row must not stay 'in_progress' claiming otherwise.
+            # Only reached if a consumer stops iterating the generator early.
+            # Detached jobs normally run to completion in their own thread;
+            # this path still leaves a resumable partial draft behind.
             self._abandon_run(
-                translation_id, 'error',
-                'Interrupted before the draft was finished — press Start again.',
+                translation_id, 'interrupted',
+                'Interrupted — press Resume to continue from the last finished chunk.',
             )
             raise
         except Exception as e:
@@ -1533,13 +1694,15 @@ class BookTranslator(QualityTests):
             logger.translation_logger.error(traceback.format_exc())
 
             with sqlite3.connect(DB_PATH) as conn:
-                conn.execute('''
-                    UPDATE translations
-                    SET status = 'error',
-                        error_message = ?,
-                        updated_at = CURRENT_TIMESTAMP
-                    WHERE id = ?
-                ''', (str(e), translation_id))
+                conn.execute(
+                    "UPDATE translations "
+                    "SET status = 'interrupted', error_message = ?, "
+                    "updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                    (
+                        f'{e} — press Resume to continue from the last finished chunk.',
+                        translation_id,
+                    ),
+                )
             raise
         finally:
             release_run(translation_id)
@@ -2831,6 +2994,7 @@ def check_ollama():
         'health_check', 'serve_frontend', 'serve_static', 'delete_translation',
         'get_translation', 'get_translations', 'get_review_chunks',
         'update_review_chunk', 'download_translation',
+        'stream_translation_progress',
         'source_preview', 'get_workspace_glossary', 'save_workspace_glossary',
         'get_glossary_verification_prompt', 'get_frontier_providers',
         'verify_glossary_with_frontier',
@@ -3086,19 +3250,25 @@ def save_workspace_glossary(document_fingerprint):
 @app.route('/translations', methods=['GET'])
 @with_error_handling
 def get_translations():
+    _heal_orphaned_runs()
     with sqlite3.connect(DB_PATH) as conn:
         conn.row_factory = sqlite3.Row
         cur = conn.execute('''
             SELECT t.id, t.filename, t.source_lang, t.target_lang, t.model,
                    t.status, t.progress, t.detected_language, t.created_at,
-                   t.updated_at, t.error_message,
+                   t.updated_at, t.error_message, t.current_chunk, t.total_chunks,
                    COUNT(tt.id) AS glossary_terms
             FROM translations AS t
             LEFT JOIN translation_terms AS tt ON tt.translation_id = t.id
             GROUP BY t.id
             ORDER BY t.created_at DESC
         ''')
-        translations = [dict(row) for row in cur.fetchall()]
+        translations = []
+        for row in cur.fetchall():
+            item = dict(row)
+            item['status'] = _effective_status(item['id'], item['status'])
+            item['running'] = is_run_active(item['id'])
+            translations.append(item)
     return jsonify({'translations': translations})
 
 @app.route('/translations/<int:translation_id>', methods=['GET'])
@@ -3126,6 +3296,8 @@ def get_translation(translation_id):
         ).fetchall()
 
         data = dict(translation)
+        data['status'] = _effective_status(translation_id, data['status'])
+        data['running'] = is_run_active(translation_id)
         # The glossary this job actually ran under, in the textarea's own
         # format, so reopening a translation can show its terminology instead
         # of an empty editor. Same serialisation as /prepare.
@@ -4024,15 +4196,11 @@ def read_uploaded_book(file, source_lang: Optional[str] = None):
     """Save an uploaded book into UPLOAD_FOLDER and decode it.
 
     Returns (text, chapters, book_title, book_author, source_format, filepath).
-    `chapters` is None for plain text; for EPUB it is what drives chunking, so
-    that no chunk ever straddles a chapter boundary. Deleting filepath on the way
-    out is the caller's job — but a file rejected here never reaches a caller
-    that has a path to delete, so it is removed here instead.
-
-    PDF is read here and nowhere else. It comes back with `chapters` None, like
-    a .txt book, because that is what it is by the time it leaves this function:
-    the format is recorded so the archive can say where the text came from, but
-    every branch downstream asks only whether the source was EPUB.
+    `chapters` is None for plain text; for EPUB (and for DOCX/PDF that carry
+    clear chapter structure) it is what drives chunking, so that no chunk ever
+    straddles a chapter boundary. Deleting filepath on the way out is the
+    caller's job — but a file rejected here never reaches a caller that has a
+    path to delete, so it is removed here instead.
     """
     if not file or file.filename == '':
         raise UploadError('No selected file')
@@ -4044,7 +4212,7 @@ def read_uploaded_book(file, source_lang: Optional[str] = None):
     try:
         if is_pdf_filename(filename):
             try:
-                text, book_title, book_author = extract_pdf_book(filepath)
+                text, chapters, book_title, book_author = extract_pdf_book(filepath)
             except Exception as e:
                 # pypdf's own errors name internal objects, so the message the
                 # user gets is the one thing worth adding to it.
@@ -4053,9 +4221,29 @@ def read_uploaded_book(file, source_lang: Optional[str] = None):
             if not text.strip():
                 raise UploadError(
                     'No text could be extracted from this PDF. If it is a scan, run '
-                    'OCR on it first, or upload the book as TXT or EPUB.'
+                    'OCR on it first, or upload the book as TXT, EPUB, or DOCX.'
                 )
-            return text, None, book_title, book_author, 'pdf', filepath
+            if chapters:
+                text = '\n\n'.join(
+                    f'=== Chapter {i} ===\n\n{chapter}'
+                    for i, chapter in enumerate(chapters, 1)
+                )
+            return text, chapters, book_title, book_author, 'pdf', filepath
+
+        if is_docx_filename(filename):
+            try:
+                text, chapters, book_title, book_author = extract_docx_book(filepath)
+            except Exception as e:
+                logger.app_logger.error('Failed to read DOCX %s: %s', filename, e)
+                raise UploadError(f'Could not read this DOCX: {e}')
+            if not text.strip():
+                raise UploadError('No text could be extracted from this DOCX.')
+            if chapters:
+                text = '\n\n'.join(
+                    f'=== Chapter {i} ===\n\n{chapter}'
+                    for i, chapter in enumerate(chapters, 1)
+                )
+            return text, chapters, book_title, book_author, 'docx', filepath
 
         if is_epub_filename(filename):
             chapters, book_title, book_author = extract_epub_book(filepath)
@@ -4302,40 +4490,35 @@ def translate():
                 )
 
         translator = BookTranslator(model_name=model_name)
-        
-        def generate():
-            try:
-                starting = {
-                    'progress': 1,
-                    'stage': 'starting',
-                    'translation_id': translation_id,
-                    'message': 'Book uploaded. Loading the model and starting the first batch…',
-                    'terminology': {
-                        'total': len(terminology.terms),
-                        'used': 0,
-                        'violations': 0,
-                    },
-                }
-                yield f"data: {json.dumps(starting, ensure_ascii=False)}\n\n"
-                for update in translator.translate_stage1(
-                    text,
-                    source_lang,
-                    target_lang,
-                    translation_id,
-                    genre=genre,
-                    terminology=terminology,
-                    chapters=chapters,
-                ):
-                    update['translation_id'] = translation_id
-                    yield f"data: {json.dumps(update, ensure_ascii=False)}\n\n"
-            except Exception as e:
-                error_message = str(e)
-                logger.translation_logger.error(f"Translation error: {error_message}")
-                logger.translation_logger.error(traceback.format_exc())
-                yield f"data: {json.dumps({'error': error_message})}\n\n"
+
+        # Work runs in a daemon thread. The SSE response only observes the
+        # progress queue — closing the browser no longer kills the overnight run.
+        _emit_progress(translation_id, {
+            'progress': 1,
+            'stage': 'starting',
+            'translation_id': translation_id,
+            'message': 'Book uploaded. Loading the model and starting the first batch…',
+            'terminology': {
+                'total': len(terminology.terms),
+                'used': 0,
+                'violations': 0,
+            },
+        })
+        _start_detached_job(
+            translation_id,
+            translator.translate_stage1(
+                text,
+                source_lang,
+                target_lang,
+                translation_id,
+                genre=genre,
+                terminology=terminology,
+                chapters=chapters,
+            ),
+        )
 
         return Response(
-            generate(),
+            _sse_from_progress_queue(translation_id),
             mimetype='text/event-stream',
             headers={
                 'Cache-Control': 'no-cache',
@@ -4356,6 +4539,122 @@ def translate():
                 os.remove(filepath)
         except OSError as e:
             logger.app_logger.error(f"Failed to cleanup uploaded file: {str(e)}")
+
+
+@app.route('/resume-translation/<int:translation_id>', methods=['POST'])
+@with_error_handling
+def resume_translation(translation_id):
+    """Continue Stage 1 from the last finished chunk after an interrupt."""
+    if is_run_active(translation_id):
+        return jsonify({'error': 'This translation is already running'}), 409
+
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.row_factory = sqlite3.Row
+        row = conn.execute(
+            'SELECT * FROM translations WHERE id = ?', (translation_id,)
+        ).fetchone()
+        if not row:
+            return jsonify({'error': 'Translation not found'}), 404
+
+        original_chunks = _json_list(row['original_chunks'])
+        draft_chunks = _json_list(row['draft_chunks'])
+        if not original_chunks:
+            return jsonify({
+                'error': 'Nothing to resume — press Start to begin this book again.',
+            }), 400
+        if len(draft_chunks) >= len(original_chunks):
+            return jsonify({
+                'error': 'Draft is already complete — press Continue to refine.',
+            }), 400
+        if row['status'] not in (
+            'interrupted', 'error', 'in_progress', 'pending',
+        ):
+            return jsonify({
+                'error': f"Cannot resume a translation with status '{row['status']}'.",
+            }), 400
+
+        term_rows = conn.execute(
+            '''SELECT source_term, target_term, enforcement_mode
+               FROM translation_terms WHERE translation_id = ?''',
+            (translation_id,),
+        ).fetchall()
+
+    terminology = TerminologyManager([
+        GlossaryTerm(
+            source=r['source_term'], target=r['target_term'], mode=r['enforcement_mode'],
+        )
+        for r in term_rows
+    ])
+    translator = BookTranslator(model_name=row['model'])
+
+    _clear_progress_queue(translation_id)
+    _emit_progress(translation_id, {
+        'progress': max(1, int(100 * len(draft_chunks) / max(len(original_chunks), 1))),
+        'stage': 'starting',
+        'translation_id': translation_id,
+        'message': (
+            f'Resuming draft from chunk {len(draft_chunks) + 1}/'
+            f'{len(original_chunks)}…'
+        ),
+        'terminology': {
+            'total': len(terminology.terms),
+            'used': 0,
+            'violations': 0,
+        },
+    })
+    _start_detached_job(
+        translation_id,
+        translator.translate_stage1(
+            row['original_text'] or '',
+            row['source_lang'],
+            row['target_lang'],
+            translation_id,
+            genre=row['genre'] or 'unknown',
+            terminology=terminology,
+            resume=True,
+        ),
+    )
+
+    return Response(
+        _sse_from_progress_queue(translation_id),
+        mimetype='text/event-stream',
+        headers={
+            'Cache-Control': 'no-cache',
+            'X-Accel-Buffering': 'no',
+        },
+    )
+
+
+@app.route('/translations/<int:translation_id>/stream', methods=['GET'])
+@with_error_handling
+def stream_translation_progress(translation_id):
+    """Re-attach to a live job's progress after a page reload."""
+    if not is_run_active(translation_id):
+        with sqlite3.connect(DB_PATH) as conn:
+            conn.row_factory = sqlite3.Row
+            row = conn.execute(
+                'SELECT status, progress, error_message FROM translations WHERE id = ?',
+                (translation_id,),
+            ).fetchone()
+        if not row:
+            return jsonify({'error': 'Translation not found'}), 404
+        payload = {
+            'translation_id': translation_id,
+            'status': _effective_status(translation_id, row['status']),
+            'progress': row['progress'] or 0,
+        }
+        if row['error_message']:
+            payload['message'] = row['error_message']
+        return Response(
+            f"data: {json.dumps(payload, ensure_ascii=False)}\n\n",
+            mimetype='text/event-stream',
+            headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no'},
+        )
+    return Response(
+        _sse_from_progress_queue(translation_id),
+        mimetype='text/event-stream',
+        headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no'},
+    )
 
 
 @app.route('/refine/<int:translation_id>', methods=['POST'])
@@ -4389,6 +4688,12 @@ def refine(translation_id):
             return jsonify({'error': 'Translation not found'}), 404
         if not row['draft_chunks']:
             return jsonify({'error': 'No draft translation to refine yet — run Start first'}), 400
+        original_chunks = _json_list(row['original_chunks'])
+        draft_chunks = _json_list(row['draft_chunks'])
+        if original_chunks and len(draft_chunks) < len(original_chunks):
+            return jsonify({
+                'error': 'Draft is incomplete — press Resume to finish Stage 1 before Continue.',
+            }), 400
         if row['status'] == 'in_progress':
             # Only this process's own live streams count as running. A row left
             # 'in_progress' by a closed tab or by a server restart is a leftover,
@@ -4425,41 +4730,34 @@ def refine(translation_id):
         model_name=refine_model, verifier_model=verifier_model or None,
     )
 
-    def generate():
-        try:
-            starting = {
-                'progress': 1,
-                'stage': 'starting',
-                'translation_id': translation_id,
-                'message': 'Starting the refinement pass…',
-                'terminology': {
-                    'total': len(terminology.terms),
-                    'used': 0,
-                    'violations': 0,
-                },
-                'refinement': {
-                    'review_model': translator.model_name,
-                    'verifier_model': translator.verifier_model,
-                },
-            }
-            yield f"data: {json.dumps(starting, ensure_ascii=False)}\n\n"
-            for update in translator.translate_stage2(
-                translation_id,
-                row['source_lang'],
-                row['target_lang'],
-                genre=row['genre'],
-                terminology=terminology,
-            ):
-                update['translation_id'] = translation_id
-                yield f"data: {json.dumps(update, ensure_ascii=False)}\n\n"
-        except Exception as e:
-            error_message = str(e)
-            logger.translation_logger.error(f"Refinement error: {error_message}")
-            logger.translation_logger.error(traceback.format_exc())
-            yield f"data: {json.dumps({'error': error_message})}\n\n"
+    _emit_progress(translation_id, {
+        'progress': 1,
+        'stage': 'starting',
+        'translation_id': translation_id,
+        'message': 'Starting the refinement pass…',
+        'terminology': {
+            'total': len(terminology.terms),
+            'used': 0,
+            'violations': 0,
+        },
+        'refinement': {
+            'review_model': translator.model_name,
+            'verifier_model': translator.verifier_model,
+        },
+    })
+    _start_detached_job(
+        translation_id,
+        translator.translate_stage2(
+            translation_id,
+            row['source_lang'],
+            row['target_lang'],
+            genre=row['genre'],
+            terminology=terminology,
+        ),
+    )
 
     return Response(
-        generate(),
+        _sse_from_progress_queue(translation_id),
         mimetype='text/event-stream',
         headers={
             'Cache-Control': 'no-cache',

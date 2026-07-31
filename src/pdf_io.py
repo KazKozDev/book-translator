@@ -1,9 +1,10 @@
-"""Reading a PDF, which the app accepts only as a source of plain text.
+"""Reading a PDF, which the app accepts as a source of plain text and,
+when the file carries a usable outline or clear chapter headings, as a
+chapter list so chunking respects those breaks the way EPUB already does.
 
-Deliberately one-directional: there is no PDF writer here, and nothing
-downstream learns a new format. A PDF is turned into exactly the kind of string
-a .txt upload produces and then travels the same pipeline — chunking, glossary,
-translation, export — with no branch of its own.
+Deliberately one-directional: there is no PDF writer here. A PDF is turned into
+the same shape of string (and optional chapters) the rest of the pipeline
+already understands.
 
 The work that is not trivial is undoing the page. A PDF has no paragraphs, only
 lines placed on sheets, so extracted text arrives hard-wrapped at the print
@@ -21,6 +22,7 @@ from collections import Counter
 from typing import List, Optional, Tuple
 
 from pypdf import PdfReader
+from pypdf.generic import Destination
 
 
 # A line that is only a page number — "57", "- 57 -", "[57]", "xiv". Removed
@@ -49,18 +51,41 @@ HEADER_FREQUENCY = 0.4
 # book's width is used instead.
 MIN_LINES_TO_MEASURE_A_PAGE = 5
 
+# Explicit chapter / part openers in novels and non-fiction. Kept conservative:
+# a false chapter break only adds a boundary, but too many of them fragment the
+# book into one-paragraph chapters.
+CHAPTER_HEADING = re.compile(
+    r'^(?:'
+    r'(?:chapter|chap\.?|ch\.?)\s+(?:\d+|[ivxlcdm]+)\b'
+    r'|(?:part|book|section)\s+(?:\d+|[ivxlcdm]+)\b'
+    r'|(?:глава|часть|раздел)\s+(?:\d+|[ivxlcdm]+)\b'
+    r'|(?:capítulo|capitulo|partie|kapitel)\s+(?:\d+|[ivxlcdm]+)\b'
+    r')'
+    r'(?:\s*[:.\-–—].*)?$',
+    re.IGNORECASE,
+)
+
+# Short all-caps titles used as chapter heads in many print PDFs.
+ALL_CAPS_HEADING = re.compile(r'^[A-Z0-9][A-Z0-9 \'\-–—:,.!?]{2,80}$')
+
 
 def is_pdf_filename(filename: str) -> bool:
     return filename.lower().endswith('.pdf')
 
 
-def extract_pdf_book(filepath: str) -> Tuple[str, Optional[str], Optional[str]]:
-    """Read a PDF and return (text, title, author).
+def extract_pdf_book(
+    filepath: str,
+) -> Tuple[str, Optional[List[str]], Optional[str], Optional[str]]:
+    """Read a PDF and return (text, chapters, title, author).
 
     The text is plain, with paragraphs separated by blank lines — the same shape
-    decode_text_file() returns for a .txt book. Returns an empty string when the
-    file carries no extractable text at all, which is what a scan looks like:
-    the caller decides what to tell the user.
+    decode_text_file() returns for a .txt book. `chapters` is set when the PDF
+    outline (bookmarks) yields at least two sections with text, or when the
+    rejoined paragraphs clearly open with chapter headings; otherwise None so
+    the pipeline treats the file like .txt.
+
+    Returns empty text when the file carries no extractable text at all, which
+    is what a scan looks like: the caller decides what to tell the user.
     """
     reader = PdfReader(filepath)
     if reader.is_encrypted:
@@ -72,8 +97,10 @@ def extract_pdf_book(filepath: str) -> Tuple[str, Optional[str], Optional[str]]:
         except Exception:
             pass
 
-    pages = [(page.extract_text() or '').splitlines() for page in reader.pages]
-    text = _join_lines_into_paragraphs(_strip_page_furniture(pages))
+    page_lines = [(page.extract_text() or '').splitlines() for page in reader.pages]
+    cleaned_pages = _strip_page_furniture(page_lines)
+    page_texts = [_join_lines_into_paragraphs([page]) for page in cleaned_pages]
+    text = _join_lines_into_paragraphs(cleaned_pages)
 
     title = None
     author = None
@@ -84,7 +111,137 @@ def extract_pdf_book(filepath: str) -> Tuple[str, Optional[str], Optional[str]]:
         title = (meta.title or '').strip() or None
         author = (meta.author or '').strip() or None
 
-    return text, title, author
+    chapters = _chapters_from_outline(reader, page_texts)
+    if chapters is None:
+        chapters = _split_text_into_chapters(text)
+
+    return text, chapters, title, author
+
+
+def _chapters_from_outline(
+    reader: PdfReader, page_texts: List[str],
+) -> Optional[List[str]]:
+    """Build chapters from PDF bookmarks when they point at real page ranges."""
+    try:
+        outline = reader.outline
+    except Exception:
+        return None
+    if not outline:
+        return None
+
+    starts: List[Tuple[int, str]] = []
+    for title, page_index in _flatten_outline(reader, outline):
+        if page_index is None or page_index < 0 or page_index >= len(page_texts):
+            continue
+        if starts and starts[-1][0] == page_index:
+            # Two bookmarks on the same page — keep the first title.
+            continue
+        starts.append((page_index, title))
+
+    if len(starts) < 2:
+        return None
+
+    chapters: List[str] = []
+    for index, (start, title) in enumerate(starts):
+        end = starts[index + 1][0] if index + 1 < len(starts) else len(page_texts)
+        body = '\n\n'.join(
+            page for page in page_texts[start:end] if page and page.strip()
+        ).strip()
+        if not body:
+            continue
+        # Prefer the bookmark title as the opening line when the page text
+        # does not already begin with it.
+        heading = title.strip()
+        if heading and not body.lower().startswith(heading.lower()[: min(40, len(heading))]):
+            body = f'{heading}\n\n{body}'
+        chapters.append(body)
+
+    if len(chapters) < 2:
+        return None
+    # Outline noise: a bookmark per page produces hundreds of tiny chapters.
+    if len(chapters) > max(80, len(page_texts)):
+        return None
+    return chapters
+
+
+def _flatten_outline(
+    reader: PdfReader, nodes, depth: int = 0,
+) -> List[Tuple[str, Optional[int]]]:
+    """Walk nested bookmarks; only top-level entries open chapters."""
+    entries: List[Tuple[str, Optional[int]]] = []
+    for node in nodes:
+        if isinstance(node, list):
+            # Nested children — ignored for chapter splits so a book's section
+            # tree does not explode into one chapter per subsection.
+            continue
+        title = ''
+        page_index = None
+        try:
+            if isinstance(node, Destination):
+                title = (node.title or '').strip()
+                page_index = reader.get_destination_page_number(node)
+            else:
+                title = str(getattr(node, 'title', '') or '').strip()
+                try:
+                    page_index = reader.get_destination_page_number(node)
+                except Exception:
+                    page_index = None
+        except Exception:
+            continue
+        if title:
+            entries.append((title, page_index))
+    return entries
+
+
+def _split_text_into_chapters(text: str) -> Optional[List[str]]:
+    """Heuristic chapter split when the PDF has no usable outline."""
+    paragraphs = [p.strip() for p in text.split('\n\n') if p.strip()]
+    if len(paragraphs) < 4:
+        return None
+
+    heading_indexes = [
+        i for i, paragraph in enumerate(paragraphs)
+        if _looks_like_chapter_heading(paragraph)
+    ]
+    if len(heading_indexes) < 2:
+        return None
+    # Too many "headings" means the detector is matching body text.
+    if len(heading_indexes) > max(3, len(paragraphs) // 8):
+        return None
+    # First heading should not be buried after most of the book.
+    if heading_indexes[0] > max(20, len(paragraphs) // 3):
+        return None
+
+    chapters: List[str] = []
+    # Keep a short preface before the first chapter heading when present.
+    if heading_indexes[0] > 0:
+        preface = '\n\n'.join(paragraphs[:heading_indexes[0]]).strip()
+        if preface:
+            chapters.append(preface)
+
+    for index, start in enumerate(heading_indexes):
+        end = heading_indexes[index + 1] if index + 1 < len(heading_indexes) else len(paragraphs)
+        body = '\n\n'.join(paragraphs[start:end]).strip()
+        if body:
+            chapters.append(body)
+
+    return chapters if len(chapters) >= 2 else None
+
+
+def _looks_like_chapter_heading(paragraph: str) -> bool:
+    """True for a short paragraph that opens a chapter."""
+    if '\n' in paragraph:
+        return False
+    stripped = paragraph.strip()
+    if len(stripped) < 3 or len(stripped) > 80:
+        return False
+    if CHAPTER_HEADING.match(stripped):
+        return True
+    # All-caps titles: "THE BOY WHO LIVED". Reject lines that are mostly digits.
+    letters = sum(1 for char in stripped if char.isalpha())
+    if letters >= 3 and ALL_CAPS_HEADING.match(stripped) and stripped == stripped.upper():
+        return True
+    return False
 
 
 def _strip_page_furniture(pages: List[List[str]]) -> List[List[str]]:
