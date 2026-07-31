@@ -3,14 +3,22 @@
 Professional literary translation software for translating entire TXT, EPUB, and PDF books with local Ollama models, document glossaries, guarded refinement, and side-by-side review.
 
 ```bash
+# macOS / Linux
 git clone https://github.com/KazKozDev/book-translator.git && cd book-translator && python3 launch.py
+
+# Windows (PowerShell or cmd, after cloning)
+git clone https://github.com/KazKozDev/book-translator.git
+cd book-translator
+py -3 launch.py
 ```
 
 <p align="center">
-  <a href="Launch%20Book-Translator.command"><img src="assets/badges/macos.png" alt="macOS" height="36"></a>
-  <a href="Launch%20Book-Translator.sh"><img src="assets/badges/linux.png" alt="Linux" height="36"></a>
-  <a href="Launch%20Book-Translator.bat"><img src="assets/badges/windows.png" alt="Windows" height="36"></a>
+  <a href="Launch%20Book-Translator.command"><img src="assets/badges/macos.png" alt="macOS" height="30"></a>
+  <a href="Launch%20Book-Translator.bat"><img src="assets/badges/windows.png" alt="Windows" height="30"></a>
+  <a href="Launch%20Book-Translator.sh"><img src="assets/badges/linux.png" alt="Linux" height="30"></a>
 </p>
+
+<p align="center">Launchers after clone — not App Store downloads. Double-click <code>.command</code> / <code>.bat</code>, or run <code>.sh</code>.</p>
 
 ![Tolmach offline AI book translator for EPUB, PDF, and novels](assets/demo-polished.gif)
 
@@ -20,7 +28,7 @@ Open source · Local by default · No API key required
 
 ## Quick start
 
-1. Run the command above. It clones the current repository and starts `launch.py`. The launcher creates `venv`, installs the Python dependencies, checks Ollama and the required local models, starts Tolmach at `http://localhost:5001`, and opens it in your browser.
+1. Run the command above. On macOS and Linux it clones the repository and starts `launch.py`; on Windows, clone first, then run `py -3 launch.py` or double-click `Launch Book-Translator.bat`. The launcher creates `venv`, installs the Python dependencies, checks Ollama and the required local models, starts Tolmach at `http://localhost:5001`, and opens it in your browser.
 
 2. Open **Settings**, choose a local model for each role, and click **Save setup**.
 
