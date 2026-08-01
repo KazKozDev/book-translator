@@ -203,6 +203,7 @@ Glossary   Ollama   Verifier
 - **macOS or Linux** for the one-command installer. Windows users can run the repository launcher.
 - **Ollama** running on the same computer.
 - The minimum local setup is `translategemma:12b` for translation plus `gemma4:31b` for the other roles. For a more independent refinement check, choose a third instruct model as Verifier.
+- A stack that personally produced good results for the author: Glossary preparation `gemma4:31b-cloud` (32.7B), Translation `translategemma:27b` (27.4B), Refinement `gemma4:31b-cloud` (32.7B), Verifier and Judge `mistral-large-3:675b-cloud` (675B) (cloud open-source models).
 - Enough memory and disk space for the models you choose.
 - Internet access on the first run to download Python dependencies, Ollama models, and optional Hugging Face components.
 - Supported languages: English, Russian, Spanish, French, German, Italian, Portuguese, Chinese, Japanese, and Korean.
@@ -214,6 +215,7 @@ The installer uses an existing Python 3.10+ installation when available. Otherwi
 ## Limitations
 
 - Tolmach is not a one-prompt translator. A finished book needs the staged workflow (glossary → START → CONTINUE → review) and several local model roles working in sequence; expecting chat-app turnaround will disappoint.
+- Translation quality depends heavily on the model stack. A stack that personally produced good results for the author is Glossary preparation `gemma4:31b-cloud` (32.7B), Translation `translategemma:27b` (27.4B), Refinement `gemma4:31b-cloud` (32.7B), Verifier and Judge `mistral-large-3:675b-cloud` (675B) (cloud open-source models). Smaller local models still run; expect lower quality.
 - A long Start run keeps going if you close the browser tab; use **Resume** in History to continue from the last finished chunk after an interrupt or server restart. A full machine sleep or Ollama crash still stops the model calls themselves.
 - Tolmach accepts TXT, EPUB, PDF, and DOCX. A scanned PDF without a text layer is refused; layout/images are not preserved.
 - Translating a complete book can take 10–15 hours on local hardware.

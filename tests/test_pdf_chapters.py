@@ -1,7 +1,5 @@
 """PDF chapter detection from headings (outline-free fixtures)."""
 
-from pathlib import Path
-
 import pdf_io
 from test_pdf_upload import _pdf, _written
 
