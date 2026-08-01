@@ -41,9 +41,15 @@ ENV/
 .idea/
 .vscode/
 .qodo/
+.cursor/
 *.swp
 *.swo
 .DS_Store
+
+# HyperFrames agent skills (local video tooling; not part of Tolmach)
+.agents/
+.claude/skills/
+skills-lock.json
 
 # Logs outside the runtime directory
 *.log
