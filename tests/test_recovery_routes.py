@@ -12,6 +12,13 @@ import pytest
 import translator as app_module
 
 
+class _HealthyOllama:
+    """The single response shape ``check_ollama`` looks at."""
+
+    def raise_for_status(self):
+        return None
+
+
 def _insert_failed(conn, translation_id, *, age_days=0):
     conn.execute(
         '''
@@ -30,6 +37,13 @@ def recovery_app(tmp_path, monkeypatch):
     database_path = tmp_path / 'translations.db'
     monkeypatch.setattr(app_module, 'DB_PATH', str(database_path))
     app_module.init_db()
+
+    # Neither route is exempt from the Ollama health check, so without this
+    # they answer 503 on any machine that is not running Ollama — which is
+    # every CI runner. The check itself is not what these tests are about.
+    monkeypatch.setattr(
+        app_module.requests, 'get', lambda *args, **kwargs: _HealthyOllama(),
+    )
 
     with sqlite3.connect(database_path) as conn:
         _insert_failed(conn, 1)
