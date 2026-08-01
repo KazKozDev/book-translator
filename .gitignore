@@ -51,6 +51,9 @@ ENV/
 .claude/skills/
 skills-lock.json
 
+# HyperFrames promo project workspace (renders live under assets/ when needed)
+videos/
+
 # Logs outside the runtime directory
 *.log
 
