@@ -2946,44 +2946,40 @@ class BookTranslator(QualityTests):
 
 
 # Translation Recovery
-class TranslationRecovery:
-    def __init__(self, db_path: str = DB_PATH):
-        self.db_path = db_path
-        
-    def get_failed_translations(self) -> List[Dict]:
-        with sqlite3.connect(self.db_path) as conn:
-            conn.row_factory = sqlite3.Row
-            cur = conn.execute('''
-                SELECT * FROM translations 
-                WHERE status = 'error'
-                ORDER BY created_at DESC
-            ''')
-            return [dict(row) for row in cur.fetchall()]
-        
-    def retry_translation(self, translation_id: int):
-        with sqlite3.connect(self.db_path) as conn:
-            conn.execute('''
-                UPDATE translations
-                SET status = 'pending', progress = 0, error_message = NULL,
-                    current_chunk = 0, updated_at = CURRENT_TIMESTAMP
-                WHERE id = ?
-            ''', (translation_id,))
-            
-            conn.execute('''
-                UPDATE chunks
-                SET status = 'pending', error_message = NULL
-                WHERE translation_id = ? AND status = 'error'
-            ''', (translation_id,))
-            
-    def cleanup_failed_translations(self, days: int = 7):
-        with sqlite3.connect(self.db_path) as conn:
-            conn.execute(
-                "DELETE FROM translations WHERE status = 'error' "
-                "AND created_at < datetime('now', ?)",
-                (f'-{int(days)} days',),
-            )
-            
-recovery = TranslationRecovery()
+def _load_failed_translations() -> List[Dict]:
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.row_factory = sqlite3.Row
+        cur = conn.execute('''
+            SELECT * FROM translations
+            WHERE status = 'error'
+            ORDER BY created_at DESC
+        ''')
+        return [dict(row) for row in cur.fetchall()]
+
+
+def _retry_failed_translation(translation_id: int):
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.execute('''
+            UPDATE translations
+            SET status = 'pending', progress = 0, error_message = NULL,
+                current_chunk = 0, updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+        ''', (translation_id,))
+
+        conn.execute('''
+            UPDATE chunks
+            SET status = 'pending', error_message = NULL
+            WHERE translation_id = ? AND status = 'error'
+        ''', (translation_id,))
+
+
+def _cleanup_failed_translations(days: int = 7):
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.execute(
+            "DELETE FROM translations WHERE status = 'error' "
+            "AND created_at < datetime('now', ?)",
+            (f'-{int(days)} days',),
+        )
 
 # Health checking middleware
 @app.before_request
@@ -5251,12 +5247,12 @@ def export_epub():
 @app.route('/failed-translations', methods=['GET'])
 @with_error_handling
 def get_failed_translations():
-    return jsonify(recovery.get_failed_translations())
+    return jsonify(_load_failed_translations())
 
 @app.route('/retry-translation/<int:translation_id>', methods=['POST'])
 @with_error_handling
 def retry_failed_translation(translation_id):
-    recovery.retry_translation(translation_id)
+    _retry_failed_translation(translation_id)
     return jsonify({'status': 'success'})
 
 @app.route('/metrics', methods=['GET'])
@@ -5303,7 +5299,7 @@ def cleanup_old_data():
                 logger.app_logger.error(f"Cache cleanup error: {str(e)}")
 
             try:
-                recovery.cleanup_failed_translations()
+                _cleanup_failed_translations()
                 logger.app_logger.debug("Failed translations cleanup completed")
             except Exception as e:
                 logger.app_logger.error(f"Failed translations cleanup error: {str(e)}")

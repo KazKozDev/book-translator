@@ -33,7 +33,7 @@ LOG_FOLDER = os.environ.get('TOLMACH_LOG_DIR', 'logs')
 
 
 class AppLogger:
-    def __init__(self, log_dir='logs'):
+    def __init__(self, log_dir):
         self.log_dir = log_dir
         os.makedirs(log_dir, exist_ok=True)
         

@@ -9,9 +9,17 @@ import hashlib
 import json
 import re
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, TypedDict
 
 import prompts
+
+
+class ExactReplacement(TypedDict):
+    """One enforced ``exact`` rule: the term, and how often it was rewritten."""
+
+    source: str
+    target: str
+    count: int
 
 
 @dataclass(frozen=True)
@@ -114,7 +122,7 @@ class TerminologyManager:
             if term.mode == "exact" and term.target.casefold() not in translated_folded
         ]
 
-    def enforce_exact_source_forms(self, translated_text: str) -> Tuple[str, List[Dict[str, str]]]:
+    def enforce_exact_source_forms(self, translated_text: str) -> Tuple[str, List[ExactReplacement]]:
         """Replace an exact term only when the model leaked its source form.
 
         A glossary is still provided to the model as translation context: it
@@ -125,7 +133,7 @@ class TerminologyManager:
         for fresh generations and cached chunks.  ``inflectable`` and
         ``preferred`` terms are intentionally never rewritten this way.
         """
-        replacements: List[Dict[str, str]] = []
+        replacements: List[ExactReplacement] = []
         result = translated_text
         for term in self.terms:
             if term.mode != "exact" or term.source.casefold() == term.target.casefold():
