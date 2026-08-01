@@ -27,10 +27,6 @@ py -3 launch.py
   </video>
 </p>
 
-<p align="center">
-  <a href="https://www.youtube.com/watch?v=-lMNAKOp1Kc" target="_blank" rel="noopener noreferrer">▶ Full video on YouTube</a>
-</p>
-
 ---
 
 ## Quick start
@@ -212,7 +208,8 @@ The installer uses an existing Python 3.10+ installation when available. Otherwi
 
 </details>
 
-## Limitations
+<details>
+<summary>Limitations</summary>
 
 - Tolmach is not a one-prompt translator. A finished book needs the staged workflow (glossary → START → CONTINUE → review) and several local model roles working in sequence; expecting chat-app turnaround will disappoint.
 - Translation quality depends heavily on the model stack. A stack that personally produced good results for the author is Glossary preparation `gemma4:31b-cloud` (32.7B), Translation `translategemma:27b` (27.4B), Refinement `gemma4:31b-cloud` (32.7B), Verifier and Judge `mistral-large-3:675b-cloud` (675B) (cloud open-source models). Smaller local models still run; expect lower quality.
@@ -224,6 +221,8 @@ The installer uses an existing Python 3.10+ installation when available. Otherwi
 - Optional glossary verification sends the glossary and language pair—not the full book—to the selected API provider and may cost money.
 - COMET-Kiwi is optional, downloads a multi-gigabyte gated checkpoint, and requires Hugging Face access.
 - Tolmach does not currently provide an official Docker image.
+
+</details>
 
 <details>
 <summary>Manual installation, Docker, development setup</summary>
