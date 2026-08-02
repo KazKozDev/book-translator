@@ -38,9 +38,10 @@ def recovery_app(tmp_path, monkeypatch):
     monkeypatch.setattr(app_module, 'DB_PATH', str(database_path))
     app_module.init_db()
 
-    # Neither route is exempt from the Ollama health check, so without this
-    # they answer 503 on any machine that is not running Ollama — which is
-    # every CI runner. The check itself is not what these tests are about.
+    # Retrying is not exempt from the Ollama health check, so without this it
+    # answers 503 on any machine that is not running Ollama — which is every
+    # CI runner. The check itself is not what these tests are about; the one
+    # test that does care about it overrides this again.
     monkeypatch.setattr(
         app_module.requests, 'get', lambda *args, **kwargs: _HealthyOllama(),
     )
@@ -69,6 +70,22 @@ def recovery_app(tmp_path, monkeypatch):
 
 def test_failed_translations_lists_only_errors(recovery_app):
     client, _ = recovery_app
+
+    response = client.get('/failed-translations')
+
+    assert response.status_code == 200
+    assert [row['id'] for row in response.get_json()] == [1]
+
+
+def test_failed_translations_survives_a_stopped_ollama(recovery_app, monkeypatch):
+    """Listing failures is a local database read, and it is wanted precisely
+    when the pipeline is down — same reason delete_translation is exempt."""
+    client, _ = recovery_app
+
+    def refuse(*args, **kwargs):
+        raise app_module.requests.exceptions.ConnectionError('Ollama is down')
+
+    monkeypatch.setattr(app_module.requests, 'get', refuse)
 
     response = client.get('/failed-translations')
 

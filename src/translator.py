@@ -2988,7 +2988,8 @@ def check_ollama():
     # stopped, so a user can clear old or failed translations.
     exempt_endpoints = {
         'health_check', 'serve_frontend', 'serve_static', 'delete_translation',
-        'get_translation', 'get_translations', 'get_review_chunks',
+        'get_translation', 'get_translations', 'get_failed_translations',
+        'get_review_chunks',
         'update_review_chunk', 'download_translation',
         'stream_translation_progress',
         'source_preview', 'get_workspace_glossary', 'save_workspace_glossary',
