@@ -5,7 +5,8 @@ Professional literary translation software for translating entire TXT, EPUB, PDF
 ```bash
 # macOS / Linux
 git clone https://github.com/KazKozDev/book-translator.git && cd book-translator && python3 launch.py
-
+```
+```bash
 # Windows (PowerShell or cmd, after cloning)
 git clone https://github.com/KazKozDev/book-translator.git
 cd book-translator
