@@ -867,7 +867,7 @@
                     <p class="form-hint" id="prepareStatus" data-default="Upload the source text with → 1 UPLOAD below, then click → PREPARE. The app scans the text, collects names and repeated terms, and fills the list on the left. This step is optional, but it improves translation quality and keeps names consistent across the whole book.">Upload the source text with → 1 UPLOAD below, then click → PREPARE. The app scans the text, collects names and repeated terms, and fills the list on the left. This step is optional, but it improves translation quality and keeps names consistent across the whole book.</p>
                     <p class="form-hint">Review the list before you start: delete what you don't need, correct a wrong translation, add what the scan missed. Entries can be edited until you click → 2 START.</p>
                     <p class="form-hint">Format: <code>source term =&gt; translation [| mode] {note}</code><br>One entry per line. The <code>=&gt;</code> is required. If you omit the mode, inflectable is used.</p>
-                    <p class="form-hint">A <code>{note}</code> is optional free text in braces at the end of the line — anything you know that the source does not say outright: <code>Rom =&gt; Rom | inflectable {c'est un garçon de huit ans}</code>. The model is told to follow it; no test can check it. Write it in the language you are translating into, since that is the text the note has to shape. Notes are never sent to an external verifier and never changed by one.</p>
+                    <p class="form-hint">A <code>{note}</code> is optional free text in braces at the end of the line — anything you know that the source does not say outright: <code>Rom =&gt; Rom | inflectable {c'est un garçon de huit ans}</code>. The model is told to follow it; no test can check it. Write it in the language you are translating into, since that is the text the note has to shape. <strong>Copy frontier prompt</strong> can propose notes for you: the model identifies the book from its title and author, researches the lore, and adds a note only where it is certain. Read them before you paste the answer back — a wrong note is one the translator will obey.</p>
 
                     <section class="guide-section" aria-labelledby="guideModesTitle">
                         <h3 id="guideModesTitle">MODES</h3>
@@ -1284,6 +1284,10 @@
         const PANEL_PREVIEW_LIMIT = 12000;
         let selectedFile = null;
         let sourcePreviewToken = 0;
+        // Title and author as the book file itself states them. Empty for a
+        // plain TXT upload, which carries no metadata — the copied frontier
+        // prompt says "unknown" rather than inviting a guess.
+        let sourceBookIdentity = { title: '', author: '' };
         let translationPreviews = {};
         let allTranslations = [];
         let historySearchQuery = '';
@@ -1853,6 +1857,10 @@
                         glossary: document.getElementById('glossary').value,
                         sourceLanguage: document.getElementById('sourceLanguage').value,
                         targetLanguage: document.getElementById('targetLanguage').value,
+                        // Sent so the frontier model can identify the work and
+                        // research the lore behind a note instead of guessing.
+                        bookTitle: sourceBookIdentity.title,
+                        bookAuthor: sourceBookIdentity.author,
                     }),
                 });
                 const data = await response.json().catch(() => ({}));
@@ -3436,6 +3444,7 @@
 
         function handleFileSelect(file) {
             selectedFile = file;
+            sourceBookIdentity = { title: '', author: '' };
             selectedDocumentFingerprint = null;
             loadWorkspaceGlossaryForSelectedDocument();
             forgetActiveTranslation();
@@ -3508,6 +3517,14 @@
                     originalPanel.textContent = data.truncated
                         ? `${data.preview}\n\n[Showing the first ${SOURCE_PREVIEW_LIMIT.toLocaleString()} characters. The full book will be translated.]`
                         : data.preview;
+                    // The file's own metadata, not its name: a frontier model
+                    // asked to research a character's lore has to be told which
+                    // work this is, and a filename stem guesses at the title
+                    // and its volume far too easily.
+                    sourceBookIdentity = {
+                        title: (data.title || '').trim(),
+                        author: (data.author || '').trim(),
+                    };
                     updatePanelMeta('originalText');
                     document.getElementById('deckStatus').textContent = `${file.name} ready · Press START to translate`;
                 } catch (error) {
@@ -4063,6 +4080,7 @@
             if (!refinement) return;
             const found = Number(refinement.errors_found || 0);
             const applied = Number(refinement.errors_applied || 0);
+            const refused = Number(refinement.errors_dropped || 0);
             const rejected = Number(refinement.patches_rejected || 0);
             const positionBiases = Number(refinement.position_biases || 0);
             const neutralChecks = Number(refinement.neutral_checks || 0);
@@ -4077,6 +4095,7 @@
             status.classList.toggle('has-violations', rejected > 0 || failures > 0);
 
             const notes = [];
+            if (refused) notes.push(`${refused} reported error(s) refused by a guard (source text, wrong language, text loss, or a duplicate of what follows) — the draft was left as it was`);
             if (rejected) notes.push(`${rejected} patch(es) vetoed by the verifier`);
             if (positionBiases) notes.push(`${positionBiases} position bias event(s) detected`);
             if (neutralChecks) notes.push(`${neutralChecks} neutral edit check(s) run`);

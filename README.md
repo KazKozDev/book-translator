@@ -99,9 +99,11 @@ Review this list before starting the translation: delete noise, correct a wrong 
 - `inflectable` lets the model change the grammatical form.
 - `preferred` tells the model which wording to favor.
 
-An entry may end with an optional `{note}` — free text for what you know that the book does not state outright, such as the gender of a name. The Translation and Refinement models are told to follow it; no test can check it. Write it in the language you are translating into, since that is the text the note has to shape. A note is never sent to an external verifier, and one can never change or invent a note.
+An entry may end with an optional `{note}` — free text for what you know that the book does not state outright, such as the gender of a name. The Translation and Refinement models are told to follow it; no test can check it. Write it in the language you are translating into, since that is the text the note has to shape.
 
-The glossary belongs only to this book and language pair. If you configure an optional external provider, **Verify automatically** can check the glossary and show proposed changes; Tolmach applies nothing until you approve it.
+**Copy frontier prompt** also offers to write notes for you. It tells the model which book this is from the title and author in the file's metadata, asks it to research the lore, and asks for a note only where it is certain — so read them before pasting the answer back. A wrong note is one the translator will obey.
+
+The glossary belongs only to this book and language pair. If you configure an optional external provider, **Verify automatically** can check the glossary and show proposed changes; Tolmach applies nothing until you approve it. That path deliberately never sees your notes and can never write one.
 
 ## Review a novel translation side by side
 

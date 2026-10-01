@@ -18,6 +18,7 @@ These required renderings are missing from the translation and must be reported 
 
 Find places where the Russian translation is WRONG about the source. Report only real errors:
 - mistranslation — the Russian says something the source does not
+- untranslated — a stretch of the text is still in English, left as it was
 - omission — something in the source is missing from the translation
 - addition — the translation invents something not in the source
 - terminology — a required rendering from the list above was not used
@@ -27,12 +28,20 @@ Find places where the Russian translation is WRONG about the source. Report only
 
 Do NOT report anything that is merely a matter of taste: a synonym you prefer, a smoother rhythm, a more literary word choice. If the translation is accurate, return an empty list.
 
+If a passage is still in English, report it as `untranslated` and write its Russian translation as the replacement. Never report a passage of English as `omission`: an omission is something that is not there at all, and leaving the source text in its place is a different fault with a different fix.
+
+A required rendering is the form the list above gives for that term, not the English spelling of it. A word of the English is never a rendering, however well it fits.
+
+A display page — a title broken across lines, an inscription, a sign — is text to be translated, not a layout to be reported against the source word for word. Read it as a sentence and judge the translation of it.
+
 Respond with ONLY a JSON array, no prose, no code fence. Each element:
 {"span": "<the exact substring of the Russian translation that is wrong, copied character for character>", "type": "<one of the categories above>", "severity": "critical|major|minor", "replacement": "<what that span should say instead>"}
 
 Rules:
 - "span" MUST appear in the Russian translation above exactly as you write it. Copy it, do not paraphrase or re-type it from memory.
-- Keep spans short — a few words, not whole paragraphs.
+- Keep spans short — a few words, not whole paragraphs. The exception is a stretch left in English: take all of it, because a span that covers only part of an untranslated passage leaves the rest of the English in the book.
 - "replacement" fixes only that span and must fit grammatically where the span sat.
-- For an omission, let "span" be the words the missing content belongs next to, and "replacement" those same words with the content restored.
+- "replacement" must be written in Russian. Copying the English text into it is the one thing that must never happen: the reader is trying to read the other language.
+- For an omission, let "span" be the words the missing content belongs next to, and "replacement" those same words with the content restored in Russian.
+- For an untranslated stretch, let "span" be the English text that was left in place, and "replacement" its Russian translation.
 - At most 12 elements. If there is nothing wrong, respond with [].

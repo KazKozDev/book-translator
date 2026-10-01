@@ -14,10 +14,11 @@ import threading
 import signal
 import re
 import sys
+import unicodedata
 from io import BytesIO
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
-from functools import wraps
+from functools import lru_cache, wraps
 from pathlib import Path
 from queue import Empty, Queue
 
@@ -304,7 +305,21 @@ def _heal_orphaned_runs() -> None:
 #       model rather than on the one that wrote the draft
 #   v5: tie/position-biased votes get a position-free edit check, and the
 #       verifier identity is part of the cache key
-STAGE2_PIPELINE_VERSION = 'v5'
+#   v6: a replacement that carries the source text into the page, or that
+#       deletes the span it replaces, is dropped before patching, and a patch
+#       covering more than a quarter of the draft is put back under the
+#       verifier instead of trusted on its category
+#   v7: a replacement written in the source language is dropped on its
+#       language alone, which is the only check that catches a paraphrase
+#   v8: a replacement that restates the draft text following its span is
+#       dropped, which is what printed a five-sentence paragraph twice
+#   v9: `untranslated` is applied at any severity like a fact rather than an
+#       opinion, the "would delete text" guard compares across scripts instead
+#       of counting characters, the language guard stands down when source and
+#       target are the same language, a chunk that is still written in the
+#       source language is named to the reviewer outright, and dropped errors
+#       are counted per guard instead of vanishing from the chunk log
+STAGE2_PIPELINE_VERSION = 'v9'
 
 
 # Error handling setup
@@ -533,6 +548,26 @@ from epub_io import (  # noqa: E402
 # plain text (and optional chapters) and nothing downstream knows the container.
 from pdf_io import is_pdf_filename, extract_pdf_book  # noqa: E402
 from docx_io import is_docx_filename, extract_docx_book  # noqa: E402
+
+
+def _fold_for_comparison(text: str) -> str:
+    """Text reduced to what two writings of the same words still share.
+
+    Case, punctuation, quote style and diacritics are the things a model
+    changes while copying, so they are dropped before anything is compared: a
+    French sentence and its own source sentence are identical here, and a
+    diacritic the model retyped is not a different sentence.
+
+    A module-level function rather than a method because the class body needs
+    it while it is still being defined — the function-word tables are folded
+    through the same reduction as the text they are matched against, or a
+    marker written `où` would never meet the `ou` that comes out of it.
+    """
+    plain = unicodedata.normalize('NFKD', text)
+    plain = ''.join(
+        char for char in plain if not unicodedata.combining(char)
+    )
+    return re.sub(r'[\W_]+', ' ', plain.casefold(), flags=re.UNICODE).strip()
 
 
 # The Stage 3 quality tests are the other half of this class, kept in
@@ -1862,6 +1897,7 @@ class BookTranslator(QualityTests):
             used_terms = set()
             final_violation_count = 0
             errors_found = errors_applied = patches_rejected = 0
+            errors_dropped = 0
             position_biases = neutral_checks = 0
             # "Nothing changed" has three different causes — a clean draft, a
             # vetoed patch, a review call that never answered — and they used
@@ -1959,6 +1995,7 @@ class BookTranslator(QualityTests):
                         )
                         errors_found += stage2_details.get('errors_found', 0)
                         errors_applied += stage2_details.get('errors_applied', 0)
+                        errors_dropped += stage2_details.get('errors_dropped', 0)
                         verified = stage2_details.get('verified')
                         if isinstance(verified, dict) and not verified.get('accepted'):
                             patches_rejected += 1
@@ -2119,6 +2156,7 @@ class BookTranslator(QualityTests):
                 'refinement': {
                     'errors_found': errors_found,
                     'errors_applied': errors_applied,
+                    'errors_dropped': errors_dropped,
                     'patches_rejected': patches_rejected,
                     'position_biases': position_biases,
                     'neutral_checks': neutral_checks,
@@ -2131,12 +2169,14 @@ class BookTranslator(QualityTests):
             }
             logger.translation_logger.info(
                 "Stage 2 finished for translation %s: %s of %s reviewed chunk(s) "
-                "changed, %s error(s) found, %s patched, %s patch(es) vetoed by "
-                "verifier %s, %s position bias event(s), %s neutral edit "
-                "check(s), %s review call(s) gave no answer",
+                "changed, %s error(s) found, %s patched, %s refused by the "
+                "guards, %s patch(es) vetoed by verifier %s, %s position bias "
+                "event(s), %s neutral edit check(s), %s review call(s) gave no "
+                "answer",
                 translation_id, chunks_changed, chunks_reviewed, errors_found,
-                errors_applied, patches_rejected, self.verifier_model,
-                position_biases, neutral_checks, review_failures,
+                errors_applied, errors_dropped, patches_rejected,
+                self.verifier_model, position_biases, neutral_checks,
+                review_failures,
             )
 
         except GeneratorExit:
@@ -2565,10 +2605,21 @@ class BookTranslator(QualityTests):
     ERROR_TYPES = {
         'mistranslation', 'omission', 'addition',
         'terminology', 'consistency', 'grammar', 'style', 'other',
+        # Kept as its own category rather than folded into 'mistranslation',
+        # so the review desk can say what is actually wrong: a passage left in
+        # the source language is a different fault from a meaning that was
+        # got wrong, and it has a different fix. Applied at any severity,
+        # because a passage in the wrong language is not a matter of degree —
+        # it is either translated or it is not. It is deliberately *not* in
+        # OBJECTIVE_ERROR_TYPES: restoring a whole paragraph is a rewrite, and
+        # this one still has to face the verifier like any other.
+        'untranslated',
     }
     ERROR_TYPE_ALIASES = {
         'accuracy': 'mistranslation', 'mistranslated': 'mistranslation',
-        'missing': 'omission', 'omitted': 'omission', 'untranslated': 'mistranslation',
+        'missing': 'omission', 'omitted': 'omission',
+        'left untranslated': 'untranslated', 'untranslated text': 'untranslated',
+        'not translated': 'untranslated', 'source language': 'untranslated',
         'added': 'addition', 'hallucination': 'addition',
         'term': 'terminology', 'glossary': 'terminology',
         'inconsistency': 'consistency', 'inconsistent': 'consistency',
@@ -2581,6 +2632,14 @@ class BookTranslator(QualityTests):
     # are also the categories whose severity does not matter — a missing
     # required rendering is worth fixing at any label the reviewer put on it.
     OBJECTIVE_ERROR_TYPES = {'terminology', 'consistency'}
+    # The categories whose severity does not gate the edit, which is not the
+    # same list as the ones that skip the judge. A glossary rendering and a
+    # passage left in the source language are both facts about the two texts
+    # rather than opinions about them, so they are worth applying however the
+    # reviewer labelled them — a reviewer that calls an untranslated paragraph
+    # "minor" is right about it being a small passage and wrong about it being
+    # a small problem, and the reader is holding the English either way.
+    ACTIONABLE_AT_ANY_SEVERITY = OBJECTIVE_ERROR_TYPES | {'untranslated'}
     # What the verifier is not asked about. Whether a sentence of the source
     # is missing from the translation, or a clause appears that the source
     # never said, is settled by reading the two texts — the A/B "which reads
@@ -2595,13 +2654,66 @@ class BookTranslator(QualityTests):
     # good "испарилось" with "полностью покинуло его" and the verifier waved
     # it through, because on that axis there is nothing to be wrong about.
     ACTIONABLE_ERROR_TYPES = {
-        'mistranslation', 'omission', 'addition', 'terminology', 'consistency', 'grammar',
+        'mistranslation', 'omission', 'addition', 'terminology', 'consistency',
+        'grammar', 'untranslated',
     }
     # And below major severity, only the objectively checkable categories are
     # worth touching the text for. A "minor mistranslation" on a local judge
     # is mostly the judge preferring a synonym.
     ACTIONABLE_SEVERITIES = {'critical', 'major'}
     MAX_ESTIMATE_SPANS = 12
+    # The judge-exempt categories below rest on a claim — "a sentence of the
+    # source is either translated or missing" — that only holds while the
+    # patch stays the size of the thing it corrects. A missing word and a
+    # missing paragraph are both `omission`, and only one of them is a fact
+    # anyone checked. Past this share of the draft, the patch is a rewrite
+    # wearing a category's clothes, and it goes to the verifier like any
+    # other.
+    #
+    # Observed on a real chapter opening: nine `omission` errors whose
+    # replacements were the English source sentences, covering 88% of the
+    # draft, applied unverified because every one of them was judge-exempt.
+    MAX_JUDGE_EXEMPT_SHARE = 0.25
+    # Two shapes of answer the reviewer must never be allowed to write into
+    # the book, both of them ways of losing the reader's text rather than
+    # improving it. Neither is a judgement call about quality: each is
+    # checked against the two texts the pass already holds.
+    #
+    # Observed on a real chapter opening, where a display block ("WANTED /
+    # HER / TO / BE / MAD / AT / ME") was rendered as French prose by Stage 1
+    # and the review pass then reported the whole page as nine `omission`
+    # errors whose replacements were the English source sentences, copied
+    # verbatim. Because `omission` is judge-exempt the patch was applied
+    # unverified, and a third of a chapter went back to English.
+    #
+    # A replacement that carries the source text into the page is not a
+    # translation of it, and a replacement that is a fraction of the span it
+    # replaces is a hole where a sentence used to be. Both fall back to
+    # leaving the draft alone.
+    DELETED_TEXT_MIN_RATIO = 0.4
+    MIN_SPAN_FOR_LOSS_CHECK = 20
+    #: The same guard for a replacement written in a different script from the
+    #: span it replaces. Chinese and Japanese are denser than any Latin
+    #: language by a factor of two or three, so a *correct* translation of a
+    #: paragraph comes out at a fraction of its character length and the ratio
+    #: above would read it as a deletion — which is how a fix that exists
+    #: precisely to put the missing text back would be the one thing refused.
+    #: Low enough that a real Chinese rendering of an English paragraph clears
+    #: it, high enough that three words in place of a paragraph do not.
+    CROSS_SCRIPT_DELETED_MIN_RATIO = 0.15
+    # Words of the source that have to appear, unbroken and in order, inside a
+    # replacement before it counts as copied text. High enough that a name
+    # kept in the target language never reaches it, low enough to catch the
+    # case where the model kept the words it was fixing and appended the
+    # source sentence after them.
+    COPIED_REPLACEMENT_MIN_RUN = 6
+    #: Same idea, applied to the draft rather than the source: how many words
+    #: a replacement may share with the text *after* its span before the edit
+    #: counts as printing that passage twice. Higher than the copy threshold,
+    #: because here the two texts are the same language and a coincidence of
+    #: common words is likelier — a fix that begins "Elle a dit que…" beside a
+    #: passage that also begins "Elle a dit que…" is not a duplicate.
+    REPEATED_TEXT_MIN_RUN = 9
     # The verifier is meant to be a larger model than the reviewer, and it is
     # shown the source plus two full versions of the chunk. The shared 180s is
     # a timeout for per-chunk translation, not for that; a verifier that runs
@@ -2619,7 +2731,7 @@ class BookTranslator(QualityTests):
         """
         if error['type'] not in cls.ACTIONABLE_ERROR_TYPES:
             return False
-        if error['type'] in cls.OBJECTIVE_ERROR_TYPES:
+        if error['type'] in cls.ACTIONABLE_AT_ANY_SEVERITY:
             return True
         return error['severity'] in cls.ACTIONABLE_SEVERITIES
 
@@ -2636,8 +2748,329 @@ class BookTranslator(QualityTests):
             max_spans=self.MAX_ESTIMATE_SPANS,
         )
 
+    @staticmethod
+    @lru_cache(maxsize=64)
+    def _comparable(text: str) -> str:
+        """Text reduced to what two writings of the same words still share.
+
+        Case, punctuation, quote style and diacritics are the things a model
+        changes while copying, so they are dropped before anything is
+        compared: the French output of a French source sentence is identical
+        here, and a diacritic the model retyped is not a different sentence.
+
+        Cached, because this runs on the same handful of long strings — the
+        draft, the source, the text following a span — once per reported
+        error, and folding a full chunk again for each of a dozen edits is the
+        most expensive thing in a pass that never calls a model.
+        """
+        return _fold_for_comparison(text)
+
+    # Function words per language, enough of them to recognise a sentence as
+    # being written in that language. Deliberately not a full stopword list:
+    # this is asked "is this text in the source language?", and a handful of
+    # very common words answers that for a sentence while a name or a number
+    # never reaches the bar. Kept here rather than pulled from a package
+    # because it is the only language knowledge the pipeline needs inline, and
+    # the alternative — running the language-ID model once per reported span —
+    # is a model call on the hot path of every chunk.
+    #
+    # Two things are deliberately absent. Words shared with a language the book
+    # might be translated *into* are left out (`pt` and `it` against `es`,
+    # `de` against `en`): the guard asks one direction only, and a marker that
+    # is also a correct word of the target language fires on good French and
+    # good Portuguese alike. And there is no `zh` or `ja` entry at all, because
+    # a word list cannot be read out of a text that has no spaces — every
+    # marker below is matched against whitespace-separated tokens, and for
+    # those two scripts the table would look armed while being unreachable.
+    # Chinese and Japanese source text is still covered by the run check,
+    # which needs no word boundaries.
+    #
+    # Folded through the same reduction the text is folded through before the
+    # comparison, so that `où` in the table meets `ou` in the text. Written out
+    # as it is spoken, with the accents, a marker carrying one was dead: the
+    # tokens arriving from `_comparable` have had theirs stripped, and a set
+    # lookup is not a normalisation.
+    _FUNCTION_WORDS = {
+        code: {_fold_for_comparison(word) for word in words}
+        for code, words in {
+        'en': {
+            'the', 'a', 'an', 'and', 'or', 'but', 'of', 'to', 'in', 'on',
+            'at', 'for', 'with', 'is', 'was', 'were', 'are', 'be', 'been',
+            'it', 'its', 'he', 'she', 'they', 'we', 'you', 'i', 'his', 'her',
+            'their', 'this', 'that', 'not', 'have', 'has', 'had', 'would',
+            'could', 'should', 'will', 'can', 'do', 'does', 'did', 'said',
+            'went', 'come', 'came', 'from', 'what', 'where', 'how', 'there',
+            # The display case. A chapter opening renders as "WANTED / HER /
+            # TO / BE / MAD / AT / ME", one word to a line, and a fix that
+            # puts "HONK IF YOU LOVE CAKE" back is five words carrying two
+            # function words. Without these it reads as a name, not English.
+            'if', 'when', 'than', 'then', 'them', 'these', 'those', 'who',
+            'why', 'some', 'any', 'each', 'more', 'most', 'other', 'such',
+            'only', 'too', 'very', 'just', 'now', 'here', 'both', 'after',
+            'before', 'because', 'while', 'about', 'into', 'over', 'under',
+            'again', 'once', 'all', 'up', 'out', 'no', 'yes', 'oh', 'so',
+            'as', 'one', 'through', 'during', 'between', 'against', 'above',
+            'below', 'off', 'down', 'still', 'even', 'ever', 'never',
+            'always', 'another', 'few', 'nor', 'whose', 'whom', 'whether',
+            'until', 'upon', 'among', 'along', 'across', 'behind', 'beyond',
+            'toward', 'towards',
+        },
+        'fr': {
+            'le', 'la', 'les', 'un', 'une', 'des', 'et', 'ou', 'mais', 'de',
+            'du', 'au', 'aux', 'en', 'dans', 'sur', 'pour', 'avec', 'est',
+            'sont', 'était', 'étaient', 'être', 'avoir', 'a', 'ont', 'il',
+            'elle', 'ils', 'elles', 'nous', 'vous', 'je', 'tu', 'son', 'sa',
+            'leur', 'ce', 'cette', 'ces', 'ne', 'pas', 'que', 'qui', 'quoi',
+            'où', 'comment', 'plus', 'pourrait', 'devrait', 'faire', 'dit',
+        },
+        'es': {
+            'el', 'la', 'los', 'las', 'un', 'una', 'y', 'o', 'pero', 'de',
+            'del', 'en', 'para', 'con', 'es', 'son', 'era', 'eran', 'ser',
+            'estar', 'tiene', 'han', 'su', 'sus', 'este', 'esta', 'esto',
+            'no', 'que', 'qué', 'quién', 'dónde', 'cómo', 'más', 'puede',
+            'debería', 'hacer', 'dijo', 'ellos', 'ellas', 'nosotros', 'yo',
+        },
+        'de': {
+            'der', 'die', 'das', 'ein', 'eine', 'und', 'oder', 'aber', 'von',
+            'zu', 'in', 'auf', 'für', 'mit', 'ist', 'sind', 'war', 'waren',
+            'sein', 'haben', 'hat', 'hatte', 'ihr', 'ihre', 'dieser', 'dieses',
+            'nicht', 'dass', 'was', 'wer', 'wo', 'wie', 'mehr', 'könnte',
+            'sollte', 'machen', 'sagte', 'sie', 'er', 'wir', 'ich', 'mich',
+        },
+        'it': {
+            # Spanish cognates (la, un, una, o, del, con, era, eran, han, su,
+            # este, esta) are left out on purpose: an Italian sentence must not
+            # be caught by the Spanish markers when Spanish is the target.
+            'il', 'lo', 'gli', 'le', 'e', 'ma', 'di', 'in', 'per', 'sono',
+            'essere', 'avere', 'hanno', 'suo', 'sua', 'loro', 'questo',
+            'non', 'cosa', 'dove', 'come', 'più', 'potrebbe', 'dovrebbe',
+            'fare', 'disse', 'noi', 'io', 'lui', 'lei', 'anche', 'già',
+            'ancora', 'quando', 'dovevo', 'faceva', 'niente', 'tutto',
+        },
+        'pt': {
+            # Spanish cognates (a, de, que, no, para, como, este, esta) are
+            # left out on purpose, for the same reason as the Italian list.
+            'o', 'os', 'as', 'um', 'uma', 'e', 'ou', 'mas', 'do', 'da',
+            'em', 'com', 'é', 'são', 'era', 'eram', 'ser', 'estar', 'tem',
+            'têm', 'seu', 'seus', 'suas', 'isto', 'não', 'quem',
+            'onde', 'mais', 'poderia', 'deveria', 'fazer', 'disse', 'nós',
+            'eu', 'você', 'eles', 'elas', 'quando', 'porque', 'também',
+            'ainda', 'nada', 'coisa', 'vez', 'anos',
+        },
+        'ru': {
+            'и', 'в', 'не', 'на', 'что', 'с', 'по', 'это', 'как', 'а', 'то',
+            'все', 'она', 'так', 'его', 'но', 'да', 'ты', 'к', 'у', 'же',
+            'вы', 'за', 'бы', 'по', 'или', 'если', 'мне', 'было', 'вот',
+            'от', 'меня', 'еще', 'нет', 'о', 'из', 'ему', 'теперь', 'когда',
+        },
+        'ko': {
+            '이', '그', '저', '는', '에', '을', '를', '와', '과', '도', '의',
+            '로', '으로', '에서', '에게', '한', '하다', '있다', '없다', '되다',
+            '보다', '만', '나', '그리고', '하지만', '그런데', '때문', '위해',
+        },
+        }.items()
+    }
+    #: Share of a replacement's words that have to be source-language function
+    #: words before it counts as untranslated. Set against the two numbers that
+    #: were actually measured: genuine source-language replacements score 0.80,
+    #: and 12,506 French paragraphs of a French target — the only corpus
+    #: measured — put correct French replacements as high as 0.36. The bar
+    #: therefore sits just above the worst false positive observed and well
+    #: under the true case. It was raised from 0.34 because a rule tuned on one
+    #: book and one language pair is exactly the rule that misfires on the
+    #: next one.
+    SOURCE_LANGUAGE_MIN_SHARE = 0.38
+    #: Below this many words a replacement is not judged on its language: too
+    #: few words carry no reliable signal, and a name or a greeting must not
+    #: be mistaken for a failure to translate. Four is the floor that still
+    #: catches the short questions the review pass produces — "Where are you
+    #: from?" is four words and was getting through.
+    MIN_WORDS_FOR_LANGUAGE_CHECK = 4
+
     @classmethod
-    def validate_estimate_spans(cls, items: List[Dict], draft_translation: str) -> List[Dict]:
+    def _is_in_source_language(cls, replacement: str, source_lang: str) -> bool:
+        """Whether a replacement is written in the source language.
+
+        The other two guards compare the replacement against the source text,
+        which catches a copy and nothing else. This one does not look at the
+        source at all: it asks what language the replacement is written in.
+        That is what catches the paraphrase — the review pass rewriting
+        "« D'où venez-vous ? »" as "Where are you from?", which shares no run
+        of words with the source and slips past every text comparison.
+
+        Only runs when the source language is one this table covers, so an
+        unknown code cannot start dropping legitimate fixes.
+        """
+        markers = cls._FUNCTION_WORDS.get(source_lang)
+        if not markers:
+            return False
+        tokens = cls._comparable(replacement).split()
+        if len(tokens) < cls.MIN_WORDS_FOR_LANGUAGE_CHECK:
+            return False
+        hits = sum(1 for token in tokens if token in markers)
+        return hits / len(tokens) >= cls.SOURCE_LANGUAGE_MIN_SHARE
+
+    @classmethod
+    def _longest_shared_run(cls, left: str, right: str) -> int:
+        """How many words `left` and `right` share, unbroken and in order.
+
+        The longest common run of words between two texts, which is what tells
+        a quotation apart from a resemblance: two French sentences can share
+        four common words by accident, and share fifteen only by one having
+        been written from the other.
+        """
+        left_words, right_words = cls._comparable(left).split(), cls._comparable(right).split()
+        if not left_words or not right_words:
+            return 0
+        if len(left_words) < len(right_words):
+            left_words, right_words = right_words, left_words
+
+        # One row per position of the longer text: how long a run ends here,
+        # given that the previous word matched the one before it.
+        previous = [0] * (len(left_words) + 1)
+        longest = 0
+        for word in right_words:
+            current = [0] * (len(left_words) + 1)
+            for index, other in enumerate(left_words, start=1):
+                if word == other:
+                    current[index] = previous[index - 1] + 1
+                    longest = max(longest, current[index])
+            previous = current
+        return longest
+
+    @classmethod
+    def _is_source_copy(cls, replacement: str, original_text: str) -> bool:
+        """Whether a proposed replacement carries the source text into the page.
+
+        The span is already known to exist in the draft; this asks about the
+        half that would be written over it.
+
+        Two shapes, because the review pass produces both. Sometimes the whole
+        replacement is the source sentence. Sometimes it is the words that were
+        already there followed by the source sentence — a run copied onto the
+        end of a span, which a whole-string comparison cannot see. So the test
+        is a run: how many words of the source appear, unbroken and in order,
+        inside the replacement. A name kept in the target language ("Rome",
+        "New York", "Ivy") is never long enough to reach the threshold.
+
+        Only meaningful across two languages, so callers pass the source only
+        when source and target differ.
+        """
+        return (
+            cls._longest_shared_run(replacement, original_text)
+            >= cls.COPIED_REPLACEMENT_MIN_RUN
+        )
+
+    @classmethod
+    def _repeats_the_draft(cls, replacement: str, draft_translation: str, span: str) -> bool:
+        """Whether applying this replacement would print a passage twice.
+
+        The observed shape, on a chapter the review pass reported as nine
+        `omission` errors: the span is one sentence, and the replacement
+        quotes that sentence and then keeps going, restating the two hundred
+        characters that follow it. Patching that in leaves the following text
+        in the book twice — a five-sentence paragraph, then the same five
+        sentences again.
+
+        The run is measured against the draft *after* the span, because that
+        is the part of the page the span's own words do not replace. Quoting
+        the span is legitimate — the estimate prompt asks for exactly that
+        when restoring missing content — so the words inside the span are not
+        counted against it.
+
+        Dropping the edit is the safe direction: the draft's text stays
+        exactly as it was, so declining a fix can never leave a hole. A
+        duplicated paragraph is a flaw, a missing one is a different and
+        worse one.
+        """
+        start = draft_translation.find(span)
+        if start < 0:
+            return False
+        following = draft_translation[start + len(span):]
+        if not following.strip():
+            return False
+        return (
+            cls._longest_shared_run(replacement, following)
+            >= cls.REPEATED_TEXT_MIN_RUN
+        )
+
+    @classmethod
+    def _is_source_form(cls, replacement: str, original_text: str) -> bool:
+        """Whether a replacement is a word of the source rather than a
+        rendering of one.
+
+        Deliberately strict — a single word, and only where the source has it
+        as a word of its own. `New York` is two words and passes, because a
+        place name is normally left as it is in a French page; `WANTED` and
+        `ME` are not, and a glossary error whose fix is one of those is the
+        source word being put back rather than translated.
+        """
+        candidate = cls._comparable(replacement)
+        if not candidate or ' ' in candidate:
+            return False
+        return f' {candidate} ' in f' {cls._comparable(original_text)} '
+
+    @staticmethod
+    def _is_cjk(text: str) -> bool:
+        """Whether the text is written in a Chinese or Japanese script.
+
+        Only ever used to decide which length ratio to compare, never to judge
+        a translation: the question it answers is "do these two texts count
+        their length the same way?", and only the scripts that count it
+        differently need to be told apart.
+        """
+        return any(
+            'CJK' in unicodedata.name(char, '')
+            or 'HIRAGANA' in unicodedata.name(char, '')
+            or 'KATAKANA' in unicodedata.name(char, '')
+            or 'HANGUL' in unicodedata.name(char, '')
+            for char in text
+        )
+
+    @classmethod
+    def _shrinks_to_nothing(cls, span: str, replacement: str) -> bool:
+        """Whether a replacement is so much shorter than what it replaces that
+        text has gone missing.
+
+        This is the hole the reader would see: a paragraph replaced by three
+        words, with nothing to show that anything was dropped. A shorter
+        rendering is normal — French runs longer than English, not shorter —
+        so this only fires on a collapse, and a collapse is the one thing a
+        fix must never be. Below a sentence there is nothing to lose that a
+        reader would miss, and a name is routinely longer than the word it
+        stands in for.
+
+        The ratio depends on the script. Two languages written in the same
+        alphabet count their length comparably; a Chinese rendering of an
+        English paragraph does not, and judging it by the Latin ratio refuses
+        the fix for being correct.
+        """
+        if len(span) < cls.MIN_SPAN_FOR_LOSS_CHECK:
+            return False
+        if cls._is_cjk(replacement) != cls._is_cjk(span):
+            ratio = cls.CROSS_SCRIPT_DELETED_MIN_RATIO
+        else:
+            ratio = cls.DELETED_TEXT_MIN_RATIO
+        return len(replacement) < len(span) * ratio
+
+    @staticmethod
+    def _drop(dropped: Optional[Dict[str, int]], reason: str) -> None:
+        """Record which guard refused an edit, when the caller is counting.
+
+        A dropped error leaves the draft alone, which is the safe outcome, but
+        "safe" and "invisible" are not the same thing: a chunk whose whole
+        review answer was refused reads as "0 found · nothing to do" unless
+        the refusal is counted. The counter is optional so the guards stay
+        callable — and testable — on their own.
+        """
+        if dropped is not None:
+            dropped[reason] = dropped.get(reason, 0) + 1
+
+    @classmethod
+    def validate_estimate_spans(
+        cls, items: List[Dict], draft_translation: str, original_text: str = '',
+        source_lang: str = '', dropped: Optional[Dict[str, int]] = None,
+    ) -> List[Dict]:
         """Keep only the reported errors that can actually be acted on.
 
         A span is usable only if it occurs in the draft verbatim: everything
@@ -2647,6 +3080,35 @@ class BookTranslator(QualityTests):
         model this discards a fair share of the answer, which is the point —
         a dropped error leaves the draft alone, and leaving the draft alone
         is the safe outcome.
+
+        `original_text` is the other text the answer is checked against. A
+        replacement that reproduces the source, or that collapses a span to a
+        fraction of its length, is dropped on the same principle: it is not an
+        improvement to the translation, it is the loss of one. The reader is
+        better served by the draft than by either, which is why the fallback
+        is always the text that is already there.
+
+        `source_lang` enables the last guard, which asks what language the
+        replacement is written in rather than comparing it to anything. It is
+        the only one that catches a paraphrase: a review pass that rewrites
+        "« D'où venez-vous ? »" as "Where are you from?" shares no run of
+        words with the source and passes every text comparison above. With no
+        `source_lang`, or one this table does not cover, it stands down.
+
+        There is deliberately no check here that a `terminology` fix names a
+        rendering the glossary lists. It was written and measured: over the
+        three books in this workspace it blocked 414 edits, and two thirds of
+        those were `consistency` errors about words the chunk's glossary has
+        no entry for — real fixes dropped because their replacement was absent
+        from an unrelated term's list. Deciding whether a reported span is
+        about a term the glossary covers needs the span aligned to the source,
+        which this pass does not have. A doubtful fix that is let through is
+        recoverable in the review desk; a real one that is silently dropped is
+        not.
+
+        `dropped` is filled in, when given, with a count per guard that refused
+        an edit. It is reporting only: nothing here reads it, and a caller that
+        passes nothing gets exactly the behaviour it had before.
         """
         validated, seen = [], set()
         for item in items:
@@ -2668,6 +3130,52 @@ class BookTranslator(QualityTests):
             if severity not in cls.SEVERITIES:
                 severity = 'minor'
 
+            if original_text and cls._is_source_copy(replacement, original_text):
+                cls._drop(dropped, 'source copy')
+                logger.translation_logger.info(
+                    "Stage 2 dropped a reported error whose replacement copies "
+                    "the source text: %r", replacement[:80],
+                )
+                continue
+            if source_lang and cls._is_in_source_language(replacement, source_lang):
+                cls._drop(dropped, 'source language')
+                logger.translation_logger.info(
+                    "Stage 2 dropped a reported error whose replacement is "
+                    "written in %s: %r", source_lang, replacement[:80],
+                )
+                continue
+            if (
+                original_text
+                and error_type in {'terminology', 'consistency'}
+                and cls._is_source_form(replacement, original_text)
+            ):
+                # A glossary fix whose replacement is a word of the source is
+                # not a rendering, it is the original word put back. The
+                # chapter-opening page in the observed failure produced three
+                # of these in a row ("ELLE" => "New York"), each of them a
+                # single word and so invisible to the run check above.
+                cls._drop(dropped, 'source word')
+                logger.translation_logger.info(
+                    "Stage 2 dropped a %s error whose replacement is a source "
+                    "word rather than a rendering: %r", error_type, replacement[:80],
+                )
+                continue
+            if cls._shrinks_to_nothing(span, replacement):
+                cls._drop(dropped, 'deletes text')
+                logger.translation_logger.info(
+                    "Stage 2 dropped a reported error that would delete text: "
+                    "%r => %r", span[:60], replacement[:60],
+                )
+                continue
+            if cls._repeats_the_draft(replacement, draft_translation, span):
+                cls._drop(dropped, 'repeats the draft')
+                logger.translation_logger.info(
+                    "Stage 2 dropped a reported error whose replacement repeats "
+                    "the text after its span, which would print it twice: %r",
+                    replacement[:80],
+                )
+                continue
+
             seen.add(span)
             validated.append({
                 'span': span,
@@ -2688,15 +3196,24 @@ class BookTranslator(QualityTests):
         target_lang: str,
         terminology_context: str = "",
         terminology_violations: Optional[List[Dict[str, str]]] = None,
+        dropped: Optional[Dict[str, int]] = None,
     ) -> Tuple[List[Dict], Optional[str]]:
         """STAGE 2a: what is wrong with this draft, as located spans.
 
         Returns (errors, warning). A warning means the model produced no
         answer at all; an empty list with no warning means it answered that
         the draft is fine, which is a legitimate result and not a failure.
+
+        `dropped` is filled in with a count per guard that refused an edit.
         """
         source_name = LANG_NAMES.get(source_lang, source_lang)
         target_name = LANG_NAMES.get(target_lang, target_lang)
+        source_code = self._language_code(source_lang)
+        # Both text guards read the source as a language the output is not
+        # supposed to be in, so they only run when there are two languages.
+        # With one language every correct replacement matches by definition,
+        # and the guards would refuse all of them.
+        two_languages = source_lang != target_lang
 
         violation_section = ""
         if terminology_violations:
@@ -2708,6 +3225,21 @@ class BookTranslator(QualityTests):
                 'stage2_refine/estimate', 'terminology_violations', missing=missing,
             )
 
+        # A draft that is still written in the source language is the one
+        # fault this pass exists to catch, and it is the one a reviewer asked
+        # to find interesting errors will step over — a chunk that reads
+        # exactly like its source does not look wrong when you are checking
+        # it against the source in front of you. So the pass says so outright
+        # when it can see it. It is a prompt, not a patch: the guards below
+        # still decide whether the answer may be written into the text.
+        if two_languages and self._is_in_source_language(
+            draft_translation, source_code,
+        ):
+            violation_section = "\n\n" + prompts.render(
+                'stage2_refine/estimate', 'untranslated_draft',
+                source_name=source_name, target_name=target_name,
+            ) + violation_section
+
         prompt = self._estimate_prompt(
             original_text, draft_translation, source_name, target_name,
             terminology_context, violation_section,
@@ -2715,7 +3247,25 @@ class BookTranslator(QualityTests):
         raw = self._call_model(prompt, temperature=0.2)
         if raw is None:
             return [], 'The review pass returned no output — kept the draft for this chunk.'
-        return self.validate_estimate_spans(self._parse_json_array(raw), draft_translation), None
+        return self.validate_estimate_spans(
+            self._parse_json_array(raw), draft_translation,
+            original_text if two_languages else '',
+            # Normalised to the short code the function-word table is keyed by:
+            # the prompt gets the display name, the guard needs 'en'.
+            source_code if two_languages else '',
+            dropped,
+        ), None
+
+    @staticmethod
+    def _language_code(name: str) -> str:
+        """'English' or 'english' or 'en' -> 'en'; anything else unchanged."""
+        if not name:
+            return ''
+        folded = name.strip().casefold()
+        for code, label in LANG_NAMES.items():
+            if folded == code or folded == label.casefold():
+                return code
+        return folded
 
     @staticmethod
     def stage2_patch(draft_translation: str, errors: List[Dict]) -> Tuple[str, List[Dict]]:
@@ -2909,6 +3459,15 @@ class BookTranslator(QualityTests):
             f"{details.get('errors_actionable', 0)} actionable",
             f"{details.get('errors_applied', 0)} patched",
         ]
+        dropped = details.get('errors_dropped') or 0
+        if dropped:
+            by_guard = details.get('dropped_by_guard') or {}
+            parts.append('{} refused by guard ({})'.format(
+                dropped,
+                ', '.join(
+                    f'{reason} {count}' for reason, count in sorted(by_guard.items())
+                ) or 'no reason recorded',
+            ))
         verified = details.get('verified')
         if warning:
             parts.append(f'review pass gave no answer ({warning})')
@@ -2958,6 +3517,7 @@ class BookTranslator(QualityTests):
         `details` is what the UI shows about the pass: how many errors were
         found, how many survived validation, whether the verifier kept them.
         """
+        dropped: Dict[str, int] = {}
         errors, warning = self.stage2_estimate(
             original_text=original_text,
             draft_translation=draft_translation,
@@ -2965,6 +3525,7 @@ class BookTranslator(QualityTests):
             target_lang=target_lang,
             terminology_context=terminology_context,
             terminology_violations=terminology_violations,
+            dropped=dropped,
         )
         actionable = [error for error in errors if self.is_actionable_error(error)]
         details: Dict = {
@@ -2972,6 +3533,11 @@ class BookTranslator(QualityTests):
             'errors_found': len(errors),
             'errors_actionable': len(actionable),
             'errors_applied': 0,
+            # What the guards refused, per guard. A chunk whose review answer
+            # was entirely rejected reads as "0 found" otherwise, and that is
+            # the reading that hides an untranslated paragraph.
+            'errors_dropped': sum(dropped.values()),
+            'dropped_by_guard': dropped,
             # Keep the actual located spans, not just aggregate counts. The
             # review desk needs to explain why a chunk was flagged and let a
             # human decide whether the proposed replacement is right.
@@ -2998,7 +3564,15 @@ class BookTranslator(QualityTests):
         # a sentence of the source is either translated or missing. Asking a
         # "which reads more faithfully" vote about those buys nothing and can
         # only veto a fix the pipeline is already confident about.
-        if all(error['type'] in self.JUDGE_EXEMPT_ERROR_TYPES for error in applied):
+        #
+        # "Checked against the source" is the part that has to stay true. A
+        # patch that rewrites a large part of the draft is not a fact about
+        # one word or one sentence, whatever category it was filed under, so
+        # it is put back under the vote rather than trusted on its label.
+        if (
+            all(error['type'] in self.JUDGE_EXEMPT_ERROR_TYPES for error in applied)
+            and not self._is_rewrite(draft_translation, applied)
+        ):
             details['verified'] = 'skipped_objective'
             return patched, None, details
 
@@ -3010,6 +3584,23 @@ class BookTranslator(QualityTests):
         if not accepted:
             return draft_translation, None, details
         return patched, None, details
+
+    @classmethod
+    def _is_rewrite(cls, draft_translation: str, applied: List[Dict]) -> bool:
+        """Whether applying these spans amounts to rewriting the chunk.
+
+        Measured against the draft rather than counted in spans, because the
+        two are not the same thing: nine one-word `omission` reports that
+        between them cover the page are one rewrite, and a single legitimate
+        fix to a long proper noun is not.
+        """
+        if not draft_translation.strip():
+            return False
+        touched = sum(
+            len(error['span']) for error in applied
+            if error['span'] in draft_translation
+        )
+        return touched > len(draft_translation) * cls.MAX_JUDGE_EXEMPT_SHARE
 
     def _stage2_cache_model(self, glossary_fingerprint: str) -> str:
         """Every model-dependent input that can change a Stage 2 result."""
@@ -3151,21 +3742,68 @@ def get_glossary_verification_prompt():
             source_language,
             target_language,
             entities,
+            book_line=_book_identity_line(
+                data.get('bookTitle'), data.get('bookAuthor'),
+            ),
+            notes_task=True,
         ),
     })
+
+
+def _book_identity_line(book_title, book_author) -> str:
+    """One line naming the work, for a model that has to research its lore.
+
+    Untrusted and possibly absent: a plain TXT book carries no metadata at all,
+    so the honest answer is "unknown" rather than a title guessed from the
+    filename. A wrong title would send the frontier model looking for a work
+    that is not the one being translated, and it would write confident notes
+    about the wrong book.
+    """
+    def clean(value, limit=200):
+        if not isinstance(value, str):
+            return ''
+        # Collapse whitespace so embedded newlines cannot forge extra lines in
+        # the prompt, and cap it so a pathological EPUB cannot inflate it.
+        return ' '.join(value.split())[:limit]
+
+    title = clean(book_title)
+    author = clean(book_author)
+    if title and author:
+        return f'BOOK: {title} by {author}'
+    if title:
+        return f'BOOK: {title} (author not given)'
+    if author:
+        return f'BOOK: unknown (written by {author})'
+    return 'BOOK: unknown — identify the work from the entries below'
 
 
 def _render_glossary_verification_prompt(
     source_language: str,
     target_language: str,
     entities: str,
+    book_line: str = 'BOOK: unknown',
+    notes_task: bool = False,
 ) -> str:
-    return prompts.render(
-        'manual/glossary_verification',
-        source_language=source_language,
-        target_language=target_language,
-        entities=entities,
-    )
+    # Assembled from sections rather than sent as one block because the two
+    # callers want different instructions. The automated verifier is given a
+    # glossary whose notes were deliberately withheld from it and whose output
+    # validator rejects a note outright; only the human-in-the-loop copy is
+    # invited to propose one.
+    parts = [
+        prompts.render(
+            'manual/glossary_verification', 'header',
+            source_language=source_language,
+            target_language=target_language,
+            book_line=book_line,
+        ),
+        prompts.render('manual/glossary_verification', 'review'),
+    ]
+    if notes_task:
+        parts.append(prompts.render('manual/glossary_verification', 'notes_task'))
+    parts.append(prompts.render(
+        'manual/glossary_verification', 'entities', entities=entities,
+    ))
+    return '\n\n'.join(parts)
 
 
 @app.route('/frontier-providers', methods=['GET'])
