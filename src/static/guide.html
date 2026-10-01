@@ -165,6 +165,7 @@
                             <li>
                                 <div class="step-title">Prepare and review the glossary — optional</div>
                                 <p>Open <strong>Glossary</strong> and press <strong>→ PREPARE</strong>. Tolmach scans the whole source, groups recurring names and terms, and proposes target renderings. Existing glossary text is not overwritten.</p>
+                                <p>A full novel takes a while, so the Progress rail reports the stage: extracting names, resolving which source forms name one entity, proposing renderings, then checking for conflicts. The Pause button beside the bar works here as it does on Start and Continue.</p>
                                 <p>Review every line before Start. Delete noise, correct wrong renderings, and add missing terms. The editable draft is saved for this document and language pair, so it does not leak into another book.</p>
                             </li>
                             <li>
@@ -174,6 +175,11 @@
                             <li>
                                 <div class="step-title">Create the draft — <code>→ 2 START</code></div>
                                 <p>Start translates the book in chunks and streams completed batches into the Translation panel. Glossary terms submitted with Start become the terminology contract for this job.</p>
+                            </li>
+                            <li>
+                                <div class="step-title">Pause or resume at any time</div>
+                                <p>A <strong>Pause</strong> button sits beside the progress bar while Prepare, Start, or Continue is running. It suspends the job at the next chunk or batch boundary rather than stopping it, which frees the GPU while you decide, and pressing it again carries on from that boundary. Nothing is written to disk while a job is paused, so quitting the app at that point loses only the chunk that had not been saved yet. The button works even with Ollama stopped, because it is controlling a worker that is already running.</p>
+                                <div class="note">Pausing is not a save point. Use <strong>Resume</strong> in the Archive to continue a job after an interrupt, a server restart, or a machine that went to sleep.</div>
                             </li>
                             <li>
                                 <div class="step-title">Refine the draft — <code>→ 3 CONTINUE</code></div>

@@ -228,6 +228,17 @@ def extract(chunks: list[str], labels: list[str], threshold: float, model_name: 
                 if len(rec["contexts"]) < 3:
                     rec["contexts"].append(chunk)
         done = min(start + batch_size, len(chunks))
+        # REVIEW: called unconditionally per batch, after the batch has been
+        # merged into `records`, so the fraction reported is work completed and
+        # never the same value twice. Two consumers are wired to it and they
+        # want different things: /prepare's progress_with_pause also uses it as
+        # the pause point (so a pause takes effect per batch, batch_size chunks
+        # at a time), and a caller that only wants progress still pays for a
+        # `done / len(chunks)` and an f-string per batch. Both are trivial next
+        # to the GLiNER inference the line follows. Note that the *first*
+        # callback cannot fire until load_ner() and the first inference are
+        # done, so a caller cannot distinguish "still loading" from "0% done" —
+        # see the note on PREPARE_STAGE_WEIGHTS in translator.py.
         if progress_callback is not None:
             progress_callback(
                 done / len(chunks),

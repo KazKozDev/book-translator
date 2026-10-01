@@ -403,6 +403,17 @@ def strip_notes(glossary: str) -> str:
     That also keeps the provider's output contract exactly as strict as it was:
     ``OUTPUT_LINE`` still ends at the mode.
     """
+    # REVIEW: this is applied to the raw textarea, comments and blank lines
+    # included, so a `#`-commented glossary line reaches the provider as a
+    # commented line with its note removed — correct. What is *not* enforced
+    # here is the note's own rules: MAX_NOTE_LENGTH and the empty-note check
+    # live in TerminologyManager.from_text and are not applied to a note that
+    # comes back out of a provider response. In practice the provider can never
+    # supply a note (OUTPUT_LINE rejects one, and there is a test for that), and
+    # the note put back is verbatim the author's, already validated when it was
+    # parsed. So nothing slips through today — but "tolerant reader" here means
+    # this function will happily re-emit a 5,000-character note if one is ever
+    # stored unvalidated.
     return '\n'.join(split_note(line)[0] for line in glossary.splitlines())
 
 
@@ -461,6 +472,18 @@ def validate_frontier_output(
         after = f'{verified} {{{note}}}' if note else verified
         normalized.append(after)
         if before != verified:
+            # REVIEW: `before` is stripped and `after` is not, so every genuine
+            # change to an *annotated* entry is reported as a diff that also
+            # appears to introduce the note. Verified:
+            #   before = 'Hermione => Гермиона | inflectable'
+            #   after  = 'Hermione => Гермиона | preferred {the heroine, a girl}'
+            # The review list is the one place the user is shown what the
+            # provider did, so a note materialising out of nowhere undercuts the
+            # "a provider cannot write a note" guarantee the same feature is
+            # built on. Stripping `before` from the note is what keeps the entry
+            # out of `changes`; it also has to be added back for display, or
+            # `before` should stay note-stripped and the UI should know the note
+            # is unchanged.
             changes.append({
                 'source': source,
                 'before': before,
