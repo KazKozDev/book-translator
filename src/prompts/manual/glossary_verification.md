@@ -5,7 +5,7 @@ Review the following glossary entries and assign only the correct mode to each t
 
 For characters, places, organisations, titles, and other entities from a published work, use the established rendering found in authoritative published translations of that specific work in the target language. Do not invent a new literal translation or transliteration when an established target-language rendering exists. If several published renderings exist, choose the most widely established rendering for that work and use it consistently. Only create a source-grounded translation or transliteration when no established target-language rendering can be verified.
 
-Check the identity of each entity against sources in the original language, and verify its established rendering against authoritative sources and published editions in the target language. Return only the corrected glossary, with one entry per line, using exactly this format: `source term => translation | mode`. Every output entry must include a translation and exactly one mode. Do not add explanations, tables, comments, headings, confidence scores, or sources.
+Check the identity of each entity against sources in the original language, and verify its established rendering against authoritative sources and published editions in the target language. Return only the corrected glossary, with one entry per line, using exactly this format: `source term => translation | mode`. Every output entry must include a translation and exactly one mode. Do not add explanations, tables, comments, headings, confidence scores, or sources. An entry may end with a `{note}` the book's author wrote about the term — copy that note through character for character, and never write, reword, or drop one.
 
 ENTITIES:
 

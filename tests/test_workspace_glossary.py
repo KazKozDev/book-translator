@@ -110,8 +110,8 @@ def _job(database_path, *, fingerprint=FINGERPRINT, terms=()):
         conn.executemany(
             '''
             INSERT INTO translation_terms (
-                translation_id, source_term, target_term, enforcement_mode, status
-            ) VALUES (?, ?, ?, ?, 'verified')
+                translation_id, source_term, target_term, enforcement_mode, note, status
+            ) VALUES (?, ?, ?, ?, ?, 'verified')
             ''',
             [(translation_id, *term) for term in terms],
         )
@@ -125,7 +125,7 @@ def test_a_reopened_translation_carries_its_book_and_its_glossary(glossary_clien
     records the fingerprint, which is the binding the editor rebinds through."""
     client, database_path = glossary_client
     client.put(f'/workspace-glossary/{FINGERPRINT}', json=_draft())
-    translation_id = _job(database_path, terms=[('Darcy', 'Дарси', 'exact')])
+    translation_id = _job(database_path, terms=[('Darcy', 'Дарси', 'exact', '')])
 
     reopened = client.get(f'/translations/{translation_id}').get_json()
 
@@ -146,7 +146,10 @@ def test_a_job_without_a_fingerprint_still_shows_the_terms_it_ran_under(glossary
     translation_id = _job(
         database_path,
         fingerprint=None,
-        terms=[('Darcy', 'Дарси', 'exact'), ('Netherfield', 'Незерфилд', 'inflectable')],
+        terms=[
+            ('Darcy', 'Дарси', 'exact', ''),
+            ('Netherfield', 'Незерфилд', 'inflectable', ''),
+        ],
     )
 
     reopened = client.get(f'/translations/{translation_id}').get_json()
@@ -161,15 +164,52 @@ def test_a_reopened_glossary_parses_back_into_the_terms_it_came_from(glossary_cl
     """The rebuilt text goes back into the same textarea and through the same
     parser as anything typed by hand, so it has to survive the round trip."""
     client, database_path = glossary_client
-    terms = [('Darcy', 'Дарси', 'exact'), ('Mr Bennet', 'мистер Беннет', 'preferred')]
+    terms = [
+        ('Darcy', 'Дарси', 'exact', ''),
+        ('Mr Bennet', 'мистер Беннет', 'preferred', ''),
+    ]
     translation_id = _job(database_path, terms=terms)
 
     text = client.get(f'/translations/{translation_id}').get_json()['glossary']
 
     assert [
-        (term.source, term.target, term.mode)
+        (term.source, term.target, term.mode, term.note)
         for term in app_module.TerminologyManager.from_text(text).terms
     ] == terms
+
+
+def test_a_note_written_before_start_is_still_there_after_a_reopen(glossary_client):
+    """Reopening a job refills the editor from the approved terms. A note left
+    out of that rebuild would be deleted by the act of reloading the page —
+    silently, and with nothing left to tell the author it had happened."""
+    client, database_path = glossary_client
+    translation_id = _job(database_path, terms=[
+        ('Darcy', 'Дарси', 'exact', ''),
+        ('Rom', 'Rom', 'inflectable', "c'est un garçon de huit ans"),
+    ])
+
+    reopened = client.get(f'/translations/{translation_id}').get_json()
+
+    assert reopened['glossary'] == (
+        'Darcy => Дарси | exact\n'
+        'Rom => Rom | inflectable {c\'est un garçon de huit ans}'
+    )
+    assert [
+        (term.source, term.target, term.mode, term.note)
+        for term in app_module.TerminologyManager.from_text(reopened['glossary']).terms
+    ] == [
+        ('Darcy', 'Дарси', 'exact', ''),
+        ('Rom', 'Rom', 'inflectable', "c'est un garçon de huit ans"),
+    ]
+
+
+def test_a_job_started_before_notes_existed_reopens_without_them(glossary_client):
+    client, database_path = glossary_client
+    translation_id = _job(database_path, terms=[('Darcy', 'Дарси', 'exact', '')])
+
+    reopened = client.get(f'/translations/{translation_id}').get_json()
+
+    assert reopened['glossary'] == 'Darcy => Дарси | exact'
 
 
 def test_a_translation_with_no_glossary_reopens_with_an_empty_one(glossary_client):

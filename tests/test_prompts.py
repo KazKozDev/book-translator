@@ -254,6 +254,20 @@ def shared_terminology_context() -> str:
     return TERMINOLOGY_CONTEXT
 
 
+def shared_terminology_context_with_notes() -> str:
+    """The same block once the author has annotated an entry. The extra
+    instruction about notes only appears when a note is actually present, so
+    every other role's golden is untouched by the feature."""
+    annotated = TerminologyManager([
+        GlossaryTerm(source='Grunnings', target='Граннингс', mode='exact'),
+        GlossaryTerm(
+            source='Rom', target='Rom', mode='inflectable',
+            note='c’est un garçon de huit ans',
+        ),
+    ])
+    return annotated.prompt_context('Rom worked at Grunnings, which made drills.')
+
+
 def manual_glossary_verification() -> str:
     entities = '\n'.join(
         f'{term.source} => {term.target} | {term.mode}'
@@ -303,6 +317,7 @@ CASES = {
     'quality_adequacy_fluency': quality_adequacy_fluency,
     'quality_candidate_judge': quality_candidate_judge,
     'shared_terminology_context': shared_terminology_context,
+    'shared_terminology_context_with_notes': shared_terminology_context_with_notes,
 }
 
 

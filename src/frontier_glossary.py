@@ -18,6 +18,8 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import requests
 
+from terminology import split_note
+
 
 PROVIDERS: Dict[str, Dict[str, str]] = {
     'openai': {
@@ -390,12 +392,36 @@ def _input_entries(glossary: str) -> List[Tuple[str, str]]:
     return entries
 
 
+def strip_notes(glossary: str) -> str:
+    """The glossary as the provider is allowed to see it.
+
+    A note is what the author knows about the book that the text does not say
+    outright. A model checking a rendering against published editions has no
+    standing to confirm one, change one, or invent one — and a note it never
+    received cannot be damaged, dropped, or hallucinated. So notes are taken
+    out before the call and put back verbatim after it, matched by source term.
+    That also keeps the provider's output contract exactly as strict as it was:
+    ``OUTPUT_LINE`` still ends at the mode.
+    """
+    return '\n'.join(split_note(line)[0] for line in glossary.splitlines())
+
+
+def _notes_by_source(glossary: str) -> Dict[str, str]:
+    notes = {}
+    for source, line in _input_entries(glossary):
+        _, note = split_note(line)
+        if note:
+            notes[source] = note
+    return notes
+
+
 def validate_frontier_output(
     original_glossary: str,
     candidate_glossary: str,
 ) -> Tuple[str, List[Dict[str, str]]]:
     """Validate and normalize a provider response without inventing fallbacks."""
     original_entries = _input_entries(original_glossary)
+    notes = _notes_by_source(original_glossary)
     candidate_lines = [
         line.strip() for line in candidate_glossary.splitlines() if line.strip()
     ]
@@ -406,7 +432,7 @@ def validate_frontier_output(
 
     normalized = []
     changes = []
-    for index, ((expected_source, before), line) in enumerate(
+    for index, ((expected_source, before_line), line) in enumerate(
         zip(original_entries, candidate_lines),
         start=1,
     ):
@@ -426,9 +452,15 @@ def validate_frontier_output(
             raise FrontierGlossaryError(
                 f'The frontier model returned a malformed glossary line {index}'
             )
-        after = f'{source} => {target} | {mode}'
+        # The author's note is put back for display, but never counted as a
+        # change: it was in the entry before the call and it is in the entry
+        # after it, and the review list exists to show what the provider did.
+        before, _ = split_note(before_line)
+        verified = f'{source} => {target} | {mode}'
+        note = notes.get(source, '')
+        after = f'{verified} {{{note}}}' if note else verified
         normalized.append(after)
-        if before != after:
+        if before != verified:
             changes.append({
                 'source': source,
                 'before': before,

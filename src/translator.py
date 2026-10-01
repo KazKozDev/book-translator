@@ -36,6 +36,7 @@ import prompts  # noqa: E402
 from frontier_glossary import (  # noqa: E402
     FrontierGlossaryError,
     provider_catalog,
+    strip_notes,
     verify_glossary,
 )
 from frontier_review import decide_review_cases  # noqa: E402
@@ -126,19 +127,6 @@ PREPARE_STAGE_WEIGHTS = {
 }
 
 
-# Stage 0 /prepare has no single total work counter: it runs four ordered
-# steps with very different shapes. These weights turn each step's fraction
-# into one smooth 0-100% bar, so the user still gets a feel for how far along
-# something is even though the steps can't be reduced to one number.
-PREPARE_STAGE_ORDER = ['extracting', 'adjudicating', 'rendering', 'conflicts']
-PREPARE_STAGE_WEIGHTS = {
-    'extracting': 0.45,
-    'adjudicating': 0.10,
-    'rendering': 0.40,
-    'conflicts': 0.05,
-}
-
-
 def claim_run(translation_id: int):
     with ACTIVE_RUNS_LOCK:
         ACTIVE_RUNS.add(translation_id)
@@ -172,9 +160,61 @@ def _emit_progress(translation_id: int, event: Any) -> None:
     _progress_queue(translation_id).put(event)
 
 
+# In-process pause/resume flags for running jobs. Keys are stringified ids of
+# whatever the SSE queue uses, so a single /pause/<run_id> route works for a
+# translation (int) and a Stage 0 prepare (str) alike. A paused worker blocks
+# on Event.wait() between chunks/batches — that releases the GIL and lets the
+# GPU go idle until the user resumes, without persisting any new state.
+RUN_PAUSE_EVENTS: Dict[str, threading.Event] = {}
+RUN_PAUSE_LOCK = threading.Lock()
+
+
+def register_pause_event(run_id) -> threading.Event:
+    key = str(run_id)
+    with RUN_PAUSE_LOCK:
+        event = threading.Event()
+        event.set()  # running
+        RUN_PAUSE_EVENTS[key] = event
+    return event
+
+
+def pause_run(run_id) -> bool:
+    key = str(run_id)
+    with RUN_PAUSE_LOCK:
+        event = RUN_PAUSE_EVENTS.get(key)
+    if event is None:
+        return False
+    event.clear()
+    return True
+
+
+def resume_run(run_id) -> bool:
+    key = str(run_id)
+    with RUN_PAUSE_LOCK:
+        event = RUN_PAUSE_EVENTS.get(key)
+    if event is None:
+        return False
+    event.set()
+    return True
+
+
+def run_pause_checkpoint(run_id) -> None:
+    """Block the calling worker thread while its run is paused.
+
+    Insert at chunk/batch boundaries so a single in-flight model call finishes
+    but nothing starts until the user resumes — the GPU frees up between calls.
+    No-op for jobs that never registered a pause event (e.g. in unit tests).
+    """
+    with RUN_PAUSE_LOCK:
+        event = RUN_PAUSE_EVENTS.get(str(run_id))
+    if event is not None:
+        event.wait()
+
+
 def _clear_progress_queue(translation_id: int) -> None:
     with _PROGRESS_QUEUES_LOCK:
         _PROGRESS_QUEUES.pop(translation_id, None)
+    RUN_PAUSE_EVENTS.pop(str(translation_id), None)
 
 
 def _sse_from_progress_queue(translation_id: int) -> Iterator[str]:
@@ -342,6 +382,7 @@ def init_db():
                 source_term TEXT NOT NULL,
                 target_term TEXT NOT NULL,
                 enforcement_mode TEXT NOT NULL,
+                note TEXT NOT NULL DEFAULT '',
                 status TEXT NOT NULL DEFAULT 'verified',
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 UNIQUE (translation_id, source_term),
@@ -426,6 +467,16 @@ def init_db():
         if 'revision' not in review_columns:
             conn.execute(
                 'ALTER TABLE chunk_reviews ADD COLUMN revision INTEGER NOT NULL DEFAULT 0'
+            )
+        # A term note is the author's own annotation — the gender of a name,
+        # which of two similar names it is. Jobs started before notes existed
+        # have no value for it, and SQLite fills those rows with the default.
+        term_columns = {
+            row[1] for row in conn.execute('PRAGMA table_info(translation_terms)')
+        }
+        if 'note' not in term_columns:
+            conn.execute(
+                "ALTER TABLE translation_terms ADD COLUMN note TEXT NOT NULL DEFAULT ''"
             )
 
 init_db()
@@ -1563,6 +1614,7 @@ class BookTranslator(QualityTests):
             # STAGE 1: Primary translation with context
             logger.translation_logger.info("Stage 1: Primary LLM translation")
             for i in range(start_index, total_chunks):
+                run_pause_checkpoint(str(translation_id))
                 chunk = chunks[i]
                 batch_index = i + 1
                 try:
@@ -1845,6 +1897,7 @@ class BookTranslator(QualityTests):
             # STAGE 2: Reflection and improvement
             logger.translation_logger.info("Stage 2: Reflection and improvement")
             for i, (original_chunk, draft_chunk) in enumerate(zip(chunks, draft_translations), 1):
+                run_pause_checkpoint(str(translation_id))
                 try:
                     if not original_chunk.strip():
                         final_translations.append('')
@@ -3038,6 +3091,9 @@ def check_ollama():
         # The log console is most wanted precisely when the pipeline is
         # failing, and "Ollama is down" is one of the things it exists to show.
         'stream_logs', 'reset_logs', 'rotate_logs',
+        # Pause/resume control a worker that is already running, so they must
+        # work even when the service health check would otherwise block the request.
+        'pause_job', 'resume_job',
     }
     if request.endpoint not in exempt_endpoints:
         try:
@@ -3147,8 +3203,8 @@ def verify_glossary_with_frontier():
     if not source_language or not target_language:
         return jsonify({'error': 'Source and target languages are required'}), 400
     entities = '\n'.join(
-        line.strip()
-        for line in glossary.splitlines()
+        line
+        for line in strip_notes(glossary).splitlines()
         if line.strip() and not line.lstrip().startswith('#')
     )
     prompt = _render_glossary_verification_prompt(
@@ -3323,7 +3379,7 @@ def get_translation(translation_id):
 
         term_rows = conn.execute(
             '''
-            SELECT source_term, target_term, enforcement_mode
+            SELECT source_term, target_term, enforcement_mode, note
             FROM translation_terms WHERE translation_id = ?
             ORDER BY id
             ''',
@@ -3337,7 +3393,9 @@ def get_translation(translation_id):
         # format, so reopening a translation can show its terminology instead
         # of an empty editor. Same serialisation as /prepare.
         data['glossary'] = '\n'.join(
-            f"{r['source_term']} => {r['target_term']} | {r['enforcement_mode']}"
+            TerminologyManager.format_line(
+                r['source_term'], r['target_term'], r['enforcement_mode'], r['note'],
+            )
             for r in term_rows
         )
         data['evaluation_results'] = {
@@ -3453,7 +3511,7 @@ def _review_chunks_payload(conn, translation_row) -> Dict:
         conn, translation_row['id'],
     )
     term_rows = conn.execute(
-        '''SELECT source_term, target_term, enforcement_mode
+        '''SELECT source_term, target_term, enforcement_mode, note
            FROM translation_terms WHERE translation_id = ?''',
         (translation_row['id'],),
     ).fetchall()
@@ -3462,6 +3520,7 @@ def _review_chunks_payload(conn, translation_row) -> Dict:
             source=row['source_term'],
             target=row['target_term'],
             mode=row['enforcement_mode'],
+            note=row['note'],
         )
         for row in term_rows
     ])
@@ -3943,7 +4002,7 @@ def update_review_chunk(translation_id, chunk_index):
         )
 
         term_rows = conn.execute(
-            '''SELECT source_term, target_term, enforcement_mode
+            '''SELECT source_term, target_term, enforcement_mode, note
                FROM translation_terms WHERE translation_id = ?''',
             (translation_id,),
         ).fetchall()
@@ -4007,7 +4066,7 @@ def generate_review_chunk_alternatives(translation_id, chunk_index):
         if chunk_index < 0 or chunk_index >= len(original_chunks):
             return jsonify({'error': 'Chunk index is out of range'}), 404
         term_rows = conn.execute(
-            '''SELECT source_term, target_term, enforcement_mode
+            '''SELECT source_term, target_term, enforcement_mode, note
                FROM translation_terms WHERE translation_id = ?''',
             (translation_id,),
         ).fetchall()
@@ -4030,6 +4089,7 @@ def generate_review_chunk_alternatives(translation_id, chunk_index):
             source=term['source_term'],
             target=term['target_term'],
             mode=term['enforcement_mode'],
+            note=term['note'],
         )
         for term in term_rows
     ])
@@ -4397,13 +4457,19 @@ def prepare():
             event.update(extra)
             _emit_progress(prepare_id, event)
 
+        def progress_with_pause(stage):
+            def callback(frac, message=None):
+                emit_prepare_stage(stage, frac, message)
+                run_pause_checkpoint(prepare_id)
+            return callback
+
         def run_prepare():
             try:
                 emit_prepare_stage('extracting', 0.0, 'Scanning the source for recurring names…')
                 try:
                     candidates, review_queue = translator.build_glossary_candidates(
                         text,
-                        progress_callback=lambda frac, msg: emit_prepare_stage('extracting', frac, msg),
+                        progress_callback=progress_with_pause('extracting'),
                     )
                 except RuntimeError as e:
                     logger.translation_logger.error(f"Stage 0 failed: {e}")
@@ -4412,6 +4478,7 @@ def prepare():
                         'error': str(e),
                     })
                     return
+                run_pause_checkpoint(prepare_id)
                 extracted = len(candidates)
                 emit_prepare_stage(
                     'extracting', 1.0,
@@ -4421,11 +4488,13 @@ def prepare():
                     translator if entity_model_name == model_name
                     else BookTranslator(model_name=entity_model_name)
                 )
+                run_pause_checkpoint(prepare_id)
                 emit_prepare_stage('adjudicating', 0.0,
                                    'Resolving which source forms name one entity…')
                 candidates, cluster_decisions = resolver.adjudicate_entity_clusters(
                     text, source_lang, candidates, review_queue,
                 )
+                run_pause_checkpoint(prepare_id)
                 emit_prepare_stage(
                     'adjudicating', 1.0,
                     f"Adjudicated {len(cluster_decisions)} cluster decision(s)",
@@ -4434,11 +4503,13 @@ def prepare():
                                    'Proposing target-language renderings…')
                 records = translator.propose_proper_noun_records(
                     text, source_lang, target_lang, genre, candidates=candidates,
-                    progress_callback=lambda frac, msg: emit_prepare_stage('rendering', frac, msg),
+                    progress_callback=progress_with_pause('rendering'),
                 )
+                run_pause_checkpoint(prepare_id)
                 emit_prepare_stage(
                     'rendering', 1.0, f"Rendered {len(records)} glossary record(s)",
                 )
+                run_pause_checkpoint(prepare_id)
                 emit_prepare_stage('conflicts', 0.0, 'Checking for rendering conflicts…')
                 rendering_conflicts = translator.find_rendering_conflicts(records)
                 emit_prepare_stage('conflicts', 1.0, 'Finalising the glossary')
@@ -4449,9 +4520,12 @@ def prepare():
                 )
                 # Serialised in the glossary's own text format, so the proposal
                 # lands in the existing textarea and goes through the same parser
-                # and the same validation as anything typed by hand.
+                # and the same validation as anything typed by hand. Stage 0 has
+                # no basis for a note, so it proposes none.
                 glossary = '\n'.join(
-                    f"{record['source']} => {record['target']} | {record['mode']}"
+                    TerminologyManager.format_line(
+                        record['source'], record['target'], record['mode'],
+                    )
                     for record in records
                 )
                 proposed = {record['source'].casefold() for record in records}
@@ -4485,6 +4559,7 @@ def prepare():
                     'error': str(e),
                 })
 
+        register_pause_event(prepare_id)
         _start_detached_job(prepare_id, run_prepare())
         return Response(
             _sse_from_progress_queue(prepare_id),
@@ -4492,6 +4567,7 @@ def prepare():
             headers={
                 'Cache-Control': 'no-cache',
                 'X-Accel-Buffering': 'no',
+                'X-Prepare-Id': prepare_id,
             },
         )
     finally:
@@ -4556,8 +4632,8 @@ def translate():
                 '''
                 INSERT INTO translation_terms (
                     translation_id, source_term, target_term,
-                    enforcement_mode, status
-                ) VALUES (?, ?, ?, ?, ?)
+                    enforcement_mode, note, status
+                ) VALUES (?, ?, ?, ?, ?, ?)
                 ''',
                 [
                     (
@@ -4565,6 +4641,7 @@ def translate():
                         term.source,
                         term.target,
                         term.mode,
+                        term.note,
                         # Clicking Start is the explicit approval boundary:
                         # the editable glossary that reaches this endpoint is
                         # the user's accepted contract for this job.
@@ -4598,6 +4675,7 @@ def translate():
                 'violations': 0,
             },
         })
+        register_pause_event(translation_id)
         _start_detached_job(
             translation_id,
             translator.translate_stage1(
@@ -4635,6 +4713,30 @@ def translate():
             logger.app_logger.error(f"Failed to cleanup uploaded file: {str(e)}")
 
 
+@app.route('/pause/<run_id>', methods=['POST'])
+@with_error_handling
+def pause_job(run_id):
+    """Suspend a running job (Start, Continue, or Prepare) until /resume.
+
+    Works in-process only: the worker thread blocks on Event.wait() at its next
+    chunk/batch boundary, which releases the GIL so Ollama/the GPU is freed. No
+    state is written, so aborting the process while paused simply loses whatever
+    the current chunk had not persisted yet.
+    """
+    if pause_run(run_id):
+        return jsonify({'paused': True})
+    return jsonify({'error': 'No active run with that id'}), 404
+
+
+@app.route('/resume/<run_id>', methods=['POST'])
+@with_error_handling
+def resume_job(run_id):
+    """Release a paused worker so it continues toward completion."""
+    if resume_run(run_id):
+        return jsonify({'resumed': True})
+    return jsonify({'error': 'No paused run with that id'}), 404
+
+
 @app.route('/resume-translation/<int:translation_id>', methods=['POST'])
 @with_error_handling
 def resume_translation(translation_id):
@@ -4668,14 +4770,15 @@ def resume_translation(translation_id):
             }), 400
 
         term_rows = conn.execute(
-            '''SELECT source_term, target_term, enforcement_mode
+            '''SELECT source_term, target_term, enforcement_mode, note
                FROM translation_terms WHERE translation_id = ?''',
             (translation_id,),
         ).fetchall()
 
     terminology = TerminologyManager([
         GlossaryTerm(
-            source=r['source_term'], target=r['target_term'], mode=r['enforcement_mode'],
+            source=r['source_term'], target=r['target_term'],
+            mode=r['enforcement_mode'], note=r['note'],
         )
         for r in term_rows
     ])
@@ -4696,6 +4799,7 @@ def resume_translation(translation_id):
             'violations': 0,
         },
     })
+    register_pause_event(translation_id)
     _start_detached_job(
         translation_id,
         translator.translate_stage1(
@@ -4801,13 +4905,16 @@ def refine(translation_id):
             )
 
         term_rows = conn.execute(
-            '''SELECT source_term, target_term, enforcement_mode
+            '''SELECT source_term, target_term, enforcement_mode, note
                FROM translation_terms WHERE translation_id = ?''',
             (translation_id,)
         ).fetchall()
 
     terminology = TerminologyManager([
-        GlossaryTerm(source=r['source_term'], target=r['target_term'], mode=r['enforcement_mode'])
+        GlossaryTerm(
+            source=r['source_term'], target=r['target_term'],
+            mode=r['enforcement_mode'], note=r['note'],
+        )
         for r in term_rows
     ])
 
@@ -4839,6 +4946,7 @@ def refine(translation_id):
             'verifier_model': translator.verifier_model,
         },
     })
+    register_pause_event(translation_id)
     _start_detached_job(
         translation_id,
         translator.translate_stage2(
@@ -5153,13 +5261,16 @@ def evaluate(translation_id, test_name):
             return jsonify({'error': 'Run Continue (refinement) first — no final translation to evaluate yet'}), 400
 
         term_rows = conn.execute(
-            '''SELECT source_term, target_term, enforcement_mode
+            '''SELECT source_term, target_term, enforcement_mode, note
                FROM translation_terms WHERE translation_id = ?''',
             (translation_id,)
         ).fetchall()
 
     terminology = TerminologyManager([
-        GlossaryTerm(source=r['source_term'], target=r['target_term'], mode=r['enforcement_mode'])
+        GlossaryTerm(
+            source=r['source_term'], target=r['target_term'],
+            mode=r['enforcement_mode'], note=r['note'],
+        )
         for r in term_rows
     ])
     # LLM judge tests and backtranslation re-invoke a model rather than just

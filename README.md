@@ -90,6 +90,7 @@ After uploading the book, click **→ PREPARE**. Tolmach scans the complete sour
 ```text
 Netherfield => Незерфилд | exact
 Mr. Darcy => мистер Дарси | inflectable
+Rom => Rom | inflectable {c'est un garçon de huit ans}
 ```
 
 Review this list before starting the translation: delete noise, correct a wrong translation, and add anything the scan missed.
@@ -97,6 +98,8 @@ Review this list before starting the translation: delete noise, correct a wrong 
 - `exact` keeps the target wording unchanged.
 - `inflectable` lets the model change the grammatical form.
 - `preferred` tells the model which wording to favor.
+
+An entry may end with an optional `{note}` — free text for what you know that the book does not state outright, such as the gender of a name. The Translation and Refinement models are told to follow it; no test can check it. Write it in the language you are translating into, since that is the text the note has to shape. A note is never sent to an external verifier, and one can never change or invent a note.
 
 The glossary belongs only to this book and language pair. If you configure an optional external provider, **Verify automatically** can check the glossary and show proposed changes; Tolmach applies nothing until you approve it.
 

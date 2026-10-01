@@ -174,6 +174,53 @@ def test_provider_output_cannot_drop_change_or_damage_source_entries(candidate, 
         frontier.validate_frontier_output(ORIGINAL, candidate)
 
 
+ANNOTATED = (
+    'Hermione => Гермиона | inflectable {the heroine, a girl}\n'
+    'Hogwarts => Хогвартс | exact\n'
+    'Ministry of Magic => Министерство магии | exact'
+)
+
+
+def test_notes_are_never_shown_to_the_provider():
+    """A frontier model has no standing to write a note: it checks renderings
+    against published editions and knows nothing about this particular book.
+    A note it never received is a note it cannot hallucinate, drop, or
+    reword."""
+    assert frontier.strip_notes(ANNOTATED) == (
+        'Hermione => Гермиона | inflectable\n'
+        'Hogwarts => Хогвартс | exact\n'
+        'Ministry of Magic => Министерство магии | exact'
+    )
+
+
+def test_a_note_survives_verification_untouched():
+    glossary, changes = frontier.validate_frontier_output(
+        ANNOTATED,
+        CORRECTED,
+    )
+
+    assert glossary == ANNOTATED
+    assert changes == []
+
+
+def test_an_annotated_entry_is_not_reported_as_changed_just_for_its_note():
+    _, changes = frontier.validate_frontier_output(
+        ANNOTATED.replace(' | exact', ' | preferred', 1),
+        CORRECTED,
+    )
+
+    assert [change['source'] for change in changes] == ['Hogwarts']
+    assert changes[0]['before'] == 'Hogwarts => Хогвартс | preferred'
+    assert changes[0]['after'] == 'Hogwarts => Хогвартс | exact'
+
+
+def test_a_provider_that_invents_a_note_is_rejected_like_any_other_extra_text():
+    invented = CORRECTED.replace(' | inflectable', ' | inflectable {a boy}', 1)
+
+    with pytest.raises(frontier.FrontierGlossaryError, match='malformed glossary line'):
+        frontier.validate_frontier_output(ANNOTATED, invented)
+
+
 def test_environment_key_availability_never_exposes_the_secret(monkeypatch):
     monkeypatch.setenv('OPENAI_API_KEY', 'super-secret-value')
 

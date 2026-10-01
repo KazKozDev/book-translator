@@ -4,6 +4,7 @@ Notable changes to Tolmach are documented here.
 
 ## Unreleased
 
+- Added an optional per-term glossary note: `Rom => Rom | inflectable {c'est un garçon}`. A note is free text for what the author knows that the book does not state outright — the gender of a name, an ambiguity in the original — and it reaches the Translation and Refinement prompts. Notes are never sent to an external verifier and can never be changed or invented by one. Only `exact` remains deterministically checkable; a note is guidance, not a rule. Editing a note retires the cached chunks, since it changes the prompt.
 - Added PDF upload beside TXT and EPUB. A PDF is read as text only: running heads and page numbers are removed and printed lines are rejoined into paragraphs, after which it follows the same path as a TXT book. A scanned PDF with no text layer is refused instead of translated as an empty book.
 
 ## [3.0.1] — 2026-07-29

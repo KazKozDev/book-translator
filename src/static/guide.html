@@ -193,7 +193,8 @@
                     <section class="card">
                         <div class="section-title">Glossary</div>
                         <h2>Format and enforcement</h2>
-                        <p>Use one entry per line: <code>source =&gt; target | mode</code>. Tab-separated <code>source[TAB]target[TAB]mode</code> rows are also accepted. The default mode is <code>inflectable</code>.</p>
+                        <p>Use one entry per line: <code>source =&gt; target | mode</code>. Tab-separated <code>source[TAB]target[TAB]mode</code> rows are also accepted. The default mode is <code>inflectable</code>. An entry may end with an optional <code>{note}</code>: <code>Rom =&gt; Rom | inflectable {c'est un garçon de huit ans}</code>.</p>
+                        <div class="note">A note is free text in braces at the end of the line, for what you know that the book does not state outright — a name's gender, an ambiguity in the original. The Translation and Refinement models are told to follow it. Nothing can check it: only <code>exact</code> is enforced by a test. Write it in the target language, because that is the text it has to shape. A note is never sent to an external verifier, and one can never change or invent a note.</div>
                         <div class="mode-list">
                             <div class="mode-row">
                                 <code>exact</code>
