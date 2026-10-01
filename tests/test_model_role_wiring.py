@@ -31,8 +31,10 @@ class RecordingTranslator:
         return []
 
     @staticmethod
-    def build_glossary_candidates(text):
+    def build_glossary_candidates(text, progress_callback=None):
         RecordingTranslator.glossary_builder_calls += 1
+        if progress_callback is not None:
+            progress_callback(1.0, 'built')
         return [], []
 
     @staticmethod
@@ -178,7 +180,15 @@ def test_each_pipeline_role_uses_its_own_requested_model(tmp_path, monkeypatch):
     assert prepare_response.status_code == 200
     assert RecordingTranslator.entity_resolver_models == ['entity-model']
     assert 'rendering-model' in RecordingTranslator.selected_models
-    assert prepare_response.get_json()['entity_resolution'] == {
+    final_event = None
+    for line in prepare_response.get_data(as_text=True).splitlines():
+        if line.startswith('data: '):
+            event = json.loads(line[len('data: '):])
+            if event.get('stage') == 'completed':
+                final_event = event
+                break
+    assert final_event is not None, 'Prepare SSE stream did not emit a completed event'
+    assert final_event['entity_resolution'] == {
         'clustered_candidates': 0,
         'extracted_candidates': 0,
         'review_pairs': 0,
@@ -264,6 +274,8 @@ def test_prepare_runs_both_of_its_passes_on_one_model_by_default(tmp_path, monke
         'genre': 'fiction',
     }, content_type='multipart/form-data')
 
+    # /prepare now streams progress; consume the stream so the detached job finishes.
+    response.get_data()
     assert response.status_code == 200
     assert RecordingTranslator.entity_resolver_models == ['prepare-model']
     # And only one translator is constructed, so the second role cannot

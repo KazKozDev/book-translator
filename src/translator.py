@@ -1,6 +1,7 @@
 import json
 import requests
 import time
+import uuid
 from typing import List, Dict, Optional, Callable, Set, Tuple, Iterator, Any
 import os
 # COMET pins SentencePiece below 0.2. Its generated protobuf bindings require
@@ -111,6 +112,31 @@ ACTIVE_RUNS_LOCK = threading.Lock()
 _PROGRESS_QUEUES: Dict[int, Queue] = {}
 _PROGRESS_QUEUES_LOCK = threading.Lock()
 _PROGRESS_SENTINEL = object()
+
+
+# Stage 0 /prepare has no single total to count down: it runs four ordered
+# steps whose duration varies wildly. These weights map each step's fraction
+# into one smooth 0-100% bar so the wait still feels measured instead of stuck.
+PREPARE_STAGE_ORDER = ['extracting', 'adjudicating', 'rendering', 'conflicts']
+PREPARE_STAGE_WEIGHTS = {
+    'extracting': 0.45,
+    'adjudicating': 0.10,
+    'rendering': 0.40,
+    'conflicts': 0.05,
+}
+
+
+# Stage 0 /prepare has no single total work counter: it runs four ordered
+# steps with very different shapes. These weights turn each step's fraction
+# into one smooth 0-100% bar, so the user still gets a feel for how far along
+# something is even though the steps can't be reduced to one number.
+PREPARE_STAGE_ORDER = ['extracting', 'adjudicating', 'rendering', 'conflicts']
+PREPARE_STAGE_WEIGHTS = {
+    'extracting': 0.45,
+    'adjudicating': 0.10,
+    'rendering': 0.40,
+    'conflicts': 0.05,
+}
 
 
 def claim_run(translation_id: int):
@@ -796,7 +822,10 @@ class BookTranslator(QualityTests):
         return items
 
     @classmethod
-    def build_glossary_candidates(cls, text: str) -> Tuple[List[Dict], List[Dict]]:
+    def build_glossary_candidates(
+        cls, text: str,
+        progress_callback: Optional[Callable[[float, str], None]] = None,
+    ) -> Tuple[List[Dict], List[Dict]]:
         """Run the document-wide glossary builder used by Stage 0 Prepare.
 
         The builder uses GLiNER to find recurring entity mentions and a
@@ -825,7 +854,10 @@ class BookTranslator(QualityTests):
         logger.translation_logger.info(
             f"Stage 0: extracting glossary candidates from {len(text):,} characters"
         )
-        entries, review_queue = build_document_glossary(text)
+        build_glossary_kwargs = {}
+        if progress_callback is not None:
+            build_glossary_kwargs['progress_callback'] = progress_callback
+        entries, review_queue = build_document_glossary(text, **build_glossary_kwargs)
         logger.translation_logger.info(
             f"Stage 0: extraction found {len(entries)} clustered candidate(s), "
             f"{len(review_queue)} pair(s) for review"
@@ -1251,6 +1283,7 @@ class BookTranslator(QualityTests):
     def propose_proper_noun_records(
         self, text: str, source_lang: str, target_lang: str, genre: str = 'unknown',
         candidates: Optional[List[Dict]] = None,
+        progress_callback: Optional[Callable[[float, str], None]] = None,
     ) -> List[Dict]:
         """One agreed target rendering per recurring name in the source.
 
@@ -1295,6 +1328,11 @@ class BookTranslator(QualityTests):
         # the same line in the log as each batch's turn comes up.
         with ThreadPoolExecutor(max_workers=workers) as pool:
             for number, (batch, raw) in enumerate(zip(batches, pool.map(render, batches)), 1):
+                if progress_callback is not None:
+                    progress_callback(
+                        number / len(batches),
+                        f"Rendering: {number}/{len(batches)} name batch(es)",
+                    )
                 accepted = 0
                 for item in self._parse_json_array(raw):
                     record = self._rendering_record(text, item, counts)
@@ -4345,58 +4383,117 @@ def prepare():
                else f"entities: {entity_model_name}, rendering: {model_name}")
         )
         translator = BookTranslator(model_name=model_name)
-        try:
-            candidates, review_queue = translator.build_glossary_candidates(text)
-        except RuntimeError as e:
-            logger.translation_logger.error(f"Stage 0 failed: {e}")
-            return jsonify({'error': str(e)}), 503
-        extracted = len(candidates)
-        # The clustering step guessed which source forms are one entity. Have
-        # the model rule on those guesses before anything is rendered, because
-        # a wrong merge silently agrees one rendering for two entities and no
-        # later stage can tell that happened.
-        resolver = (
-            translator if entity_model_name == model_name
-            else BookTranslator(model_name=entity_model_name)
-        )
-        candidates, cluster_decisions = resolver.adjudicate_entity_clusters(
-            text, source_lang, candidates, review_queue,
-        )
-        records = translator.propose_proper_noun_records(
-            text, source_lang, target_lang, genre, candidates=candidates,
-        )
-        rendering_conflicts = translator.find_rendering_conflicts(records)
-        logger.translation_logger.info(
-            f"Stage 0 finished: {len(records)} glossary record(s) proposed, "
-            f"{len(rendering_conflicts)} rendering conflict(s) to review"
-        )
-        # Serialised in the glossary's own text format, so the proposal lands
-        # in the existing textarea and goes through the same parser and the
-        # same validation as anything typed by hand.
-        glossary = '\n'.join(
-            f"{record['source']} => {record['target']} | {record['mode']}"
-            for record in records
-        )
-        proposed = {record['source'].casefold() for record in records}
-        return jsonify({
-            'glossary': glossary,
-            'entities': records,
-            'entity_resolution': {
-                'clustered_candidates': len(candidates),
-                'extracted_candidates': extracted,
-                'review_pairs': len(review_queue),
-                # What the model ruled on the clustering, and what it found
-                # that extraction did not — both were previously invisible.
-                'cluster_decisions': cluster_decisions,
-                'clusters_confirmed': sum(1 for d in cluster_decisions if d['same_entity']),
-                'clusters_split': sum(1 for d in cluster_decisions if not d['same_entity']),
-                'added_by_model': sorted(
-                    proposed - {record['surface'].casefold() for record in candidates}
-                ),
+        prepare_id = f"prepare-{uuid.uuid4().hex[:8]}"
+
+        def emit_prepare_stage(stage, frac, message=None, **extra):
+            index = PREPARE_STAGE_ORDER.index(stage)
+            base = sum(PREPARE_STAGE_WEIGHTS[s] for s in PREPARE_STAGE_ORDER[:index])
+            progress = round(
+                (base + PREPARE_STAGE_WEIGHTS[stage] * min(1.0, max(0.0, frac))) * 100, 1
+            )
+            event = {'progress': progress, 'stage': stage, 'prepare_id': prepare_id}
+            if message:
+                event['message'] = message
+            event.update(extra)
+            _emit_progress(prepare_id, event)
+
+        def run_prepare():
+            try:
+                emit_prepare_stage('extracting', 0.0, 'Scanning the source for recurring names…')
+                try:
+                    candidates, review_queue = translator.build_glossary_candidates(
+                        text,
+                        progress_callback=lambda frac, msg: emit_prepare_stage('extracting', frac, msg),
+                    )
+                except RuntimeError as e:
+                    logger.translation_logger.error(f"Stage 0 failed: {e}")
+                    _emit_progress(prepare_id, {
+                        'progress': 0.0, 'stage': 'error', 'prepare_id': prepare_id,
+                        'error': str(e),
+                    })
+                    return
+                extracted = len(candidates)
+                emit_prepare_stage(
+                    'extracting', 1.0,
+                    f"Found {extracted} candidate name(s) across {len(review_queue)} review pair(s)",
+                )
+                resolver = (
+                    translator if entity_model_name == model_name
+                    else BookTranslator(model_name=entity_model_name)
+                )
+                emit_prepare_stage('adjudicating', 0.0,
+                                   'Resolving which source forms name one entity…')
+                candidates, cluster_decisions = resolver.adjudicate_entity_clusters(
+                    text, source_lang, candidates, review_queue,
+                )
+                emit_prepare_stage(
+                    'adjudicating', 1.0,
+                    f"Adjudicated {len(cluster_decisions)} cluster decision(s)",
+                )
+                emit_prepare_stage('rendering', 0.0,
+                                   'Proposing target-language renderings…')
+                records = translator.propose_proper_noun_records(
+                    text, source_lang, target_lang, genre, candidates=candidates,
+                    progress_callback=lambda frac, msg: emit_prepare_stage('rendering', frac, msg),
+                )
+                emit_prepare_stage(
+                    'rendering', 1.0, f"Rendered {len(records)} glossary record(s)",
+                )
+                emit_prepare_stage('conflicts', 0.0, 'Checking for rendering conflicts…')
+                rendering_conflicts = translator.find_rendering_conflicts(records)
+                emit_prepare_stage('conflicts', 1.0, 'Finalising the glossary')
+
+                logger.translation_logger.info(
+                    f"Stage 0 finished: {len(records)} glossary record(s) proposed, "
+                    f"{len(rendering_conflicts)} rendering conflict(s) to review"
+                )
+                # Serialised in the glossary's own text format, so the proposal
+                # lands in the existing textarea and goes through the same parser
+                # and the same validation as anything typed by hand.
+                glossary = '\n'.join(
+                    f"{record['source']} => {record['target']} | {record['mode']}"
+                    for record in records
+                )
+                proposed = {record['source'].casefold() for record in records}
+                yield {
+                    'progress': 100.0,
+                    'stage': 'completed',
+                    'prepare_id': prepare_id,
+                    'glossary': glossary,
+                    'entities': records,
+                    'entity_resolution': {
+                        'clustered_candidates': len(candidates),
+                        'extracted_candidates': extracted,
+                        'review_pairs': len(review_queue),
+                        # What the model ruled on the clustering, and what it
+                        # found that extraction did not — both previously invisible.
+                        'cluster_decisions': cluster_decisions,
+                        'clusters_confirmed': sum(1 for d in cluster_decisions if d['same_entity']),
+                        'clusters_split': sum(1 for d in cluster_decisions if not d['same_entity']),
+                        'added_by_model': sorted(
+                            proposed - {record['surface'].casefold() for record in candidates}
+                        ),
+                    },
+                    'rendering_conflicts': rendering_conflicts,
+                    'source_chars': len(text),
+                }
+            except Exception as e:
+                logger.translation_logger.error(f"Stage 0 failed: {e}")
+                logger.translation_logger.error(traceback.format_exc())
+                _emit_progress(prepare_id, {
+                    'progress': 0.0, 'stage': 'error', 'prepare_id': prepare_id,
+                    'error': str(e),
+                })
+
+        _start_detached_job(prepare_id, run_prepare())
+        return Response(
+            _sse_from_progress_queue(prepare_id),
+            mimetype='text/event-stream',
+            headers={
+                'Cache-Control': 'no-cache',
+                'X-Accel-Buffering': 'no',
             },
-            'rendering_conflicts': rendering_conflicts,
-            'source_chars': len(text),
-        })
+        )
     finally:
         # Prepare and Start are given the same upload under the same name, so
         # the second one to finish finds the temp file already gone. That is

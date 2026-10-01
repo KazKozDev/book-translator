@@ -2898,8 +2898,57 @@
 
             try {
                 const response = await fetch(`${API_URL}/prepare`, { method: 'POST', body: formData });
-                const data = await response.json().catch(() => ({}));
-                if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
+                if (!response.ok) {
+                    const err = await response.json().catch(() => ({}));
+                    throw new Error(err.error || `HTTP ${response.status}`);
+                }
+
+                // PREPARE now streams Server-Sent Events the same way Start does,
+                // so the job-rail progress bar can report it instead of hanging on a blank screen.
+                const progressSection = document.getElementById('progressSection');
+                const progressBar = document.getElementById('progressBar');
+                const progressInfo = document.getElementById('progressInfo');
+                progressSection.style.display = 'block';
+                progressBar.style.width = '0%';
+                progressInfo.textContent = 'Preparing…';
+
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let buffer = '';
+                let data = null;
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    buffer += decoder.decode(value, { stream: true });
+                    const lines = buffer.split('\n');
+                    buffer = lines.pop() || '';
+                    for (const line of lines) {
+                        if (!line.startsWith('data: ')) continue;
+                        let event;
+                        try {
+                            event = JSON.parse(line.substring(6).trim());
+                        } catch (e) {
+                            continue;
+                        }
+                        if (typeof event.progress === 'number') {
+                            progressBar.style.width = event.progress + '%';
+                            progressInfo.textContent = event.message || `${event.stage}…`;
+                        }
+                        if (event.error) {
+                            throw new Error(event.error);
+                        }
+                        if (event.stage === 'completed') {
+                            data = event;
+                            progressBar.style.width = '100%';
+                            progressInfo.textContent = 'Glossary ready — reviewing terms…';
+                            break;
+                        }
+                    }
+                    if (data) break;
+                }
+                if (!data) {
+                    throw new Error('Prepare ended without a result');
+                }
 
                 // Never silently overwrite work already in the boxes.
                 const glossaryHadContent = glossaryField.value.trim().length > 0;
@@ -2964,6 +3013,9 @@
                 glossaryField.removeAttribute('aria-busy');
                 if (!glossaryField.value.trim()) updateGlossaryPlaceholder();
                 button.disabled = false;
+                document.getElementById('progressSection').style.display = 'none';
+                document.getElementById('progressBar').style.width = '0%';
+                document.getElementById('progressInfo').textContent = 'Waiting for a translation';
             }
         }
 
