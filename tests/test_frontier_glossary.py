@@ -221,6 +221,28 @@ def test_a_provider_that_invents_a_note_is_rejected_like_any_other_extra_text():
         frontier.validate_frontier_output(ANNOTATED, invented)
 
 
+def test_a_change_to_an_annotated_entry_does_not_look_like_the_note_was_written():
+    """The review list shows what the provider did, and the provider never saw
+    a note. A stripped `before` beside an annotated `after` rendered as though
+    the model had invented the note — the one thing this path guarantees it
+    cannot do. The note still reaches the editor through the returned glossary,
+    which is what the Apply button uses."""
+    glossary, changes = frontier.validate_frontier_output(
+        ANNOTATED,
+        CORRECTED.replace('Hermione => Гермиона | inflectable',
+                          'Hermione => Гермиона | preferred', 1),
+    )
+
+    assert [change['source'] for change in changes] == ['Hermione']
+    assert changes[0]['before'] == 'Hermione => Гермиона | inflectable'
+    assert changes[0]['after'] == 'Hermione => Гермиона | preferred'
+    assert '{the heroine, a girl}' not in changes[0]['after']
+    # The note itself is untouched on the way back to the editor.
+    assert glossary.splitlines()[0] == (
+        'Hermione => Гермиона | preferred {the heroine, a girl}'
+    )
+
+
 def test_environment_key_availability_never_exposes_the_secret(monkeypatch):
     monkeypatch.setenv('OPENAI_API_KEY', 'super-secret-value')
 

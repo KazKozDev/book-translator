@@ -472,22 +472,21 @@ def validate_frontier_output(
         after = f'{verified} {{{note}}}' if note else verified
         normalized.append(after)
         if before != verified:
-            # REVIEW: `before` is stripped and `after` is not, so every genuine
-            # change to an *annotated* entry is reported as a diff that also
-            # appears to introduce the note. Verified:
+            # Both sides of the diff are note-free on purpose. `before` is
+            # stripped so an unchanged entry is not reported at all, and a
+            # stripped `before` beside an annotated `after` read as though the
+            # provider had written the note — the one thing this path guarantees
+            # it cannot do:
             #   before = 'Hermione => Гермиона | inflectable'
             #   after  = 'Hermione => Гермиона | preferred {the heroine, a girl}'
-            # The review list is the one place the user is shown what the
-            # provider did, so a note materialising out of nowhere undercuts the
-            # "a provider cannot write a note" guarantee the same feature is
-            # built on. Stripping `before` from the note is what keeps the entry
-            # out of `changes`; it also has to be added back for display, or
-            # `before` should stay note-stripped and the UI should know the note
-            # is unchanged.
+            # The provider never saw a note (strip_notes), never returned one
+            # (OUTPUT_LINE rejects it), so the diff is exactly "what the
+            # provider changed". The note still reaches the editor through
+            # `normalized`, which is what index.html applies.
             changes.append({
                 'source': source,
                 'before': before,
-                'after': after,
+                'after': verified,
             })
     return '\n'.join(normalized), changes
 

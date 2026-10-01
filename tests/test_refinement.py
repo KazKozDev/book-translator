@@ -282,6 +282,116 @@ def test_a_multiword_name_the_source_also_contains_is_still_allowed():
     assert len(errors) == 1
 
 
+def test_a_kept_name_is_not_a_source_word_when_the_glossary_agreed_to_keep_it():
+    """`Rom => Rom | inflectable {c'est un garçon}` is the case a note exists
+    for, and an English name kept in a French page is the same thing. Without
+    the agreed-rendering exemption the guard refused every single-word kept name
+    in the book — `Rom`, `Ivy`, `Mr`, `Darcy` all came back True against a
+    source containing them — which is the failure it was written to prevent
+    arriving from the other direction."""
+    source = 'Rom was in the garden. Ivy was there too. Mr. Darcy arrived.'
+    draft = 'Rom était dans le jardin. Ivy était là aussi.'
+
+    for replacement in ('Rom', 'Ivy'):
+        assert len(BookTranslator.validate_estimate_spans(
+            [{'span': 'Rom était', 'type': 'terminology', 'severity': 'critical',
+              'replacement': replacement}],
+            draft, source, agreed_targets={'Rom', 'Ivy', 'Mr. Darcy'},
+        )) == 1, replacement
+
+
+def test_a_bare_title_is_still_refused_when_the_agreed_rendering_is_the_full_name():
+    """The exemption compares the whole replacement to the agreed rendering, so
+    it does not partially match: `Mr. Darcy` is two words and a replacement of
+    `Mr` alone is still the source word put back, not the agreed name."""
+    assert BookTranslator.validate_estimate_spans(
+        [{'span': 'Elle a dit', 'type': 'terminology', 'severity': 'critical',
+          'replacement': 'Mr'}],
+        'Elle a dit que le train était en retard.',
+        'She said Mr. Darcy had arrived.',
+        agreed_targets={'Mr. Darcy'},
+    ) == []
+
+
+def test_the_exemption_does_not_spread_to_names_the_glossary_says_nothing_about():
+    """Only the terms relevant to this chunk are passed in, so the guard defers
+    to exactly the contract the reviewer was shown. A source word that no term
+    claims is still refused — which is the "ELLE" => "WANTED" case."""
+    source = 'Rom was in the garden. Ivy was there too. Mr. Darcy arrived.'
+    draft = 'Rom était dans le jardin. Ivy était là aussi.'
+
+    for replacement in ('Ivy', 'Mr', 'Darcy'):
+        assert BookTranslator.validate_estimate_spans(
+            [{'span': 'Rom était', 'type': 'terminology', 'severity': 'critical',
+              'replacement': replacement}],
+            draft, source, agreed_targets={'Rom'},
+        ) == [], replacement
+
+
+def test_a_source_word_that_is_also_an_agreed_rendering_is_a_rendering():
+    """The exemption is not a loophole: if the contract says this name is
+    written `WANTED`, then writing `WANTED` is the fix, not the source word put
+    back. That holds for every mode, `preferred` included — a preferred wording
+    is still the agreed one, and refusing it would be refusing the glossary."""
+    errors = BookTranslator.validate_estimate_spans(
+        [{'span': 'ELLE', 'type': 'terminology', 'severity': 'critical',
+          'replacement': 'WANTED'}],
+        FR_PAGE_DRAFT, FR_PAGE_SOURCE, agreed_targets={'WANTED', 'ME'},
+    )
+
+    assert len(errors) == 1
+
+
+def test_the_exemption_ignores_case_and_accents_like_every_other_comparison():
+    source = 'ROM was in the garden.'
+    draft = 'ROM était dans le jardin.'
+    errors = BookTranslator.validate_estimate_spans(
+        [{'span': 'ROM était', 'type': 'consistency', 'severity': 'critical',
+          'replacement': 'rom'}],
+        draft, source, agreed_targets={'Rom'},
+    )
+
+    assert len(errors) == 1
+
+
+def test_a_call_that_knows_nothing_of_the_glossary_keeps_the_old_behaviour():
+    """`agreed_targets` is optional, so a caller holding only a draft is not
+    broken — the guard simply has nothing to defer to."""
+    assert BookTranslator.validate_estimate_spans(
+        [{'span': 'ELLE', 'type': 'terminology', 'severity': 'critical',
+          'replacement': 'WANTED'}],
+        FR_PAGE_DRAFT, FR_PAGE_SOURCE,
+    ) == []
+
+
+def test_the_agreed_renderings_reach_the_guard_through_the_whole_pass(monkeypatch):
+    """The exemption has to survive the two layers between the route and the
+    guard, or the fix is invisible in a real run. The same reported error is
+    refused without the glossary and kept with it."""
+    translator = BookTranslator(model_name='reviewer:12b', verifier_model='verifier:27b')
+    reported = json.dumps([
+        {'span': 'ELLE', 'type': 'terminology', 'severity': 'critical',
+         'replacement': 'WANTED'},
+    ])
+
+    def run(agreed):
+        _script_model_calls(monkeypatch, [reported])
+        _, _, details = translator.stage2_reflection_improvement(
+            original_text=FR_PAGE_SOURCE, draft_translation=FR_PAGE_DRAFT,
+            source_lang='english', target_lang='french',
+            agreed_targets=agreed,
+        )
+        return details
+
+    refused = run(None)
+    assert refused['errors_found'] == 0
+    assert refused['dropped_by_guard'] == {'source word': 1}
+
+    kept = run({'WANTED'})
+    assert kept['errors_found'] == 1
+    assert kept['dropped_by_guard'] == {}
+
+
 def test_the_source_word_check_does_not_apply_to_other_categories():
     """Only the two categories whose replacement is meant to be a rendering.
     A mistranslation is free to propose any wording, and reporting a source
@@ -576,6 +686,102 @@ def test_a_name_or_a_greeting_is_too_short_to_judge():
         assert not BookTranslator._is_in_source_language(replacement, 'en')
 
 
+# One ordinary sentence per covered language. Two jobs: each must be recognised
+# as itself (recall), and must not be recognised as any other language (the
+# guard's whole reason for being one-directional).
+SAMPLES = {
+    'en': 'He was alone in the big house and did not know what to do.',
+    'fr': 'Il etait seul dans la grande maison et ne savait que faire.',
+    'de': 'Er war allein in dem grossen Haus und wusste nicht, was er tun sollte.',
+    'es': 'Estaba solo en la gran casa y no sabia que hacer.',
+    'it': 'Era solo nella grande casa e non sapeva che cosa fare.',
+    'pt': 'Ele estava sozinho na grande casa e nao sabia o que fazer.',
+    'ru': 'Он был один в большом доме и не знал, что делать.',
+    'ko': '그는 큰 집에 혼자 있었고 무엇을 해야 할지 몰랐다.',
+}
+
+#: Korean is in the cross-contamination matrix below but not in the recall test.
+#: It is space-separated, so the method fits it, but it agglutinates: the
+#: particles and verb endings that carry the function words are glued onto the
+#: stem, so a token like `있었고` or `해야` matches no list of standalone words.
+#: Its 28 markers were not widened for the same reason the bar was not moved:
+#: it needs its own measured pass, and guessing at it would be the exact
+#: mistake the second pass was made to avoid. Until then a Korean source is
+#: recognised by the run check rather than by the word list.
+RECALL_LANGUAGES = ('en', 'fr', 'de', 'es', 'it', 'pt', 'ru')
+
+
+@pytest.mark.parametrize('lang', RECALL_LANGUAGES)
+def test_a_genuinely_untranslated_passage_is_caught_in_every_covered_language(lang):
+    """The headline case the guard exists for. The French, English and German
+    tables were always adequate; the other four were not, and their true
+    positives sat at 0.36–0.38 — under the bar — because the lists were short
+    rather than because the bar was wrong."""
+    assert BookTranslator._is_in_source_language(SAMPLES[lang], lang), lang
+
+
+@pytest.mark.parametrize('source,target', [
+    (source, target)
+    for source in SAMPLES for target in SAMPLES if source != target
+])
+def test_correct_text_in_any_language_is_never_read_as_another(source, target):
+    """The guard refuses a replacement it believes is written in the source
+    language, so a false positive here silently discards a good fix. This is
+    the property that makes the six cognate directions — it↔es, es↔it,
+    es↔pt, pt↔es, it↔pt, pt↔it — the ones worth being careful about, and the
+    reason every marker added in the second pass had to be absent from every
+    other table. All 56 ordered pairs, Korean included: nothing in this matrix
+    fires."""
+    assert not BookTranslator._is_in_source_language(SAMPLES[target], source), (
+        f'{target} text flagged as {source}'
+    )
+
+
+def test_no_marker_appears_in_two_tables_except_the_cognates_already_shared():
+    """The mechanical form of the rule the test above checks the consequence
+    of. Every overlap here predates the second pass and is deliberate: these
+    words are genuinely common to both languages, and a marker shared with a
+    language this book might be translated into fires on good text there. The
+    test exists because the second pass briefly broke it — `entre`, `nunca`
+    and `sobre` were added to both Spanish and Portuguese, and `sempre` to both
+    Italian and Portuguese, having been checked against the original tables
+    but not against each other."""
+    overlaps = set()
+    for lang, words in BookTranslator._FUNCTION_WORDS.items():
+        for other, other_words in BookTranslator._FUNCTION_WORDS.items():
+            if other <= lang:
+                continue
+            shared = words & other_words
+            if shared:
+                overlaps.add(f'{lang}/{other}: {" ".join(sorted(shared))}')
+    assert overlaps == {
+        'de/en: in was',
+        'de/it: in',
+        'en/es: no',
+        'en/fr: a',
+        'en/it: come in',
+        'en/pt: as do',
+        'es/fr: de en la que son un',
+        'es/pt: era estar mas o ser',
+        'fr/it: il le',
+        'fr/pt: mais ou',
+        'it/pt: disse e quando',
+    }, overlaps
+
+
+def test_the_english_and_french_tables_are_the_ones_an_english_to_french_run_reads():
+    """The dict is keyed by *source* language and read one way only, so an
+    English→French run touches `en` alone and nothing added to another table
+    can reach it. Pinned because that is what makes widening the other lists a
+    safe change rather than a risk to the most-used pair."""
+    assert BookTranslator._is_in_source_language(SAMPLES['en'], 'en')
+    assert not BookTranslator._is_in_source_language(SAMPLES['fr'], 'en')
+    # A run where source and target are the same language stands the guard down
+    # before it ever reads a table, so these sizes only matter one direction.
+    assert len(BookTranslator._FUNCTION_WORDS['en']) > 100
+    assert len(BookTranslator._FUNCTION_WORDS['fr']) > 35
+
+
 def test_the_language_guard_speaks_the_language_asked_for():
     """A French sentence is not English, and an English one is not French —
     the guard is not a generic 'is this foreign' test."""
@@ -750,9 +956,81 @@ def test_a_refused_edit_is_counted_per_guard(monkeypatch):
     assert details['errors_found'] == 0
     assert details['errors_dropped'] == 1
     assert details['dropped_by_guard'] == {'source copy': 1}
-    assert '1 refused by guard (source copy 1)' in (
+    assert '1 not applied (source copy 1)' in (
         BookTranslator._describe_stage2_chunk(details, warning=None, changed=False)
     )
+
+
+def test_a_span_that_is_not_in_the_draft_is_counted_too(monkeypatch):
+    """The commonest way a review answer yields nothing is a model reporting an
+    error about a string that is not there. Uncounted, the chunk reads as
+    "0 found · nothing to do", which is the reading that hides an untranslated
+    paragraph — so it is counted, and named for what it is rather than for a
+    guard that never ran on it."""
+    translator = BookTranslator(model_name='reviewer:12b')
+    reported = json.dumps([
+        {'span': 'Elle n\'est jamais venue a la maison ce soir-la.',
+         'replacement': 'Elle n\'est jamais venue à la maison ce soir-là.',
+         'type': 'mistranslation', 'severity': 'major'},
+        {'span': 'The dog barked all afternoon.',
+         'replacement': 'Le chien a aboyé tout l\'après-midi.',
+         'type': 'mistranslation', 'severity': 'major'},
+    ])
+    _script_model_calls(monkeypatch, [reported])
+
+    _, _, details = translator.stage2_reflection_improvement(
+        original_text=FR_PAGE_SOURCE, draft_translation=FR_PAGE_DRAFT,
+        source_lang='english', target_lang='french',
+    )
+
+    assert details['errors_found'] == 0
+    assert details['errors_dropped'] == 2
+    assert details['dropped_by_guard'] == {'span not in draft': 2}
+    assert '2 not applied (span not in draft 2)' in (
+        BookTranslator._describe_stage2_chunk(details, warning=None, changed=False)
+    )
+
+
+def test_a_span_refused_by_a_guard_twice_is_counted_twice(monkeypatch):
+    """Pins the upper bound documented on the chunk summary. The guards run
+    before `seen`, so a duplicated answer takes the same branch twice and
+    `errors_dropped` over-counts distinct problems. The alternative — marking
+    the span seen even when a guard refuses it — would also stop a *second,
+    different* proposal for the same span from being considered, which is a
+    behaviour change and not a reporting fix. Counting twice is the safe
+    direction: it never under-reports."""
+    translator = BookTranslator(model_name='reviewer:12b')
+    one = {'span': 'Il aurait été préférable qu’elle soit en colère contre moi.',
+           'replacement': 'It would have been better if she was mad at me.',
+           'type': 'omission', 'severity': 'major'}
+    _script_model_calls(monkeypatch, [json.dumps([one, dict(one)])])
+
+    _, _, details = translator.stage2_reflection_improvement(
+        original_text=FR_PAGE_SOURCE, draft_translation=FR_PAGE_DRAFT,
+        source_lang='english', target_lang='french',
+    )
+
+    assert details['errors_found'] == 0
+    assert details['dropped_by_guard'] == {'source copy': 2}
+
+
+def test_a_span_reported_twice_that_survives_is_counted_once(monkeypatch):
+    """The `seen` discard is the one deliberately left uncounted: the first
+    report of the span is already in `validated`, so counting the second would
+    double-count one model mistake."""
+    translator = BookTranslator(model_name='reviewer:12b')
+    one = {'span': 'cette froideur, ce vide',
+           'replacement': 'cette froideur absolute, ce vide total',
+           'type': 'style', 'severity': 'major'}
+    _script_model_calls(monkeypatch, [json.dumps([one, dict(one)])])
+
+    _, _, details = translator.stage2_reflection_improvement(
+        original_text=FR_PAGE_SOURCE, draft_translation=FR_PAGE_DRAFT,
+        source_lang='english', target_lang='french',
+    )
+
+    assert details['errors_found'] == 1
+    assert details['errors_dropped'] == 0
 
 
 def _refine_with_source(translator, monkeypatch, source, reported, *answers):

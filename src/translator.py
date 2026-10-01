@@ -2038,6 +2038,14 @@ class BookTranslator(QualityTests):
                             genre=genre,
                             terminology_context=terminology_context,
                             terminology_violations=draft_violations,
+                            # The renderings this chunk was actually shown, so
+                            # the source-word guard defers to exactly that
+                            # contract and no further. Every mode counts: a
+                            # `preferred` wording is still the agreed one, and
+                            # refusing it would be refusing the glossary.
+                            agreed_targets={
+                                term.target for term in relevant_terms
+                            },
                         )
                         errors_found += stage2_details.get('errors_found', 0)
                         errors_applied += stage2_details.get('errors_applied', 0)
@@ -2851,29 +2859,62 @@ class BookTranslator(QualityTests):
     # section is never added and an entirely untranslated chunk is never named
     # to the reviewer — the exact case this commit set out to fix, uncovered in
     # the two languages where a word list is least likely to have worked anyway.
-    # CHANGELOG.md repeats the claim as "Chinese and Japanese source text is
-    # still covered by the run check", which is the part that is right.
+    # CHANGELOG.md has been corrected to say exactly this much.
     #
-    # REVIEW (measured recall of this table, at the shipped 0.38 bar).
-    # Sampling plain, genuinely untranslated sentences per source language
-    # through `_is_in_source_language`:
+    # REVIEW (left unfixed deliberately, with the cost written down). Covering
+    # this needs a different signal, not a longer table: Chinese and Japanese
+    # do not put spaces between words, so `_comparable(...).split()` yields one
+    # or two tokens for a whole paragraph and every count here collapses. The
+    # honest version is a character-level run comparison against the source —
+    # new code, a new threshold, and no corpus available in this workspace to
+    # set that threshold honestly. The failure mode of guessing it is the bad
+    # one: a threshold set too low silently discards correct edits in every
+    # Chinese and Japanese book, which is the outcome these guards exist to
+    # prevent. Japanese also shares kanji with Chinese, so the two would need
+    # to be separated. Leaving it costs a missed detection in two languages;
+    # guessing costs wrong edits in two languages. The documentation now says
+    # which one is true.
     #
-    #   en  2/2 caught   fr 2/2   de 3/3
-    #   es  3/5   ("Cuando llego a casa, encontro que nadie lo esperaba." 0.111,
-    #              "No hay manera de que alguien pueda entenderlo ahora." 0.333)
-    #   pt  1/5   ("Ele estava sozinho na grande casa e nao sabia o que
-    #              fazer." 0.333 — four pt markers, none of them in the sentence)
-    #   it  0/4   (0.364, 0.375, 0.125, 0.222)
-    #   ru  0/2   (0.364, 0.375)
+    # REVIEW (measured recall of this table, at the shipped 0.38 bar). Sampling
+    # plain, genuinely untranslated sentences per source language:
     #
-    # 12 of 23 missed. The two it/ru true positives land at 0.364 and 0.375 —
-    # within one or two tokens of the 0.38 bar — which says the bar was placed
-    # from the French *false-positive* ceiling (0.36) without checking where the
-    # other languages' *true positives* sit. The comment above is candid that
-    # the corpus was French-only; the consequence is not that the guard
-    # misfires, it is that for it/pt/ru/es it mostly does not fire, silently.
-    # None of test_refinement.py's language tests use a non-English,
-    # non-French source, so nothing pins this down.
+    #                     before   after   markers
+    #   en                 2/2      2/2     123    (table untouched)
+    #   fr                 2/2      2/2      51    (table untouched)
+    #   de                 3/3      3/3      42    (table untouched)
+    #   es                 3/5      4/5      69
+    #   pt                 1/5      2/5      67
+    #   it                 0/4      2/5      71
+    #   ru                 0/2      3/4      75
+    #   ko                 0/1      0/1      28    (see below)
+    #
+    # The four thin tables were a table-size problem, and a second pass of
+    # markers present in no other table fixed most of it. Two things it did
+    # not fix, both limits of the method rather than of the lists:
+    #
+    #   * A content-heavy sentence carries almost no function words.
+    #     "La ragazza rideva nel modo piu semplice possibile." scores 0.25
+    #     against a 71-marker Italian list and no word list would raise it.
+    #     Catching those needs a different signal — the language-ID model, on
+    #     the hot path, which the comment above rules out deliberately.
+    #   * Korean agglutinates: the particle and the verb ending are glued to
+    #     the stem, so `있었고` and `해야` match no list of standalone words.
+    #     Its 28 markers were left alone rather than guessed at.
+    #
+    # A marker that is also a correct word of a language this book might be
+    # translated *into* is worse than no marker at all, so every word added in
+    # the second pass had to be absent from every other table in this dict.
+    # `una` for Italian, and `esta`/`ser`/`estar`/`quando` for Portuguese and
+    # `porque`/`nada`/`ser` for Spanish, were dropped for that reason. The
+    # eleven remaining overlaps are all pre-existing and all deliberate; they
+    # are listed verbatim in test_refinement.py, which exists because this
+    # pass briefly broke it — `entre`, `nunca` and `sobre` went into both
+    # Spanish and Portuguese, and `sempre` into both Italian and Portuguese,
+    # having been checked against the original tables but not each other.
+    #
+    # NOTE: this dict is keyed by *source* language and read only in that
+    # direction, so the `en` and `fr` tables are what an English→French run
+    # touches, and nothing added to another table can affect one.
     #
     # Folded through the same reduction the text is folded through before the
     # comparison, so that `où` in the table meets `ou` in the text. Written out
@@ -2919,6 +2960,19 @@ class BookTranslator(QualityTests):
             'estar', 'tiene', 'han', 'su', 'sus', 'este', 'esta', 'esto',
             'no', 'que', 'qué', 'quién', 'dónde', 'cómo', 'más', 'puede',
             'debería', 'hacer', 'dijo', 'ellos', 'ellas', 'nosotros', 'yo',
+            # Second pass. Every word here was checked against every other
+            # table in this dict and kept only because it appears in none of
+            # them, which is the whole safety rule: a marker that is also a
+            # correct word of a language this book might be translated into
+            # fires on good text in that language. `porque`, `nada` and `ser`
+            # were candidates and were dropped — all three are Portuguese too,
+            # as are `entre`, `nunca` and `sobre`, which were added to both
+            # lists by mistake before the two were checked against each other.
+            'cuando', 'muy', 'sin', 'hasta', 'desde',
+            'hacia', 'cada', 'todo', 'todos', 'todas', 'siempre',
+            'tambien', 'ahora', 'despues', 'entonces', 'mientras', 'aunque',
+            'pueden', 'tienen', 'habia', 'estaba', 'estaban', 'mismo',
+            'misma', 'otro', 'otra', 'ella', 'usted',
         },
         'de': {
             'der', 'die', 'das', 'ein', 'eine', 'und', 'oder', 'aber', 'von',
@@ -2936,6 +2990,14 @@ class BookTranslator(QualityTests):
             'non', 'cosa', 'dove', 'come', 'più', 'potrebbe', 'dovrebbe',
             'fare', 'disse', 'noi', 'io', 'lui', 'lei', 'anche', 'già',
             'ancora', 'quando', 'dovevo', 'faceva', 'niente', 'tutto',
+            # Second pass, same rule as Spanish: present in no other table.
+            # `una` was a candidate and dropped — it is Spanish too.
+            'che', 'quella', 'aveva', 'erano', 'stato', 'solo', 'senza',
+            'tutti', 'ogni', 'poi', 'prima', 'dopo', 'molto', 'bene',
+            'volte', 'uomo', 'donna', 'gente', 'modo', 'parte', 'caso',
+            'tempo', 'giorno', 'verso', 'attraverso', 'mentre',
+            'perche', 'dunque', 'invece', 'perfino', 'nemmeno', 'forse',
+            'semi',
         },
         'pt': {
             # Spanish cognates (a, de, que, no, para, como, este, esta) are
@@ -2946,12 +3008,29 @@ class BookTranslator(QualityTests):
             'onde', 'mais', 'poderia', 'deveria', 'fazer', 'disse', 'nós',
             'eu', 'você', 'eles', 'elas', 'quando', 'porque', 'também',
             'ainda', 'nada', 'coisa', 'vez', 'anos',
+            # Second pass. `esta`, `ser`, `estar` and `quando` were candidates
+            # and dropped: the first three are Spanish, `quando` is Italian.
+            # `entre`, `nunca` and `sobre` are Portuguese *and* Spanish, so they
+            # are markers for neither — a shared function word fires on good
+            # text in both directions.
+            'ele', 'ela', 'vos', 'foi', 'estao', 'muito', 'qual', 'quais',
+            'outro', 'outra', 'mesmo', 'agora', 'nunca', 'talvez',
+            'ha', 'havia', 'podem', 'devem', 'vai', 'vou', 'entao', 'assim',
+            'depois', 'antes',
         },
         'ru': {
             'и', 'в', 'не', 'на', 'что', 'с', 'по', 'это', 'как', 'а', 'то',
             'все', 'она', 'так', 'его', 'но', 'да', 'ты', 'к', 'у', 'же',
             'вы', 'за', 'бы', 'по', 'или', 'если', 'мне', 'было', 'вот',
             'от', 'меня', 'еще', 'нет', 'о', 'из', 'ему', 'теперь', 'когда',
+            # Second pass. Russian shares no marker with any other language
+            # here, so nothing had to be held back — these are simply the
+            # verbs and adverbs the first list was missing.
+            'был', 'была', 'были', 'него', 'нее', 'них', 'нас', 'вас', 'их',
+            'чем', 'чтобы', 'который', 'которая', 'которые', 'очень', 'также',
+            'лишь', 'уже', 'даже', 'здесь', 'там', 'тогда', 'потом', 'снова',
+            'может', 'мог', 'могла', 'сказала', 'думал', 'знал', 'видел',
+            'всегда', 'никогда', 'только', 'почти', 'вдруг', 'наконец',
         },
         'ko': {
             '이', '그', '저', '는', '에', '을', '를', '와', '과', '도', '의',
@@ -2970,17 +3049,15 @@ class BookTranslator(QualityTests):
     #: book and one language pair is exactly the rule that misfires on the
     #: next one.
     #:
-    #: REVIEW: the reasoning is sound and the evidence is one language pair, but
-    #: the two numbers quoted are not the same kind of measurement. 0.80 is a
-    #: genuine replacement, correctly in the source language, caught. 0.36 is a
-    #: *false positive* — a correct French replacement — and 0.38 is placed just
-    #: above it. Those bracket only the French case. For it and ru the true
-    #: positive is itself ~0.36–0.38 (see the measured table above), so the bar
-    #: lands on top of the signal rather than above the noise. "Raised because a
-    #: rule tuned on one book misfires on the next one" is the right instinct
-    #: applied to the wrong axis: the fix for a French-only corpus is a corpus
-    #: per language, not a higher number. Lowering it would reintroduce the
-    #: French false positives, so this is a measurement gap, not a wrong value.
+    #: REVIEW: the bar itself is unchanged and the four thin marker lists were
+    #: brought up to it instead. Lowering the bar would have reintroduced the
+    #: measured French false positives, and raising it further would have lost
+    #: more true ones than it saved — the true cases for it and ru sat at
+    #: 0.364–0.375, right under it, because the lists were short, not because
+    #: the bar was wrong. Enlarging the lists moves both sides of the ratio in
+    #: the right direction at once. What this number still cannot do is catch a
+    #: source-language sentence that carries almost no function words; see the
+    #: measured table on _FUNCTION_WORDS.
     SOURCE_LANGUAGE_MIN_SHARE = 0.38
     #: Below this many words a replacement is not judged on its language: too
     #: few words carry no reliable signal, and a name or a greeting must not
@@ -3106,7 +3183,9 @@ class BookTranslator(QualityTests):
         )
 
     @classmethod
-    def _is_source_form(cls, replacement: str, original_text: str) -> bool:
+    def _is_source_form(
+        cls, replacement: str, original_text: str, agreed: frozenset = frozenset(),
+    ) -> bool:
         """Whether a replacement is a word of the source rather than a
         rendering of one.
 
@@ -3116,22 +3195,19 @@ class BookTranslator(QualityTests):
         `ME` are not, and a glossary error whose fix is one of those is the
         source word being put back rather than translated.
 
-        REVIEW: this refuses the one glossary shape the feature two commits
-        earlier put at the centre of the documentation. A term whose agreed
-        rendering *is* the source word — `Rom => Rom | inflectable {c'est un
-        garçon de huit ans}` in README.md, in guide.html and as the `fr`
-        placeholder in index.html — is the case a note exists for, and every
-        single-word kept name is refused here. Verified against
-        "Rom was in the garden. Ivy was there too. Mr. Darcy arrived.":
-        `Rom`, `Ivy`, `Mr`, `Darcy` all return True; only `New York` passes.
-        So a `terminology`/`consistency` error whose correct replacement is the
-        established rendering is dropped as 'source word' precisely when that
-        rendering is a word of the source. That is the failure this guard was
-        written to prevent (`"ELLE" => "New York"`) arriving from the other
-        direction, and nothing distinguishes the two cases here.
+        `agreed` is the set of renderings the glossary for this run already
+        promises, pre-folded by the caller. A replacement that is one of them
+        is by definition a rendering and never "the source word put back" — and
+        that includes the case where the agreed rendering *is* the source word,
+        which is what `Rom => Rom | inflectable {…}` is for and what an English
+        name kept in a French page is. Without this the guard refused every
+        single-word kept name in the book: `Rom`, `Ivy`, `Mr`, `Darcy` all came
+        back True against a source containing them. Only terms relevant to the
+        chunk are passed in, so the guard defers to exactly the contract the
+        reviewer was shown for this passage.
         """
         candidate = cls._comparable(replacement)
-        if not candidate or ' ' in candidate:
+        if not candidate or ' ' in candidate or candidate in agreed:
             return False
         return f' {candidate} ' in f' {cls._comparable(original_text)} '
 
@@ -3227,6 +3303,7 @@ class BookTranslator(QualityTests):
     def validate_estimate_spans(
         cls, items: List[Dict], draft_translation: str, original_text: str = '',
         source_lang: str = '', dropped: Optional[Dict[str, int]] = None,
+        agreed_targets: Optional[Set[str]] = None,
     ) -> List[Dict]:
         """Keep only the reported errors that can actually be acted on.
 
@@ -3263,38 +3340,22 @@ class BookTranslator(QualityTests):
         recoverable in the review desk; a real one that is silently dropped is
         not.
 
-        `dropped` is filled in, when given, with a count per guard that refused
-        an edit. It is reporting only: nothing here reads it, and a caller that
+        `dropped` is filled in, when given, with a count per reason that stopped an
+        edit. It is reporting only: nothing here reads it, and a caller that
         passes nothing gets exactly the behaviour it had before.
 
-        REVIEW (the counter does not count everything the docstring above
-        promises). The stated motivation is that "a chunk whose whole review
-        answer was refused reads as '0 found · nothing to do'", and the guards
-        close that for guard refusals only. Three discards above still leave no
-        trace, and all three happen *before* `dropped` exists:
-
-        * `span not in draft_translation` — a hallucinated or misremembered span
-          is discarded here. A reviewer that returns nine bad spans produces
-          errors_found=0, errors_dropped=0, which is the exact reading the
-          commit set out to eliminate. Verified.
-        * `span in seen` — the duplicate-suppression branch is the other half of
-          the same hole: the model's second copy of an error is invisible.
-        * `span == replacement`, and the sub-2-character span — pre-existing
-          discards, same story.
-
-        REVIEW (guard order relative to `seen`). The guards run *before*
-        `seen.add(span)`, so a refused error does not consume its span: a later
-        duplicate of the same span carrying a different replacement is accepted
-        (verified — first refused as 'source language', second kept). Arguably
-        right, since the second answer is a different proposal, but it is a
-        consequence of where the `continue`s sit rather than a decision recorded
-        anywhere. The mirror image: because the guards are pure functions of
-        (span, replacement), a duplicated refused error is dropped twice and
-        counted twice, so `errors_dropped` can exceed the number of distinct
-        spans the reviewer actually got wrong (verified: {'source language': 2}
-        from one span reported twice). The UI and the CHANGELOG both describe
-        this as a count of edits, so the number is an upper bound.
+        `agreed_targets` is the glossary renderings this run promised, and it
+        exists for one guard: a `terminology`/`consistency` fix whose
+        replacement is one of them is a rendering, not the source word put back,
+        even when the two are the same string (`Rom => Rom`). Pass only the
+        terms relevant to this chunk, so the guard defers to exactly the
+        contract the reviewer was shown.
         """
+        # Folded once, like every other comparison here: the guard receives
+        # already-folded text, and a set lookup is not a normalisation.
+        agreed = frozenset(
+            cls._comparable(target) for target in (agreed_targets or ())
+        )
         validated, seen = [], set()
         for item in items:
             span = item.get('span')
@@ -3304,7 +3365,25 @@ class BookTranslator(QualityTests):
             span, replacement = span.strip(), replacement.strip()
             if len(span) < 2 or not replacement or span == replacement:
                 continue
-            if span not in draft_translation or span in seen:
+            if span not in draft_translation:
+                # The dominant way a review answer produces nothing: the model
+                # reported an error about a string that is not in the draft at
+                # all. Counted, because without it this chunk reads as "0 found
+                # · nothing to do" — the exact reading that hides an untranslated
+                # paragraph, which is the whole reason `dropped` exists. No
+                # guard runs on this one, so it is named for what it is rather
+                # than for a guard that refused it.
+                cls._drop(dropped, 'span not in draft')
+                logger.translation_logger.info(
+                    "Stage 2 dropped a reported error whose span is not in the "
+                    "draft: %r", span[:80],
+                )
+                continue
+            if span in seen:
+                # Deliberately not counted. The first report of this span is
+                # already represented — in `validated` or, if a guard took it,
+                # in `dropped` — so counting the second would double-count one
+                # model mistake.
                 continue
 
             error_type = str(item.get('type') or '').strip().lower()
@@ -3332,7 +3411,7 @@ class BookTranslator(QualityTests):
             if (
                 original_text
                 and error_type in {'terminology', 'consistency'}
-                and cls._is_source_form(replacement, original_text)
+                and cls._is_source_form(replacement, original_text, agreed)
             ):
                 # A glossary fix whose replacement is a word of the source is
                 # not a rendering, it is the original word put back. The
@@ -3382,6 +3461,7 @@ class BookTranslator(QualityTests):
         terminology_context: str = "",
         terminology_violations: Optional[List[Dict[str, str]]] = None,
         dropped: Optional[Dict[str, int]] = None,
+        agreed_targets: Optional[Set[str]] = None,
     ) -> Tuple[List[Dict], Optional[str]]:
         """STAGE 2a: what is wrong with this draft, as located spans.
 
@@ -3389,7 +3469,9 @@ class BookTranslator(QualityTests):
         answer at all; an empty list with no warning means it answered that
         the draft is fine, which is a legitimate result and not a failure.
 
-        `dropped` is filled in with a count per guard that refused an edit.
+        `dropped` is filled in with a count per reason that stopped an edit.
+        `agreed_targets` is the glossary renderings this run promised; see
+        validate_estimate_spans for why one guard needs it.
         """
         source_name = LANG_NAMES.get(source_lang, source_lang)
         target_name = LANG_NAMES.get(target_lang, target_lang)
@@ -3454,6 +3536,7 @@ class BookTranslator(QualityTests):
             # the prompt gets the display name, the guard needs 'en'.
             source_code if two_languages else '',
             dropped,
+            agreed_targets,
         ), None
 
     @staticmethod
@@ -3663,16 +3746,16 @@ class BookTranslator(QualityTests):
         if dropped:
             by_guard = details.get('dropped_by_guard') or {}
             # REVIEW: "N found" here is post-validation, so it already excludes
-            # the refused edits — "3 found, 0 patched, 2 refused by guard" is
-            # three survivors and five reported. The refused count is therefore
-            # additive to "found", not a subset of it, and the two numbers will
-            # read as contradictory to anyone who assumes otherwise. The
-            # Refinement panel in index.html draws the same pairing
-            # ("refinement.errors_found" / "refinement.errors_dropped") with no
-            # note, so this line is the only place the relationship is written
-            # down. `errors_dropped` is also an upper bound: a duplicated span
-            # is counted once per copy (see validate_estimate_spans).
-            parts.append('{} refused by guard ({})'.format(
+            # every refusal — "3 found, 1 patched, 4 not applied" is three
+            # survivors plus five reported. The two counts are additive, not
+            # nested. `errors_dropped` is also an upper bound on the number of
+            # *distinct* problems: one span reported twice by a guard is counted
+            # twice, because the guards are pure functions of (span, replacement)
+            # and both copies take the same branch. See validate_estimate_spans.
+            #
+            # "not applied", not "refused by guard": one of the reasons is a
+            # span that was never in the draft, which no guard looked at.
+            parts.append('{} not applied ({})'.format(
                 dropped,
                 ', '.join(
                     f'{reason} {count}' for reason, count in sorted(by_guard.items())
@@ -3717,6 +3800,7 @@ class BookTranslator(QualityTests):
         genre: str = "unknown",
         terminology_context: str = "",
         terminology_violations: Optional[List[Dict[str, str]]] = None,
+        agreed_targets: Optional[Set[str]] = None,
     ) -> Tuple[str, Optional[str], Dict]:
         """STAGE 2: estimate, patch, verify — the whole refinement of one
         chunk.
@@ -3736,6 +3820,7 @@ class BookTranslator(QualityTests):
             terminology_context=terminology_context,
             terminology_violations=terminology_violations,
             dropped=dropped,
+            agreed_targets=agreed_targets,
         )
         actionable = [error for error in errors if self.is_actionable_error(error)]
         details: Dict = {
@@ -4914,17 +4999,12 @@ def update_review_chunk(translation_id, chunk_index):
                 source=term['source_term'],
                 target=term['target_term'],
                 mode=term['enforcement_mode'],
-                # REVIEW: `note` is selected on the line above and then not
-                # passed. Every other place that rebuilds a TerminologyManager
-                # from translation_terms does pass it — resume_translation,
-                # refine, evaluate, generate_review_chunk_alternatives,
-                # _review_chunks_payload — so this is the one gap in the
-                # plumbing. Harmless today: the only thing asked of this manager
-                # is exact_violations(), which looks at mode and target and
-                # never reads a note. It becomes a real bug the moment this
-                # handler wants prompt_context() (to tell an alternative
-                # generator about the author's notes) and quietly sends the
-                # model a glossary with the notes missing.
+                # The only site that selected `note` and then dropped it. It is
+                # unused today — exact_violations() reads mode and target only —
+                # so this changes no output; it removes a trap for the next
+                # caller, which would otherwise get a glossary with the notes
+                # silently missing the moment it asked for prompt_context().
+                note=term['note'],
             )
             for term in term_rows
         ])

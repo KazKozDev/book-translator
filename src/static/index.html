@@ -4162,16 +4162,14 @@
 
             const notes = [];
             // REVIEW: `found` is refinement.errors_found, which translator.py
-            // fills with len(errors) *after* validation — so the guards' refusals
-            // are already excluded from it and `refused` is additive, not a
-            // subset. "3 found · 1 patched · 4 refused" means four reported
-            // errors plus three survivors. The parenthetical is also a summary
-            // of five guard names ('source copy', 'source language', 'source
-            // word', 'deletes text', 'repeats the draft') down to four phrases,
-            // and 'source word' is folded into "source text" — a reader cannot
-            // tell which guard fired. The per-guard breakdown is in the chunk
-            // log, which is one click away and is where the exact names appear.
-            if (refused) notes.push(`${refused} reported error(s) refused by a guard (source text, wrong language, text loss, or a duplicate of what follows) — the draft was left as it was`);
+            // fills with len(errors) *after* validation — so everything below is
+            // already excluded from it and `refused` is additive, not a subset:
+            // "3 found · 1 patched · 4 not applied" means seven reported errors,
+            // three of which survived. The per-guard breakdown is in the chunk
+            // log, one click away; this string deliberately does not name the
+            // guards, because one of the reasons ('span not in draft') is not a
+            // guard at all.
+            if (refused) notes.push(`${refused} reported error(s) not applied — refused by a guard, or reported about text that is not in the draft. The draft was left as it was.`);
             if (rejected) notes.push(`${rejected} patch(es) vetoed by the verifier`);
             if (positionBiases) notes.push(`${positionBiases} position bias event(s) detected`);
             if (neutralChecks) notes.push(`${neutralChecks} neutral edit check(s) run`);
