@@ -199,6 +199,18 @@ def resume_run(run_id) -> bool:
     return True
 
 
+def is_run_paused(run_id) -> bool:
+    """Whether a registered run is currently held at a pause checkpoint.
+
+    The page that pressed Pause may be gone by the time anyone asks — a reload
+    forgets it — so the server has to be able to say so, or a paused job is a
+    job nobody can resume.
+    """
+    with RUN_PAUSE_LOCK:
+        event = RUN_PAUSE_EVENTS.get(str(run_id))
+    return event is not None and not event.is_set()
+
+
 def run_pause_checkpoint(run_id) -> None:
     """Block the calling worker thread while its run is paused.
 
@@ -1370,6 +1382,7 @@ class BookTranslator(QualityTests):
         self, text: str, source_lang: str, target_lang: str, genre: str = 'unknown',
         candidates: Optional[List[Dict]] = None,
         progress_callback: Optional[Callable[[float, str], None]] = None,
+        before_call: Optional[Callable[[], None]] = None,
     ) -> List[Dict]:
         """One agreed target rendering per recurring name in the source.
 
@@ -1400,6 +1413,12 @@ class BookTranslator(QualityTests):
             + (f", {workers} at a time" if workers > 1 else "")
         )
         def render(batch: List[Dict]) -> Optional[str]:
+            # map() below has already queued every batch, so holding the loop
+            # that reads the answers holds nothing: the pool would go on
+            # calling the model. The pause point has to sit here, in the
+            # worker, ahead of the call it is meant to prevent.
+            if before_call is not None:
+                before_call()
             return self._call_model(
                 self._rendering_prompt(text, batch, source_lang, target_lang, genre),
                 temperature=0.2, read_timeout=self.PREPARE_READ_TIMEOUT,
@@ -4097,6 +4116,7 @@ def get_translations():
             item = dict(row)
             item['status'] = _effective_status(item['id'], item['status'])
             item['running'] = is_run_active(item['id'])
+            item['paused'] = item['running'] and is_run_paused(item['id'])
             translations.append(item)
     return jsonify({'translations': translations})
 
@@ -4127,6 +4147,7 @@ def get_translation(translation_id):
         data = dict(translation)
         data['status'] = _effective_status(translation_id, data['status'])
         data['running'] = is_run_active(translation_id)
+        data['paused'] = data['running'] and is_run_paused(translation_id)
         # The glossary this job actually ran under, in the textarea's own
         # format, so reopening a translation can show its terminology instead
         # of an empty editor. Same serialisation as /prepare.
@@ -5248,6 +5269,7 @@ def prepare():
                 records = translator.propose_proper_noun_records(
                     text, source_lang, target_lang, genre, candidates=candidates,
                     progress_callback=progress_with_pause('rendering'),
+                    before_call=lambda: run_pause_checkpoint(prepare_id),
                 )
                 run_pause_checkpoint(prepare_id)
                 emit_prepare_stage(

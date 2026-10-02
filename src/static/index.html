@@ -4296,6 +4296,7 @@
                             const data = JSON.parse(line.substring(6).trim());
                             lastData = data;
                             if (data.translation_id) rememberActiveTranslation(data.translation_id);
+                            if (data.translation_id) registerActiveJob(data.translation_id);
 
                             if (typeof data.progress === 'number') {
                                 document.getElementById('progressBar').style.width = data.progress + '%';
@@ -4342,6 +4343,7 @@
                 loadTranslations();
             } finally {
                 translateBtn.disabled = false;
+                clearActiveJob();
             }
         }
 
@@ -4446,6 +4448,11 @@
                 }
 
                 if (t.running) {
+                    // A paused job sends no events, so the button cannot wait
+                    // for one: after a reload it would never appear, and the
+                    // job would stay held with nothing on the page to release it.
+                    registerActiveJob(t.id);
+                    setJobPaused(Boolean(t.paused));
                     attachLiveTranslation(t.id, { silent: true });
                 }
 
