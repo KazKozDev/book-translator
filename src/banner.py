@@ -27,7 +27,7 @@ ASCII_LOGO = r"""  _____ ___  _     __  __    _    ____ _   _
    | || |_| | |___| |  | |/ ___ \ |___|  _  |
    |_| \___/|_____|_|  |_/_/   \_\____|_| |_|"""
 
-SUBTITLE = 'B O O K   T R A N S L A T O R  v3.0'
+SUBTITLE = 'B O O K   T R A N S L A T O R  v3.1'
 # Tones taken from :root in static/index.html.
 _ACCENT = '\033[1m\033[38;2;91;124;153m'
 _CREAM = '\033[1m\033[38;2;240;214;170m'

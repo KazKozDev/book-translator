@@ -28,7 +28,7 @@ def test_direct_python_banner_matches_tolmach_identity(monkeypatch, capsys):
 
     output = capsys.readouterr().out
     assert output.startswith('\n\n\n████████╗')
-    assert 'B O O K   T R A N S L A T O R  v3.0' in output
+    assert 'B O O K   T R A N S L A T O R  v3.1' in output
     assert output.endswith('\n\n\n')
 
 
