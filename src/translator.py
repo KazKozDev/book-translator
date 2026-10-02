@@ -119,15 +119,6 @@ _PROGRESS_SENTINEL = object()
 # Stage 0 /prepare has no single total to count down: it runs four ordered
 # steps whose duration varies wildly. These weights map each step's fraction
 # into one smooth 0-100% bar so the wait still feels measured instead of stuck.
-#
-# REVIEW: the weights are only as good as the assumption that 'extracting' is
-# where the time goes, and they are attributed to the wrong place. GLiNER is
-# loaded and warmed *inside* extract(), before it emits its first callback
-# (build_document_glossary starts `warm` on a second thread before calling it),
-# so on a cold start the bar sits at 0.0% for the whole model load and warm-up
-# — often minutes — and then jumps. There is no event before that point, so
-# the rail reads as "Extracting 0/N" rather than "loading model". A
-# 'loading' stage at 0.00 weight ahead of 'extracting' would be honest.
 PREPARE_STAGE_ORDER = ['extracting', 'adjudicating', 'rendering', 'conflicts']
 PREPARE_STAGE_WEIGHTS = {
     'extracting': 0.45,
@@ -184,16 +175,6 @@ def register_pause_event(run_id) -> threading.Event:
     with RUN_PAUSE_LOCK:
         event = threading.Event()
         event.set()  # running
-        # REVIEW: unconditional replace, keyed by run id. translate(),
-        # resume_translation() and refine() all call this for the *same*
-        # translation id, so a second Start while one is paused (or a
-        # Resume-from-History while the Pause button holds it) swaps in a fresh
-        # *set* Event. run_pause_checkpoint re-reads the dict on every
-        # checkpoint, so a worker blocked on the old Event is not released by
-        # the swap itself — it simply starts honouring the new one, which is
-        # set. Net effect: re-registering silently un-pauses. Intentional
-        # enough, but nothing says so, and the button's own state (currentJobPaused
-        # in index.html) is not consulted.
         RUN_PAUSE_EVENTS[key] = event
     return event
 
@@ -224,26 +205,6 @@ def run_pause_checkpoint(run_id) -> None:
     Insert at chunk/batch boundaries so a single in-flight model call finishes
     but nothing starts until the user resumes — the GPU frees up between calls.
     No-op for jobs that never registered a pause event (e.g. in unit tests).
-
-    REVIEW (docs): this whole pause/resume feature, and the PREPARE progress
-    bar that shares its plumbing, ship with no CHANGELOG entry, no README
-    mention and no guide.html section. guide.html documents the Prepare step
-    and the refinement step in detail and is silent on both. The Pause button
-    is also the only control in the rail that has no keyboard shortcut and no
-    entry in the README's step list (→ 1 UPLOAD → PREPARE → 2 START →
-    3 CONTINUE).
-
-    REVIEW (coverage): checkpoints exist at three granularities. Stage 1 and
-    Stage 2 call this once per chunk; /prepare calls it per extraction batch
-    and per rendering batch (progress_with_pause). But /prepare's
-    'adjudicating' and 'conflicts' stages only call it *around*
-    adjudicate_entity_clusters() and find_rendering_conflicts(), never inside
-    them, so a pause requested during adjudication waits for the whole
-    adjudication to finish. Adjudication is a loop of model calls over every
-    ambiguous cluster pair, not one call, so "a single in-flight model call
-    finishes" understates the wait there. evaluate(), the review-desk
-    alternative generator and quality_tests.py have no checkpoint at all, so
-    those runs cannot be paused however long they take.
     """
     with RUN_PAUSE_LOCK:
         event = RUN_PAUSE_EVENTS.get(str(run_id))
@@ -254,13 +215,6 @@ def run_pause_checkpoint(run_id) -> None:
 def _clear_progress_queue(translation_id: int) -> None:
     with _PROGRESS_QUEUES_LOCK:
         _PROGRESS_QUEUES.pop(translation_id, None)
-    # REVIEW: every other access to RUN_PAUSE_EVENTS takes RUN_PAUSE_LOCK
-    # (register/pause/resume/run_pause_checkpoint all do). This one mutates the
-    # dict outside it. It runs on the SSE reader thread while a worker may be
-    # inside run_pause_checkpoint, so the pop races that read. Benign today —
-    # pop() on a dict is atomic under the GIL and a lost race just leaves an
-    # Event that nothing will ever clear — but the asymmetry is a trap for the
-    # next caller who assumes the lock is held.
     RUN_PAUSE_EVENTS.pop(str(translation_id), None)
 
 
@@ -2816,16 +2770,6 @@ class BookTranslator(QualityTests):
         draft, the source, the text following a span — once per reported
         error, and folding a full chunk again for each of a dozen edits is the
         most expensive thing in a pass that never calls a model.
-
-        REVIEW: _is_cjk() below is the one reduction on this path that is *not*
-        cached, and it is the expensive one — four unicodedata.name() lookups per
-        character. Measured: ~1.7 ms per 4,000-character string, called twice per
-        reported error (span and replacement) by _shrinks_to_nothing, so ~3.4 ms
-        per reported edit against ~0.02 ms for a cached _comparable. On a
-        MAX_ESTIMATE_SPANS=12 chunk that is ~40 ms of pure overhead in a pass
-        whose selling point is that it never calls a model. The name lookup is
-        pure per character and could be a set membership test over one cached
-        name per character.
         """
         return _fold_for_comparison(text)
 
@@ -2849,72 +2793,9 @@ class BookTranslator(QualityTests):
     # Chinese and Japanese source text is still covered by the run check,
     # which needs no word boundaries.
     #
-    # REVIEW (the zh/ja claim is true of a *replacement*, not of a draft).
-    # `_is_source_copy` is the "run check": it compares a reported replacement
-    # against the source, so it only ever fires after the reviewer has already
-    # decided something is wrong and written a replacement. It cannot tell the
-    # reviewer that a chunk is untranslated. The only draft-level detector is
-    # `_is_in_source_language`, and it returns False immediately for a code with
-    # no marker set. So for a zh or ja source the `untranslated_draft` prompt
-    # section is never added and an entirely untranslated chunk is never named
-    # to the reviewer — the exact case this commit set out to fix, uncovered in
-    # the two languages where a word list is least likely to have worked anyway.
-    # CHANGELOG.md has been corrected to say exactly this much.
-    #
-    # REVIEW (left unfixed deliberately, with the cost written down). Covering
-    # this needs a different signal, not a longer table: Chinese and Japanese
-    # do not put spaces between words, so `_comparable(...).split()` yields one
-    # or two tokens for a whole paragraph and every count here collapses. The
-    # honest version is a character-level run comparison against the source —
-    # new code, a new threshold, and no corpus available in this workspace to
-    # set that threshold honestly. The failure mode of guessing it is the bad
-    # one: a threshold set too low silently discards correct edits in every
-    # Chinese and Japanese book, which is the outcome these guards exist to
-    # prevent. Japanese also shares kanji with Chinese, so the two would need
-    # to be separated. Leaving it costs a missed detection in two languages;
-    # guessing costs wrong edits in two languages. The documentation now says
-    # which one is true.
-    #
-    # REVIEW (measured recall of this table, at the shipped 0.38 bar). Sampling
-    # plain, genuinely untranslated sentences per source language:
-    #
-    #                     before   after   markers
-    #   en                 2/2      2/2     123    (table untouched)
-    #   fr                 2/2      2/2      51    (table untouched)
-    #   de                 3/3      3/3      42    (table untouched)
-    #   es                 3/5      4/5      69
-    #   pt                 1/5      2/5      67
-    #   it                 0/4      2/5      71
-    #   ru                 0/2      3/4      75
-    #   ko                 0/1      0/1      28    (see below)
-    #
-    # The four thin tables were a table-size problem, and a second pass of
-    # markers present in no other table fixed most of it. Two things it did
-    # not fix, both limits of the method rather than of the lists:
-    #
-    #   * A content-heavy sentence carries almost no function words.
-    #     "La ragazza rideva nel modo piu semplice possibile." scores 0.25
-    #     against a 71-marker Italian list and no word list would raise it.
-    #     Catching those needs a different signal — the language-ID model, on
-    #     the hot path, which the comment above rules out deliberately.
-    #   * Korean agglutinates: the particle and the verb ending are glued to
-    #     the stem, so `있었고` and `해야` match no list of standalone words.
-    #     Its 28 markers were left alone rather than guessed at.
-    #
-    # A marker that is also a correct word of a language this book might be
-    # translated *into* is worse than no marker at all, so every word added in
-    # the second pass had to be absent from every other table in this dict.
-    # `una` for Italian, and `esta`/`ser`/`estar`/`quando` for Portuguese and
-    # `porque`/`nada`/`ser` for Spanish, were dropped for that reason. The
-    # eleven remaining overlaps are all pre-existing and all deliberate; they
-    # are listed verbatim in test_refinement.py, which exists because this
-    # pass briefly broke it — `entre`, `nunca` and `sobre` went into both
-    # Spanish and Portuguese, and `sempre` into both Italian and Portuguese,
-    # having been checked against the original tables but not each other.
-    #
-    # NOTE: this dict is keyed by *source* language and read only in that
-    # direction, so the `en` and `fr` tables are what an English→French run
-    # touches, and nothing added to another table can affect one.
+    # This dict is keyed by *source* language and read only in that direction,
+    # so the `en` and `fr` tables are what an English→French run touches, and
+    # nothing added to another table can affect one.
     #
     # Folded through the same reduction the text is folded through before the
     # comparison, so that `où` in the table meets `ou` in the text. Written out
@@ -3048,16 +2929,6 @@ class BookTranslator(QualityTests):
     #: under the true case. It was raised from 0.34 because a rule tuned on one
     #: book and one language pair is exactly the rule that misfires on the
     #: next one.
-    #:
-    #: REVIEW: the bar itself is unchanged and the four thin marker lists were
-    #: brought up to it instead. Lowering the bar would have reintroduced the
-    #: measured French false positives, and raising it further would have lost
-    #: more true ones than it saved — the true cases for it and ru sat at
-    #: 0.364–0.375, right under it, because the lists were short, not because
-    #: the bar was wrong. Enlarging the lists moves both sides of the ratio in
-    #: the right direction at once. What this number still cannot do is catch a
-    #: source-language sentence that carries almost no function words; see the
-    #: measured table on _FUNCTION_WORDS.
     SOURCE_LANGUAGE_MIN_SHARE = 0.38
     #: Below this many words a replacement is not judged on its language: too
     #: few words carry no reliable signal, and a name or a greeting must not
@@ -3161,15 +3032,6 @@ class BookTranslator(QualityTests):
         exactly as it was, so declining a fix can never leave a hole. A
         duplicated paragraph is a flaw, a missing one is a different and
         worse one.
-
-        REVIEW: `find` measures after the *first* occurrence. validate_estimate_spans
-        only checked `span in draft`, so a span that appears twice and whose text
-        is restated after the first occurrence is refused on the strength of an
-        occurrence the patch will not touch (verified: a draft of
-        "Elle a dit que le train etait en retard." twice in a row is refused).
-        Rare — the reviewer picks spans, and a duplicated span is already
-        ambiguous — but worth knowing the guard measures a position the edit
-        does not use.
         """
         start = draft_translation.find(span)
         if start < 0:
@@ -3219,14 +3081,6 @@ class BookTranslator(QualityTests):
         a translation: the question it answers is "do these two texts count
         their length the same way?", and only the scripts that count it
         differently need to be told apart.
-
-        REVIEW: the name and the docstring say Chinese or Japanese; the body
-        also tests HANGUL, so a ko↔ko run is given the dense-script ratio
-        (0.15) rather than the Latin one (0.4). Korean is space-separated and
-        renders *longer* than English in characters, not shorter, so the guard
-        is simply weaker for Korean pairs — a real gap, but the opposite of
-        the one CROSS_SCRIPT_DELETED_MIN_RATIO exists to prevent. Either drop
-        the HANGUL test, or say why it is there.
         """
         return any(
             'CJK' in unicodedata.name(char, '')
@@ -3253,30 +3107,6 @@ class BookTranslator(QualityTests):
         alphabet count their length comparably; a Chinese rendering of an
         English paragraph does not, and judging it by the Latin ratio refuses
         the fix for being correct.
-
-        REVIEW: the cross-script branch is the right direction — Latin → CJK is
-        exactly where a correct rendering is legitimately much shorter, and 0.15
-        covers it (verified: a 28-character Spanish span with a 6-character
-        Japanese rendering passes at 0.21). Two things it does not say:
-
-        * "French runs longer than English, not shorter" is one direction, and
-          the ratio is applied in whichever direction the pair runs. It is a
-          statement about French specifically, sitting in a rule that is
-          language-agnostic. Nothing here has been measured for de/ru/es targets.
-        * The realistic false positive is not a translation at all, it is a
-          glossary name. `MIN_SPAN_FOR_LOSS_CHECK` is 20 characters, so any
-          established rendering that is short *and* whose source form is long is
-          refused: `The Society of the Fleur de Lys => Lys` is a 28-character
-          span with a 3-character replacement, ratio 0.11, dropped as 'deletes
-          text'. `_is_source_form` above explicitly blesses `New York` for the
-          same reason — a name may be longer than the word it stands in — and
-          here that case is dropped instead. Whatever floor is chosen for prose
-          needs a separate one for entries in the terminology list.
-
-        Also worth stating: this compares raw `len()`, so it counts the
-        whitespace a model reformats. A span of 40 characters with double
-        spaces that comes back single-spaced loses ~10% of its length for
-        reasons that have nothing to do with content.
         """
         if len(span) < cls.MIN_SPAN_FOR_LOSS_CHECK:
             return False
@@ -3502,21 +3332,6 @@ class BookTranslator(QualityTests):
         if two_languages and self._is_in_source_language(
             draft_translation, source_code,
         ):
-            # REVIEW: prepending rather than appending is deliberate and reads
-            # correctly — the model meets "this chunk is not translated" before
-            # it meets the terminology list. Two things to know:
-            #   * the check is the whole draft at the 0.38 bar, so it inherits the
-            #     recall gap documented on _FUNCTION_WORDS: for an it/pt/ru/es
-            #     source an entirely untranslated chunk usually does not reach
-            #     this branch at all.
-            #   * the `## untranslated_draft` section tells the model to report
-            #     it as *one* `untranslated` error "and report anything else you
-            #     find there as usual". Combined with MAX_ESTIMATE_SPANS=12, a
-            #     chunk with two untranslated stretches gets them collapsed into
-            #     one span by the model's own choice, and `span` must appear in
-            #     the draft verbatim — a joined span across two paragraphs is
-            #     discarded as not-present and is not counted (see the discarded
-            #     spans noted in validate_estimate_spans).
             violation_section = "\n\n" + prompts.render(
                 'stage2_refine/estimate', 'untranslated_draft',
                 source_name=source_name, target_name=target_name,
@@ -3745,16 +3560,6 @@ class BookTranslator(QualityTests):
         dropped = details.get('errors_dropped') or 0
         if dropped:
             by_guard = details.get('dropped_by_guard') or {}
-            # REVIEW: "N found" here is post-validation, so it already excludes
-            # every refusal — "3 found, 1 patched, 4 not applied" is three
-            # survivors plus five reported. The two counts are additive, not
-            # nested. `errors_dropped` is also an upper bound on the number of
-            # *distinct* problems: one span reported twice by a guard is counted
-            # twice, because the guards are pure functions of (span, replacement)
-            # and both copies take the same branch. See validate_estimate_spans.
-            #
-            # "not applied", not "refused by guard": one of the reasons is a
-            # span that was never in the draft, which no guard looked at.
             parts.append('{} not applied ({})'.format(
                 dropped,
                 ', '.join(
@@ -3888,30 +3693,6 @@ class BookTranslator(QualityTests):
         two are not the same thing: nine one-word `omission` reports that
         between them cover the page are one rewrite, and a single legitimate
         fix to a long proper noun is not.
-
-        REVIEW: summing `len(span)` assumes the spans are disjoint, which
-        validate_estimate_spans does not enforce — it only refuses a *repeat*
-        of an identical span, not a second span that overlaps one already
-        accepted. Two overlapping half-page `omission` reports therefore touch
-        100% of the draft and go to the verifier, which is the safe direction,
-        so this over-counts rather than under-counts. Worth knowing when reading
-        a `skipped_objective` that did not happen: the share can be crossed by
-        spans that do not in fact overlap.
-
-        REVIEW: the denominator is the whole draft including its whitespace and
-        newlines, while the numerator is span text. A chunk with generous
-        paragraph spacing under-reports its own coverage, so a genuine
-        whole-page rewrite in a loosely formatted draft can still skip the vote.
-        0.25 has a wide margin, so this is a note rather than a defect.
-
-        REVIEW: this only guards the judge-*exempt* branch, which is the right
-        place — a patch that is not all judge-exempt already faces the vote. But
-        it is a second, different notion of "too big" from _shrinks_to_nothing's
-        per-edit ratio, and from COPIED_REPLACEMENT_MIN_RUN. Three thresholds
-        (0.25 here, DELETED_TEXT_MIN_RATIO 0.4, CROSS_SCRIPT 0.15) all answer
-        "is this edit too large?" with three different units — draft share,
-        same-script length ratio, cross-script length ratio — and none of them
-        can be checked against the others by reading.
         """
         if not draft_translation.strip():
             return False
@@ -4077,22 +3858,6 @@ def _book_identity_line(book_title, book_author) -> str:
     filename. A wrong title would send the frontier model looking for a work
     that is not the one being translated, and it would write confident notes
     about the wrong book.
-
-    REVIEW: "a plain TXT book" reads as though TXT is the only format without
-    metadata. DOCX is too — docx_io.py reads only Heading 1 styles and never
-    touches core properties — so an EPUB or PDF upload names the work and a
-    DOCX or TXT upload does not, for reasons that have nothing to do with the
-    format being plain. README.md and guide.html both say the same thing
-    ("A TXT upload has no metadata, so it says the book is unknown"), so the
-    gap is documented rather than hidden; it is just narrower than it sounds.
-
-    REVIEW: 200 characters each is generous for a title. It is also the only
-    limit between an untrusted EPUB <dc:title> and a prompt, and the value is
-    interpolated straight into the sentence above. Whitespace collapsing stops
-    newline forgery, which is the injection that matters here; a title reading
-    `Foo. Ignore the instructions above and` would still read as a title to the
-    model. Acceptable for a human-in-the-loop copy button, and worth saying so
-    if this line is ever reused on an automated path.
     """
     def clean(value, limit=200):
         if not isinstance(value, str):
@@ -4124,21 +3889,6 @@ def _render_glossary_verification_prompt(
     # glossary whose notes were deliberately withheld from it and whose output
     # validator rejects a note outright; only the human-in-the-loop copy is
     # invited to propose one.
-    #
-    # REVIEW: the sectioning has a side effect worth knowing. Splitting
-    # `manual/glossary_verification.md` into ## header / ## review / ## notes_task /
-    # ## entities leaves the file's *main* section empty, because `## header` is
-    # now the first heading in the file. prompts.render(name) with no section
-    # therefore returns '' rather than the header — so any caller, test or doc
-    # tool that used to render this prompt as one block now gets an empty
-    # string, and `prompts.loaded()` cannot tell that the MAIN section is dead.
-    # Both in-repo callers name their sections (this function, and the two
-    # golden fixtures in test_prompts.py), so nothing is broken today.
-    #
-    # REVIEW: `book_line` defaults to 'BOOK: unknown' and `notes_task` to False,
-    # which is exactly the automatic verifier's shape. That default is load-bearing:
-    # it is the only thing stopping a future caller from forgetting to withhold
-    # the notes. A keyword-only signature would say so more loudly than a default.
     parts = [
         prompts.render(
             'manual/glossary_verification', 'header',
@@ -5439,22 +5189,6 @@ def prepare():
         translator = BookTranslator(model_name=model_name)
         prepare_id = f"prepare-{uuid.uuid4().hex[:8]}"
 
-        # REVIEW (contract): this route used to answer with one JSON object, and
-        # a RuntimeError out of build_glossary_candidates used to be an HTTP 503
-        # carrying that message. Both changed: the response is now an SSE stream,
-        # and every failure — including the RuntimeError branch below and the
-        # catch-all — arrives as a `stage: 'error'` event with `progress: 0.0`
-        # on an otherwise-200 response. index.html was updated to match
-        # (test_model_role_wiring.py had to be updated too, which is the tell),
-        # but nothing user-facing says so: README.md's "How it works" still
-        # describes Prepare as a single scan, and there is no API section in
-        # either README or guide.html recording the response change.
-        #
-        # REVIEW: the RuntimeError branch returns *without* yielding, so the
-        # generator finishes and _start_detached_job posts the sentinel; the
-        # catch-all does the same. Both are correct, but they duplicate the
-        # error event verbatim — the inner branch exists only to avoid the
-        # "Stage 0 failed" log line being written twice.
         def emit_prepare_stage(stage, frac, message=None, **extra):
             index = PREPARE_STAGE_ORDER.index(stage)
             base = sum(PREPARE_STAGE_WEIGHTS[s] for s in PREPARE_STAGE_ORDER[:index])
@@ -5742,13 +5476,6 @@ def pause_job(run_id):
 @with_error_handling
 def resume_job(run_id):
     """Release a paused worker so it continues toward completion."""
-    # REVIEW: both endpoints answer on *registration*, not on state.
-    # `pause_run` returns True for a run that is already paused, and
-    # `resume_run` returns True for a run that is already running — so
-    # "No paused run with that id" is only reachable when the id was never
-    # registered at all. The messages read as state checks; they are existence
-    # checks. Fine for an idempotent button, misleading for anything that
-    # wants to know whether it just changed anything.
     if resume_run(run_id):
         return jsonify({'resumed': True})
     return jsonify({'error': 'No paused run with that id'}), 404

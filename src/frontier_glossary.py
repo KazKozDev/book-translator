@@ -403,17 +403,6 @@ def strip_notes(glossary: str) -> str:
     That also keeps the provider's output contract exactly as strict as it was:
     ``OUTPUT_LINE`` still ends at the mode.
     """
-    # REVIEW: this is applied to the raw textarea, comments and blank lines
-    # included, so a `#`-commented glossary line reaches the provider as a
-    # commented line with its note removed — correct. What is *not* enforced
-    # here is the note's own rules: MAX_NOTE_LENGTH and the empty-note check
-    # live in TerminologyManager.from_text and are not applied to a note that
-    # comes back out of a provider response. In practice the provider can never
-    # supply a note (OUTPUT_LINE rejects one, and there is a test for that), and
-    # the note put back is verbatim the author's, already validated when it was
-    # parsed. So nothing slips through today — but "tolerant reader" here means
-    # this function will happily re-emit a 5,000-character note if one is ever
-    # stored unvalidated.
     return '\n'.join(split_note(line)[0] for line in glossary.splitlines())
 
 

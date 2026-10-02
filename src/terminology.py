@@ -38,14 +38,6 @@ class GlossaryTerm:
 #: delimiter because ``=>`` and ``|`` both occur inside terms, and a note is
 #: free text that may contain either. Peeled from the end of the line before
 #: the arrow is split, so nothing downstream has to know notes exist.
-#:
-#: REVIEW: ``[^{}]*`` means a note can hold neither brace, which is the right
-#: call (it makes the note unambiguously terminal) but it also means the
-#: unbalanced-brace error in ``from_text`` cannot tell "a note containing a
-#: brace" from "a brace somewhere in the middle of the line" — both arrive with
-#: ``line`` still holding a brace and both get the same message. Fine as a
-#: message; it just means the limit is not visible to the person who hit it.
-#: The same regex is duplicated in index.html as ``GLOSSARY_NOTE_SUFFIX``.
 NOTE_SUFFIX = re.compile(r"\s*\{([^{}]*)\}\s*$")
 
 
@@ -84,15 +76,6 @@ class TerminologyManager:
         Every place that rebuilds the text from stored terms goes through here,
         so a note written once survives reopening a job instead of being dropped
         the first time the editor is refilled from the database.
-
-        REVIEW: "every place" is true of src/translator.py and worth keeping
-        true — `get_translation` (the reopen path) and `/prepare` both go
-        through here, and those are the only two writers. The note does *not*
-        survive anything else: a note is stored in translation_terms.note and
-        nothing else keeps it, so the round trip depends entirely on this
-        function being used. `from_text` is the other half and both are covered
-        by test_workspace_glossary.py's reopen tests, which is the right place
-        for that guarantee to live.
         """
         line = f"{source} => {target} | {mode}"
         return f"{line} {{{note}}}" if note else line
@@ -101,12 +84,6 @@ class TerminologyManager:
     def from_text(cls, glossary_text: str):
         """Parse `source => target | mode {note}` or TSV lines; mode defaults to
         inflectable, note to nothing."""
-        # REVIEW: because split_note runs before the `\t` branch, a TSV row can
-        # carry a note too (`Rom\tRom\tinflectable {un garçon}`). That is
-        # consistent, but only the `=>` form is documented — README.md,
-        # guide.html and the format hint in index.html all show `source =>
-        # target [| mode] {note}` and never mention the tab form. Accepted
-        # silently rather than on purpose, as far as the docs go.
         terms = []
         for line_number, raw_line in enumerate(glossary_text.splitlines(), 1):
             line = raw_line.strip()
@@ -129,14 +106,6 @@ class TerminologyManager:
             if line and not note and NOTE_SUFFIX.search(raw_line):
                 # `Rom => Rom | inflectable {}`: the braces were there, so the
                 # empty value is a mistake rather than an absent field.
-                # REVIEW: the `line and` guard is doing real work and is not
-                # documented. A line that is *only* a note (`{orphan}`) leaves
-                # `line` empty, so this branch is skipped and the line falls
-                # through to "use source => target | mode" instead. index.html
-                # reaches the same line differently — it checks `noteMatch &&
-                # !note` with no `line` condition, so a browser-pasted
-                # `{orphan}` is reported as "the note is empty". Two validators,
-                # two messages for one input; both refuse it, so nothing breaks.
                 raise ValueError(f"Glossary line {line_number}: the note is empty")
 
             mode = "inflectable"
@@ -256,16 +225,6 @@ class TerminologyManager:
         # The note is part of the tuple on purpose. It changes the prompt the
         # models receive, so a glossary whose note was edited must not resolve
         # to the cached chunks translated under the old one.
-        # REVIEW: this retires more than the chunk cache. The same fingerprint
-        # is the workspace-glossary binding and (via _stage2_cache_model) part
-        # of the Stage 2 cache key, so editing a note invalidates Stage 1 chunks,
-        # Stage 2 results and the saved workspace draft for that document. That
-        # is the intended behaviour — "editing a note retires the cached chunks"
-        # in the CHANGELOG — but it is a large consequence for one line of free
-        # text, and the CHANGELOG sentence does not say the Stage 2 cache or the
-        # saved draft go with it. Note also that nothing recomputes a fingerprint
-        # for an *unchanged* note, so a note that is re-typed identically costs
-        # nothing.
         canonical = sorted(
             (term.source.casefold(), term.target, term.mode, term.note)
             for term in self.terms

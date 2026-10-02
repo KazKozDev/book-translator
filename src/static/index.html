@@ -1358,31 +1358,12 @@
                 currentJobPaused = false;
             }
             syncPauseButton();
-            // REVIEW: the guard is on identity only, and ids are reused. A
-            // translation id is an autoincrement, so this holds for translations
-            // — but a *prepare* id is a fresh uuid each time, which is why the
-            // identity check is needed at all here. The gap is on the way out:
-            // clearActiveJob() runs in the `finally` of whichever stream ended
-            // last, and progressSection is shared, so a Prepare finishing while
-            // a Start is streaming would clear the Start's pause button and hide
-            // its bar. Not reachable from the UI today (Prepare is disabled
-            // during a run and vice versa), but nothing enforces that here.
         }
 
         async function toggleJobPause() {
             if (!currentJobId) return;
             const action = currentJobPaused ? 'resume' : 'pause';
             const res = await fetch(`${API_URL}/${action}/${currentJobId}`, { method: 'POST' });
-            // REVIEW: `currentJobPaused` is flipped from the *intent*, not from
-            // the response body. /pause and /resume are idempotent existence
-            // checks server-side, so a 200 does not mean the state changed —
-            // it means the id was registered. Two races this leaves open: the
-            // button can be clicked twice quickly (the second click reads the
-            // pre-await flag and sends the same action, so it is harmless), and
-            // a run that finished between the click and the response leaves the
-            // button showing "resume" for a job that no longer exists. `alert()`
-            // is also the only error surface here, where everything else in this
-            // file reports through the deck status line.
             if (!res.ok) { alert('Could not change pause state'); return; }
             setJobPaused(!currentJobPaused);
         }
@@ -1717,11 +1698,6 @@
         const GLOSSARY_MAX_NOTE_LENGTH = 200;
         // A trailing {note}, peeled before the arrow is split — mirroring
         // NOTE_SUFFIX and split_note in terminology.py.
-        // REVIEW: deliberately not byte-identical to NOTE_SUFFIX, which starts
-        // with \s*. Here the leading whitespace is absorbed by the
-        // `rawLine.trim()` above and by the `.trim()` on the slice on the next
-        // few lines, so the missing \s* cannot change the result. Not a bug —
-        // a note for whoever diffs the two validators next.
         const GLOSSARY_NOTE_SUFFIX = /\{([^{}]*)\}\s*$/;
         const GLOSSARY_PLACEHOLDERS = {
             ru: 'Mr. Darcy => мистер Дарси | exact\nmachine learning => машинное обучение | inflectable\nhome => дом | preferred',
@@ -1761,17 +1737,6 @@
                 const noteMatch = line.match(GLOSSARY_NOTE_SUFFIX);
                 const note = noteMatch ? noteMatch[1].trim() : '';
                 if (noteMatch) line = line.slice(0, noteMatch.index).trim();
-                // REVIEW: the brace checks run before the `\t` / `=>` split, and
-                // the whole separator block is now gated on `!reason`. That is
-                // the right order — a bad note should be reported as a bad note
-                // rather than as a missing `=>` — but it means exactly one
-                // reason is ever shown per line, and it is the *first* one.
-                // Two divergences from terminology.py's from_text, both benign:
-                // this side reports `{}` as "the note is empty" where Python
-                // needs `line` to be non-empty first, and Python additionally
-                // checks the note length *before* the empty check while this
-                // checks empty first. Neither changes whether the line is
-                // accepted.
                 if (line.includes('{') || line.includes('}')) {
                     reason = 'an unbalanced brace — a note is written {like this} at the end of the line';
                 } else if (noteMatch && !note) {
@@ -1894,20 +1859,6 @@
                         targetLanguage: document.getElementById('targetLanguage').value,
                         // Sent so the frontier model can identify the work and
                         // research the lore behind a note instead of guessing.
-                        // REVIEW: `sourceBookIdentity` is filled from
-                        // /source-preview and reset in handleFileSelect, so it
-                        // tracks the *selected* file. Two consequences worth
-                        // stating: a book that has not been previewed yet (or a
-                        // preview that failed) sends empty strings and the server
-                        // answers "BOOK: unknown", which is the honest fallback;
-                        // and the values are the file's own metadata, so EPUB and
-                        // PDF name the work while TXT and DOCX do not — DOCX
-                        // carries no title or author at all, which the copy-prompt
-                        // help text does not mention. Also note this sends the
-                        // title and author to whatever provider the user picks for
-                        // the Copy button; that is the same disclosure as the
-                        // glossary itself, but it is new for a filename-free
-                        // TXT upload.
                         bookTitle: sourceBookIdentity.title,
                         bookAuthor: sourceBookIdentity.author,
                     }),
@@ -3019,23 +2970,6 @@
 
                 // PREPARE now streams Server-Sent Events the same way Start does,
                 // so the job-rail progress bar can report it instead of hanging on a blank screen.
-                // REVIEW: this loop and the Start/Continue loops below are three
-                // near-identical SSE readers. Differences that matter today:
-                //   * `registerActiveJob` is called only inside the
-                //     `typeof event.progress === 'number'` branch, so a Prepare
-                //     that errors before its first progress event leaves no
-                //     Pause button — correct, since there is nothing to pause by
-                //     then, but it means the button's presence is a proxy for
-                //     "the job has reported progress".
-                //   * `if (event.error) throw` abandons the reader without
-                //     cancelling it. The server-side job is detached and keeps
-                //     running: the Stage 0 failure path already returned, but a
-                //     throw on a *later* event (none today) or a network drop
-                //     leaves a thread walking the book with no UI. `reader.cancel()`
-                //     in the catch would close the socket; it would not stop the
-                //     job, which is worth knowing before anyone relies on it.
-                //   * the `finally` below unconditionally hides progressSection,
-                //     which is shared with Start and Continue — see the note there.
                 const progressSection = document.getElementById('progressSection');
                 const progressBar = document.getElementById('progressBar');
                 const progressInfo = document.getElementById('progressInfo');
@@ -4161,14 +4095,6 @@
             status.classList.toggle('has-violations', rejected > 0 || failures > 0);
 
             const notes = [];
-            // REVIEW: `found` is refinement.errors_found, which translator.py
-            // fills with len(errors) *after* validation — so everything below is
-            // already excluded from it and `refused` is additive, not a subset:
-            // "3 found · 1 patched · 4 not applied" means seven reported errors,
-            // three of which survived. The per-guard breakdown is in the chunk
-            // log, one click away; this string deliberately does not name the
-            // guards, because one of the reasons ('span not in draft') is not a
-            // guard at all.
             if (refused) notes.push(`${refused} reported error(s) not applied — refused by a guard, or reported about text that is not in the draft. The draft was left as it was.`);
             if (rejected) notes.push(`${rejected} patch(es) vetoed by the verifier`);
             if (positionBiases) notes.push(`${positionBiases} position bias event(s) detected`);
