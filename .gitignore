@@ -59,3 +59,6 @@ videos/
 
 # Temporary files
 nltk_data/
+
+# Serena MCP workspace cache
+.serena/

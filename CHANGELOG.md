@@ -4,6 +4,15 @@ Notable changes to Tolmach are documented here.
 
 ## Unreleased
 
+## [3.1.0] — 2026-10-02
+
+- Changed the license from MIT to AGPL-3.0-only.
+- Added DOCX upload. Heading 1 sections become chapters when the document has them.
+- PDF uploads keep chapter breaks when the file has bookmarks or detectable headings.
+- A long Start run keeps going when the browser tab is closed, and **Resume** in History continues from the last finished chunk after an interrupt or a server restart.
+- Review desk can hand proposed fixes to the configured cloud provider: **Review chunk automatically** decides apply or keep for one chunk and saves it, and **Review all automatically** does the same for every open chunk. The provider can only accept or decline the fixes already proposed; it cannot rewrite a chunk.
+- Fixed CONTINUE staying disabled after the draft translation finished.
+- The failed-translations list loads while Ollama is stopped.
 - Fixed paragraphs left in the source language. The review pass has its own `untranslated` category — reported and patched at any severity, because whether a passage is translated is not a matter of degree — and a chunk that is still written in the source language is now named to the reviewer outright, since an untranslated paragraph does not look wrong when it is printed under its own source. Guards refuse a replacement that reproduces the source text, paraphrases it back into the source language, puts a source word back as a glossary rendering, or collapses a long span to a fraction of its length; the length guard now compares across scripts, so a correct Chinese rendering of a paragraph is not mistaken for a deletion.
 - Fixed paragraphs printed twice in the refined text. A reported error whose replacement restates the passage that follows its span — a five-sentence paragraph, then the same five sentences — is refused, as is an `omission`/`addition`/`terminology`/`consistency` patch that together covers more than a quarter of the draft, which is a rewrite wearing a category's clothes and now goes to the verifier like any other. The guard that refuses a source word put back as a rendering now stands down for a name the glossary agreed to, so `Rom => Rom` and an English name kept in a French page are no longer dropped as the very mistake it prevents. Refused edits are counted per reason and reported in the chunk log and the Refinement panel. A span the reviewer reported that is not in the draft at all is counted too, under `span not in draft`, so a chunk whose whole review answer missed the text no longer reads as "0 found".
 - The language guard is tuned against its measurements rather than one book: the bar sits above the worst false positive observed on the French corpus, words shared between a source language and the language it is translated into are no longer markers, and the Spanish, Italian, Portuguese and Russian marker lists were brought up to a size where a genuine untranslated passage is actually caught in them. Chinese and Japanese have no entry at all, because a word list cannot be read out of text with no spaces. A Chinese or Japanese source is still covered once the reviewer has proposed a replacement — the run check compares that replacement against the source and needs no word boundaries — but the pass cannot name such a chunk as untranslated by itself, since detecting that is exactly what the word list is for. A run where source and target are the same language stands every one of these guards down.
@@ -38,6 +47,7 @@ Notable changes to Tolmach are documented here.
 
 - Completed the earlier project rewrite and modular architecture.
 
+[3.1.0]: https://github.com/KazKozDev/book-translator/releases/tag/v3.1.0
 [3.0.1]: https://github.com/KazKozDev/book-translator/releases/tag/v3.0.1
 [3.0.0]: https://github.com/KazKozDev/book-translator/releases/tag/v3.0.0
 [2.1.0]: https://github.com/KazKozDev/book-translator/releases/tag/v2.1.0
