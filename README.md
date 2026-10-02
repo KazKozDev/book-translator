@@ -44,6 +44,8 @@ py -3 launch.py
 
    **START** creates the first translation. **CONTINUE** reviews and refines it. When the job finishes, use the export buttons to download the book.
 
+   While a job runs, the rail on the right shows its progress and a **Pause** button. Pause suspends **PREPARE**, **START**, or **CONTINUE** at the next chunk or batch boundary, which frees the GPU without writing anything; press it again to carry on from there. Nothing is saved while a job is paused, so quitting the app at that point loses only the chunk that had not been written yet.
+
 ## Translate an entire EPUB or PDF book with AI
 
 Choose the source language, target language, and text genre. Click **→ 1 UPLOAD** and select the complete book—not one chapter at a time.
@@ -85,11 +87,12 @@ The translation desk stays the same across targets. Click a thumbnail for the fu
 
 ## Use an AI book translator with a glossary
 
-After uploading the book, click **→ PREPARE**. Tolmach scans the complete source and creates an editable glossary of recurring names, places, organisations, and terms.
+After uploading the book, click **→ PREPARE**. Tolmach scans the complete source and creates an editable glossary of recurring names, places, organisations, and terms. The scan can take a while on a full novel; the rail on the right reports which stage it is on — extracting names, resolving which source forms name one entity, proposing renderings, checking for conflicts — and the Pause button there works on it like any other job.
 
 ```text
 Netherfield => Незерфилд | exact
 Mr. Darcy => мистер Дарси | inflectable
+Rom => Rom | inflectable {c'est un garçon de huit ans}
 ```
 
 Review this list before starting the translation: delete noise, correct a wrong translation, and add anything the scan missed.
@@ -98,7 +101,11 @@ Review this list before starting the translation: delete noise, correct a wrong 
 - `inflectable` lets the model change the grammatical form.
 - `preferred` tells the model which wording to favor.
 
-The glossary belongs only to this book and language pair. If you configure an optional external provider, **Verify automatically** can check the glossary and show proposed changes; Tolmach applies nothing until you approve it.
+An entry may end with an optional `{note}` — free text for what you know that the book does not state outright, such as the gender of a name. The Translation and Refinement models are told to follow it; no test can check it. Write it in the language you are translating into, since that is the text the note has to shape.
+
+**Copy frontier prompt** also offers to write notes for you. It tells the model which book this is from the title and author in the file's metadata, asks it to research the lore, and asks for a note only where it is certain — so read them before pasting the answer back. A wrong note is one the translator will obey.
+
+The glossary belongs only to this book and language pair. If you configure an optional external provider, **Verify automatically** can check the glossary and show proposed changes; Tolmach applies nothing until you approve it. That path deliberately never sees your notes and can never write one.
 
 ## Review a novel translation side by side
 
@@ -120,6 +127,7 @@ The browser sends your TXT, EPUB, PDF, or DOCX to a Flask server running on your
 **PREPARE** scans the whole book and builds a glossary for that document.<br>
 **START** splits the book into chunks and translates them with the selected Ollama model.<br>
 **CONTINUE** proposes small edits, and a separate verifier checks each edit against the source.<br>
+Any of the three can be paused from the job rail while it runs.<br>
 SQLite saves the job, glossary, aligned text, review state, quality results, and cache locally.
 
 ```text
@@ -134,7 +142,7 @@ Book → Glossary → Draft translation → Verified refinement → Human review
 1. **Upload** — the Flask backend reads TXT, EPUB, PDF, or DOCX and stores the source in `uploads/`. A PDF is read as text (with chapter breaks from bookmarks/headings when detected); a DOCX uses Heading 1 sections as chapters when present.
 2. **Prepare** — deterministic text harvesting and GLiNER collect entity candidates. BGE-M3 groups likely spelling variants, then the selected instruct model resolves ambiguous groups and proposes target renderings. The editable glossary is stored for this document fingerprint and language pair.
 3. **Start** — the source is split into chunks of about 1200 characters at paragraph and sentence boundaries. The Translation model receives each chunk with its genre, glossary constraints, and previous-paragraph context. Completed chunks are written to SQLite and streamed to the browser.
-4. **Continue** — unlike a typical LLM “improve this” pass that rewrites the whole chunk and can replace already-good wording, the Refinement model returns located edits instead of rewriting an entire chunk. Python applies only those replacements. The Verifier compares each patched version with the source, checks the alternatives in both orders, and retries without ordered A/B versions when it detects position bias.
+4. **Continue** — unlike a typical LLM “improve this” pass that rewrites the whole chunk and can replace already-good wording, the Refinement model returns located edits instead of rewriting an entire chunk. Python applies only those replacements, and refuses an edit that would carry the source text back into the page, restate the passage that follows it, put a source word back as a rendering, or delete most of the span it replaces — a refused edit leaves the draft exactly as it was and is counted in the log, as is an error reported about text that is not in the draft at all. A name the glossary agreed to keep, such as `Rom => Rom`, counts as a rendering rather than a refused edit. The Verifier compares each patched version with the source, checks the alternatives in both orders, and retries without ordered A/B versions when it detects position bias. A passage left in the source language is its own error category and is patched at any severity, because whether a passage is translated is not a matter of degree.
 5. **Review and export** — Review desk keeps Source, Draft, and editable Final text aligned. Exporters write the accepted final text as TXT, PDF, or EPUB.
 
 ```text

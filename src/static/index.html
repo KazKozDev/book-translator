@@ -866,7 +866,8 @@
                     <h2>Format and modes</h2>
                     <p class="form-hint" id="prepareStatus" data-default="Upload the source text with → 1 UPLOAD below, then click → PREPARE. The app scans the text, collects names and repeated terms, and fills the list on the left. This step is optional, but it improves translation quality and keeps names consistent across the whole book.">Upload the source text with → 1 UPLOAD below, then click → PREPARE. The app scans the text, collects names and repeated terms, and fills the list on the left. This step is optional, but it improves translation quality and keeps names consistent across the whole book.</p>
                     <p class="form-hint">Review the list before you start: delete what you don't need, correct a wrong translation, add what the scan missed. Entries can be edited until you click → 2 START.</p>
-                    <p class="form-hint">Format: <code>source term =&gt; translation [| mode]</code><br>One entry per line. The <code>=&gt;</code> is required. If you omit the mode, inflectable is used.</p>
+                    <p class="form-hint">Format: <code>source term =&gt; translation [| mode] {note}</code><br>One entry per line. The <code>=&gt;</code> is required. If you omit the mode, inflectable is used.</p>
+                    <p class="form-hint">A <code>{note}</code> is optional free text in braces at the end of the line — anything you know that the source does not say outright: <code>Rom =&gt; Rom | inflectable {c'est un garçon de huit ans}</code>. The model is told to follow it; no test can check it. Write it in the language you are translating into, since that is the text the note has to shape. <strong>Copy frontier prompt</strong> can propose notes for you: the model identifies the book from its title and author, researches the lore, and adds a note only where it is certain. Read them before you paste the answer back — a wrong note is one the translator will obey.</p>
 
                     <section class="guide-section" aria-labelledby="guideModesTitle">
                         <h3 id="guideModesTitle">MODES</h3>
@@ -934,8 +935,9 @@
             <div class="rail-section">
                 <div class="section-title">Progress</div>
                 <div class="progress-section" id="progressSection">
-                    <div class="progress-bar-container"><div class="progress-bar" id="progressBar"></div></div>
-                    <p class="rail-note" id="progressInfo">Waiting for a translation</p>
+                <div class="progress-bar-container"><div class="progress-bar" id="progressBar"></div></div>
+                <p class="rail-note" id="progressInfo">Waiting for a translation</p>
+                <button type="button" class="header-action" id="pauseJobBtn" title="Pause this job" hidden>⏸</button>
                     <div class="rail-row">
                         <span class="rail-label">Time remaining</span>
                         <span class="rail-value" id="etaValue">—</span>
@@ -1282,12 +1284,20 @@
         const PANEL_PREVIEW_LIMIT = 12000;
         let selectedFile = null;
         let sourcePreviewToken = 0;
+        // Title and author as the book file itself states them. Empty for a
+        // plain TXT upload, which carries no metadata — the copied frontier
+        // prompt says "unknown" rather than inviting a guess.
+        let sourceBookIdentity = { title: '', author: '' };
         let translationPreviews = {};
         let allTranslations = [];
         let historySearchQuery = '';
         let translationStartTime = null;
         // Set once Start (Stage 1) finishes, so Continue knows which draft to refine.
         let currentTranslationId = null;
+        // The in-process run that the Pause button currently controls: a
+        // translation id (Start/Continue) or a "prepare-…" id (PREPARE).
+        let currentJobId = null;
+        let currentJobPaused = false;
         let canonicalSavedFinal = '';
         let canonicalExportAvailable = false;
         let reviewData = null;
@@ -1320,6 +1330,42 @@
         function rememberActiveTranslation(id) {
             currentTranslationId = id;
             try { localStorage.setItem(ACTIVE_TRANSLATION_KEY, String(id)); } catch (e) {}
+        }
+
+        function clearActiveJob() {
+            currentJobId = null;
+            setJobPaused(false);
+        }
+
+        function setJobPaused(paused) {
+            currentJobPaused = paused;
+            syncPauseButton();
+        }
+
+        function syncPauseButton() {
+            const btn = document.getElementById('pauseJobBtn');
+            if (!btn) return;
+            btn.hidden = !currentJobId;
+            btn.textContent = currentJobPaused ? '▶' : '⏸';
+            btn.title = currentJobPaused ? 'Resume this job' : 'Pause this job';
+        }
+
+        function registerActiveJob(id) {
+            // Keep the user's paused choice while the same job is still running;
+            // a flood of progress events must not un-pause it.
+            if (currentJobId !== id) {
+                currentJobId = id;
+                currentJobPaused = false;
+            }
+            syncPauseButton();
+        }
+
+        async function toggleJobPause() {
+            if (!currentJobId) return;
+            const action = currentJobPaused ? 'resume' : 'pause';
+            const res = await fetch(`${API_URL}/${action}/${currentJobId}`, { method: 'POST' });
+            if (!res.ok) { alert('Could not change pause state'); return; }
+            setJobPaused(!currentJobPaused);
         }
 
         function forgetActiveTranslation() {
@@ -1649,11 +1695,15 @@
         // so malformed lines are caught before the file is even uploaded.
         const GLOSSARY_VALID_MODES = new Set(['exact', 'inflectable', 'preferred']);
         const GLOSSARY_MAX_TERM_LENGTH = 200;
+        const GLOSSARY_MAX_NOTE_LENGTH = 200;
+        // A trailing {note}, peeled before the arrow is split — mirroring
+        // NOTE_SUFFIX and split_note in terminology.py.
+        const GLOSSARY_NOTE_SUFFIX = /\{([^{}]*)\}\s*$/;
         const GLOSSARY_PLACEHOLDERS = {
             ru: 'Mr. Darcy => мистер Дарси | exact\nmachine learning => машинное обучение | inflectable\nhome => дом | preferred',
             en: 'Mr. Darcy => Mr. Darcy | exact\nmachine learning => machine learning | inflectable\nhome => home | preferred',
             es: 'Mr. Darcy => señor Darcy | exact\nmachine learning => aprendizaje automático | inflectable\nhome => hogar | preferred',
-            fr: 'Mr. Darcy => monsieur Darcy | exact\nmachine learning => apprentissage automatique | inflectable\nhome => maison | preferred',
+            fr: 'Mr. Darcy => monsieur Darcy | exact {monsieur, pas madame}\nmachine learning => apprentissage automatique | inflectable\nhome => maison | preferred',
             de: 'Mr. Darcy => Herr Darcy | exact\nmachine learning => maschinelles Lernen | inflectable\nhome => Zuhause | preferred',
             it: 'Mr. Darcy => signor Darcy | exact\nmachine learning => apprendimento automatico | inflectable\nhome => casa | preferred',
             pt: 'Mr. Darcy => Sr. Darcy | exact\nmachine learning => aprendizado de máquina | inflectable\nhome => lar | preferred',
@@ -1675,7 +1725,7 @@
             let firstError = '';
 
             text.split('\n').forEach((rawLine, index) => {
-                const line = rawLine.trim();
+                let line = rawLine.trim();
                 if (!line || line.startsWith('#')) return;
                 const lineNo = index + 1;
 
@@ -1684,7 +1734,18 @@
                 let mode = 'inflectable';
                 let reason = '';
 
-                if (line.includes('\t')) {
+                const noteMatch = line.match(GLOSSARY_NOTE_SUFFIX);
+                const note = noteMatch ? noteMatch[1].trim() : '';
+                if (noteMatch) line = line.slice(0, noteMatch.index).trim();
+                if (line.includes('{') || line.includes('}')) {
+                    reason = 'an unbalanced brace — a note is written {like this} at the end of the line';
+                } else if (noteMatch && !note) {
+                    reason = 'the note is empty';
+                } else if (note.length > GLOSSARY_MAX_NOTE_LENGTH) {
+                    reason = `a note exceeds ${GLOSSARY_MAX_NOTE_LENGTH} characters`;
+                }
+
+                if (!reason && line.includes('\t')) {
                     const parts = line.split('\t').map(p => p.trim());
                     if (parts.length !== 2 && parts.length !== 3) {
                         reason = 'use source<TAB>target<TAB>mode';
@@ -1692,7 +1753,7 @@
                         [source, target] = parts;
                         if (parts.length === 3) mode = parts[2].toLowerCase();
                     }
-                } else {
+                } else if (!reason) {
                     const sep = line.includes('=>') ? '=>' : line.includes('=') ? '=' : null;
                     if (!sep) {
                         reason = 'use source => target | mode';
@@ -1796,6 +1857,10 @@
                         glossary: document.getElementById('glossary').value,
                         sourceLanguage: document.getElementById('sourceLanguage').value,
                         targetLanguage: document.getElementById('targetLanguage').value,
+                        // Sent so the frontier model can identify the work and
+                        // research the lore behind a note instead of guessing.
+                        bookTitle: sourceBookIdentity.title,
+                        bookAuthor: sourceBookIdentity.author,
                     }),
                 });
                 const data = await response.json().catch(() => ({}));
@@ -2898,8 +2963,58 @@
 
             try {
                 const response = await fetch(`${API_URL}/prepare`, { method: 'POST', body: formData });
-                const data = await response.json().catch(() => ({}));
-                if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
+                if (!response.ok) {
+                    const err = await response.json().catch(() => ({}));
+                    throw new Error(err.error || `HTTP ${response.status}`);
+                }
+
+                // PREPARE now streams Server-Sent Events the same way Start does,
+                // so the job-rail progress bar can report it instead of hanging on a blank screen.
+                const progressSection = document.getElementById('progressSection');
+                const progressBar = document.getElementById('progressBar');
+                const progressInfo = document.getElementById('progressInfo');
+                progressSection.style.display = 'block';
+                progressBar.style.width = '0%';
+                progressInfo.textContent = 'Preparing…';
+
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let buffer = '';
+                let data = null;
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    buffer += decoder.decode(value, { stream: true });
+                    const lines = buffer.split('\n');
+                    buffer = lines.pop() || '';
+                    for (const line of lines) {
+                        if (!line.startsWith('data: ')) continue;
+                        let event;
+                        try {
+                            event = JSON.parse(line.substring(6).trim());
+                        } catch (e) {
+                            continue;
+                        }
+                        if (typeof event.progress === 'number') {
+                            progressBar.style.width = event.progress + '%';
+                            progressInfo.textContent = event.message || `${event.stage}…`;
+                            if (event.prepare_id) registerActiveJob(event.prepare_id);
+                        }
+                        if (event.error) {
+                            throw new Error(event.error);
+                        }
+                        if (event.stage === 'completed') {
+                            data = event;
+                            progressBar.style.width = '100%';
+                            progressInfo.textContent = 'Glossary ready — reviewing terms…';
+                            break;
+                        }
+                    }
+                    if (data) break;
+                }
+                if (!data) {
+                    throw new Error('Prepare ended without a result');
+                }
 
                 // Never silently overwrite work already in the boxes.
                 const glossaryHadContent = glossaryField.value.trim().length > 0;
@@ -2964,6 +3079,10 @@
                 glossaryField.removeAttribute('aria-busy');
                 if (!glossaryField.value.trim()) updateGlossaryPlaceholder();
                 button.disabled = false;
+                clearActiveJob();
+                document.getElementById('progressSection').style.display = 'none';
+                document.getElementById('progressBar').style.width = '0%';
+                document.getElementById('progressInfo').textContent = 'Waiting for a translation';
             }
         }
 
@@ -3088,6 +3207,7 @@
             document.getElementById('translateBtn').addEventListener('click', handleSubmit);
             document.getElementById('refineHeaderBtn').addEventListener('click', handleRefine);
             document.getElementById('refineHeaderBtn').disabled = true;
+            document.getElementById('pauseJobBtn').addEventListener('click', toggleJobPause);
 
             document.getElementById('newTranslationBtn').addEventListener('click', () => {
                 if (selectedFile && !confirm('Start a new translation? This clears the current file and results.')) return;
@@ -3324,6 +3444,7 @@
 
         function handleFileSelect(file) {
             selectedFile = file;
+            sourceBookIdentity = { title: '', author: '' };
             selectedDocumentFingerprint = null;
             loadWorkspaceGlossaryForSelectedDocument();
             forgetActiveTranslation();
@@ -3396,6 +3517,14 @@
                     originalPanel.textContent = data.truncated
                         ? `${data.preview}\n\n[Showing the first ${SOURCE_PREVIEW_LIMIT.toLocaleString()} characters. The full book will be translated.]`
                         : data.preview;
+                    // The file's own metadata, not its name: a frontier model
+                    // asked to research a character's lore has to be told which
+                    // work this is, and a filename stem guesses at the title
+                    // and its volume far too easily.
+                    sourceBookIdentity = {
+                        title: (data.title || '').trim(),
+                        author: (data.author || '').trim(),
+                    };
                     updatePanelMeta('originalText');
                     document.getElementById('deckStatus').textContent = `${file.name} ready · Press START to translate`;
                 } catch (error) {
@@ -3776,6 +3905,7 @@
                                 const data = JSON.parse(line.substring(6).trim());
                                 lastData = data;
                                 if (data.translation_id) rememberActiveTranslation(data.translation_id);
+                                if (data.translation_id) registerActiveJob(data.translation_id);
 
                                 // Each event contains only the newly completed batch.
                                 if (typeof data.progress === 'number') {
@@ -3826,6 +3956,7 @@
                 updateEta(0);
             } finally {
                 translateBtn.disabled = false;
+                clearActiveJob();
             }
         }
 
@@ -3846,7 +3977,8 @@
             setTestButtonsEnabled('2', false);
             progressSection.style.display = 'block';
             document.getElementById('progressBar').style.width = '1%';
-            document.getElementById('progressInfo').textContent = 'Starting the refinement pass…';
+                document.getElementById('progressInfo').textContent = 'Starting the refinement pass…';
+                registerActiveJob(currentTranslationId);
             translationPreviews.literaryRefinement = '';
             document.getElementById('literaryRefinement').textContent = 'Refined batches will appear here during the second pass.';
             updatePanelMeta('literaryRefinement');
@@ -3934,6 +4066,7 @@
             } finally {
                 translateBtn.disabled = false;
                 refineHeaderBtn.disabled = false;
+                clearActiveJob();
             }
         }
 
@@ -3947,6 +4080,7 @@
             if (!refinement) return;
             const found = Number(refinement.errors_found || 0);
             const applied = Number(refinement.errors_applied || 0);
+            const refused = Number(refinement.errors_dropped || 0);
             const rejected = Number(refinement.patches_rejected || 0);
             const positionBiases = Number(refinement.position_biases || 0);
             const neutralChecks = Number(refinement.neutral_checks || 0);
@@ -3961,6 +4095,7 @@
             status.classList.toggle('has-violations', rejected > 0 || failures > 0);
 
             const notes = [];
+            if (refused) notes.push(`${refused} reported error(s) not applied — refused by a guard, or reported about text that is not in the draft. The draft was left as it was.`);
             if (rejected) notes.push(`${rejected} patch(es) vetoed by the verifier`);
             if (positionBiases) notes.push(`${positionBiases} position bias event(s) detected`);
             if (neutralChecks) notes.push(`${neutralChecks} neutral edit check(s) run`);
@@ -4071,10 +4206,11 @@
             updatePanelMeta('literaryRefinement');
 
             setExportButtonsEnabled(false);
-            document.getElementById('progressSection').style.display = 'none';
-            document.getElementById('progressBar').style.width = '0%';
-            document.getElementById('progressInfo').textContent = 'Waiting for a translation';
-            translationStartTime = null;
+             document.getElementById('progressSection').style.display = 'none';
+             document.getElementById('progressBar').style.width = '0%';
+             document.getElementById('progressInfo').textContent = 'Waiting for a translation';
+             clearActiveJob();
+             translationStartTime = null;
             updateEta(0);
             updateTerminologyStatus({ total: 0, used: 0, violations: 0 });
             document.getElementById('deckStatus').textContent = 'No translation yet';
@@ -4160,6 +4296,7 @@
                             const data = JSON.parse(line.substring(6).trim());
                             lastData = data;
                             if (data.translation_id) rememberActiveTranslation(data.translation_id);
+                            if (data.translation_id) registerActiveJob(data.translation_id);
 
                             if (typeof data.progress === 'number') {
                                 document.getElementById('progressBar').style.width = data.progress + '%';
@@ -4206,6 +4343,7 @@
                 loadTranslations();
             } finally {
                 translateBtn.disabled = false;
+                clearActiveJob();
             }
         }
 
@@ -4310,6 +4448,11 @@
                 }
 
                 if (t.running) {
+                    // A paused job sends no events, so the button cannot wait
+                    // for one: after a reload it would never appear, and the
+                    // job would stay held with nothing on the page to release it.
+                    registerActiveJob(t.id);
+                    setJobPaused(Boolean(t.paused));
                     attachLiveTranslation(t.id, { silent: true });
                 }
 

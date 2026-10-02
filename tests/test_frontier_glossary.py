@@ -174,6 +174,75 @@ def test_provider_output_cannot_drop_change_or_damage_source_entries(candidate, 
         frontier.validate_frontier_output(ORIGINAL, candidate)
 
 
+ANNOTATED = (
+    'Hermione => Гермиона | inflectable {the heroine, a girl}\n'
+    'Hogwarts => Хогвартс | exact\n'
+    'Ministry of Magic => Министерство магии | exact'
+)
+
+
+def test_notes_are_never_shown_to_the_provider():
+    """A frontier model has no standing to write a note: it checks renderings
+    against published editions and knows nothing about this particular book.
+    A note it never received is a note it cannot hallucinate, drop, or
+    reword."""
+    assert frontier.strip_notes(ANNOTATED) == (
+        'Hermione => Гермиона | inflectable\n'
+        'Hogwarts => Хогвартс | exact\n'
+        'Ministry of Magic => Министерство магии | exact'
+    )
+
+
+def test_a_note_survives_verification_untouched():
+    glossary, changes = frontier.validate_frontier_output(
+        ANNOTATED,
+        CORRECTED,
+    )
+
+    assert glossary == ANNOTATED
+    assert changes == []
+
+
+def test_an_annotated_entry_is_not_reported_as_changed_just_for_its_note():
+    _, changes = frontier.validate_frontier_output(
+        ANNOTATED.replace(' | exact', ' | preferred', 1),
+        CORRECTED,
+    )
+
+    assert [change['source'] for change in changes] == ['Hogwarts']
+    assert changes[0]['before'] == 'Hogwarts => Хогвартс | preferred'
+    assert changes[0]['after'] == 'Hogwarts => Хогвартс | exact'
+
+
+def test_a_provider_that_invents_a_note_is_rejected_like_any_other_extra_text():
+    invented = CORRECTED.replace(' | inflectable', ' | inflectable {a boy}', 1)
+
+    with pytest.raises(frontier.FrontierGlossaryError, match='malformed glossary line'):
+        frontier.validate_frontier_output(ANNOTATED, invented)
+
+
+def test_a_change_to_an_annotated_entry_does_not_look_like_the_note_was_written():
+    """The review list shows what the provider did, and the provider never saw
+    a note. A stripped `before` beside an annotated `after` rendered as though
+    the model had invented the note — the one thing this path guarantees it
+    cannot do. The note still reaches the editor through the returned glossary,
+    which is what the Apply button uses."""
+    glossary, changes = frontier.validate_frontier_output(
+        ANNOTATED,
+        CORRECTED.replace('Hermione => Гермиона | inflectable',
+                          'Hermione => Гермиона | preferred', 1),
+    )
+
+    assert [change['source'] for change in changes] == ['Hermione']
+    assert changes[0]['before'] == 'Hermione => Гермиона | inflectable'
+    assert changes[0]['after'] == 'Hermione => Гермиона | preferred'
+    assert '{the heroine, a girl}' not in changes[0]['after']
+    # The note itself is untouched on the way back to the editor.
+    assert glossary.splitlines()[0] == (
+        'Hermione => Гермиона | preferred {the heroine, a girl}'
+    )
+
+
 def test_environment_key_availability_never_exposes_the_secret(monkeypatch):
     monkeypatch.setenv('OPENAI_API_KEY', 'super-secret-value')
 

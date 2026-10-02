@@ -165,6 +165,7 @@
                             <li>
                                 <div class="step-title">Prepare and review the glossary — optional</div>
                                 <p>Open <strong>Glossary</strong> and press <strong>→ PREPARE</strong>. Tolmach scans the whole source, groups recurring names and terms, and proposes target renderings. Existing glossary text is not overwritten.</p>
+                                <p>A full novel takes a while, so the Progress rail reports the stage: extracting names, resolving which source forms name one entity, proposing renderings, then checking for conflicts. The Pause button beside the bar works here as it does on Start and Continue.</p>
                                 <p>Review every line before Start. Delete noise, correct wrong renderings, and add missing terms. The editable draft is saved for this document and language pair, so it does not leak into another book.</p>
                             </li>
                             <li>
@@ -176,8 +177,14 @@
                                 <p>Start translates the book in chunks and streams completed batches into the Translation panel. Glossary terms submitted with Start become the terminology contract for this job.</p>
                             </li>
                             <li>
+                                <div class="step-title">Pause or resume at any time</div>
+                                <p>A <strong>Pause</strong> button sits beside the progress bar while Prepare, Start, or Continue is running. It suspends the job at the next chunk or batch boundary rather than stopping it, which frees the GPU while you decide, and pressing it again carries on from that boundary. Nothing is written to disk while a job is paused, so quitting the app at that point loses only the chunk that had not been saved yet. The button works even with Ollama stopped, because it is controlling a worker that is already running.</p>
+                                <div class="note">Pausing is not a save point. Use <strong>Resume</strong> in the Archive to continue a job after an interrupt, a server restart, or a machine that went to sleep.</div>
+                            </li>
+                            <li>
                                 <div class="step-title">Refine the draft — <code>→ 3 CONTINUE</code></div>
                                 <p>Refinement proposes located edits instead of rewriting whole chunks. Verifier compares each patch with the draft against the source; only accepted edits enter the final text. Current job shows found, applied, vetoed, and failed review counts. <a href="/logs.html" target="tolmach-log">Log</a> shows the same process per chunk.</p>
+                                <div class="note">A chunk left in the source language is the one fault this pass is built to catch: it is reported as <code>untranslated</code> and patched at any severity, because whether a passage is translated is not a matter of degree. Edits are also refused when they would carry the source text back into the page, write in the source language, put a source word back as a glossary rendering, delete most of the span they replace, or print the passage that follows them a second time — in which case the draft is kept exactly as it was, and the count of edits that were not applied is shown under Refinement. That count also includes an error reported about text that is not in the draft at all, which is the commonest way a review produces nothing usable; the log names the reason for each. A name the glossary agreed to keep in the source language — <code>Rom =&gt; Rom</code>, or any English name left as it is in a French page — is a rendering and is never refused as the source word put back.</div>
                             </li>
                             <li>
                                 <div class="step-title">Review the final text</div>
@@ -193,7 +200,8 @@
                     <section class="card">
                         <div class="section-title">Glossary</div>
                         <h2>Format and enforcement</h2>
-                        <p>Use one entry per line: <code>source =&gt; target | mode</code>. Tab-separated <code>source[TAB]target[TAB]mode</code> rows are also accepted. The default mode is <code>inflectable</code>.</p>
+                        <p>Use one entry per line: <code>source =&gt; target | mode</code>. Tab-separated <code>source[TAB]target[TAB]mode</code> rows are also accepted. The default mode is <code>inflectable</code>. An entry may end with an optional <code>{note}</code>: <code>Rom =&gt; Rom | inflectable {c'est un garçon de huit ans}</code>.</p>
+                        <div class="note">A note is free text in braces at the end of the line, for what you know that the book does not state outright — a name's gender, an ambiguity in the original. The Translation and Refinement models are told to follow it. Nothing can check it: only <code>exact</code> is enforced by a test. Write it in the target language, because that is the text it has to shape. <strong>Copy frontier prompt</strong> adds a second task that asks a frontier model to identify the book from its title and author, research the lore, and propose a note only where it is certain. The automatic <strong>Verify automatically</strong> path does not: it is given the glossary without your notes and can never write one.</div>
                         <div class="mode-list">
                             <div class="mode-row">
                                 <code>exact</code>

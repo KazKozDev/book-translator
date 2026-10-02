@@ -21,6 +21,7 @@ import threading
 import time
 from collections import Counter, defaultdict
 from pathlib import Path
+from typing import Callable
 
 import numpy as np
 from rapidfuzz import fuzz, process
@@ -186,7 +187,8 @@ def normalize(s: str) -> str:
 
 
 def extract(chunks: list[str], labels: list[str], threshold: float, model_name: str,
-            device: str, batch_size: int):
+            device: str, batch_size: int,
+            progress_callback: Callable[[float, str], None] | None = None):
     ner = load_ner(model_name, device)
 
     records: dict[tuple[str, str], dict] = {}
@@ -225,6 +227,12 @@ def extract(chunks: list[str], labels: list[str], threshold: float, model_name: 
                 rec["chunks"].append(i)
                 if len(rec["contexts"]) < 3:
                     rec["contexts"].append(chunk)
+        done = min(start + batch_size, len(chunks))
+        if progress_callback is not None:
+            progress_callback(
+                done / len(chunks),
+                f"Extracting: {done:,}/{len(chunks):,} chunks (batch {batch_number}/{total_batches})",
+            )
     return list(records.values())
 
 
@@ -410,6 +418,7 @@ def build_document_glossary(
     embed_model: str = "BAAI/bge-m3",
     device: str | None = None,
     batch_size: int = 16,
+    progress_callback: Callable[[float, str], None] | None = None,
 ) -> tuple[list[dict], list[dict]]:
     """Return clustered glossary candidates and ambiguous pairs for review.
 
@@ -433,6 +442,7 @@ def build_document_glossary(
     warm.start()
     records = extract(
         chunks, labels or DEFAULT_LABELS, ner_threshold, ner_model, device, batch_size,
+        progress_callback=progress_callback,
     )
     records = keep_meaningful(records, min_count, len(chunks))
     if not records:

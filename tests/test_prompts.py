@@ -20,6 +20,7 @@ from frontier_review import build_review_prompt
 from quality_tests import QualityTests
 from terminology import GlossaryTerm, TerminologyManager
 from translator import BookTranslator
+import translator as app_module
 
 GOLDEN_DIR = Path(__file__).parent / 'fixtures' / 'prompts'
 
@@ -254,16 +255,46 @@ def shared_terminology_context() -> str:
     return TERMINOLOGY_CONTEXT
 
 
-def manual_glossary_verification() -> str:
-    entities = '\n'.join(
+def shared_terminology_context_with_notes() -> str:
+    """The same block once the author has annotated an entry. The extra
+    instruction about notes only appears when a note is actually present, so
+    every other role's golden is untouched by the feature."""
+    annotated = TerminologyManager([
+        GlossaryTerm(source='Grunnings', target='Граннингс', mode='exact'),
+        GlossaryTerm(
+            source='Rom', target='Rom', mode='inflectable',
+            note='c’est un garçon de huit ans',
+        ),
+    ])
+    return annotated.prompt_context('Rom worked at Grunnings, which made drills.')
+
+
+def _glossary_entities() -> str:
+    return '\n'.join(
         f'{term.source} => {term.target} | {term.mode}'
         for term in GLOSSARY.terms
     )
-    return prompts.render(
-        'manual/glossary_verification',
-        source_language='English',
-        target_language='Russian',
-        entities=entities,
+
+
+def manual_glossary_verification() -> str:
+    """The prompt the Copy button puts on the clipboard: the human is in the
+    loop, so it also asks for notes."""
+    return app_module._render_glossary_verification_prompt(
+        'English',
+        'Russian',
+        _glossary_entities(),
+        book_line='BOOK: Harry Potter and the Philosopher\'s Stone by J. K. Rowling',
+        notes_task=True,
+    )
+
+
+def automatic_glossary_verification() -> str:
+    """The same review, without the notes task: the automated call withholds
+    the notes deliberately and its validator rejects one."""
+    return app_module._render_glossary_verification_prompt(
+        'English',
+        'Russian',
+        _glossary_entities(),
     )
 
 
@@ -286,6 +317,7 @@ def review_frontier_decision() -> str:
 
 CASES = {
     'manual_glossary_verification': manual_glossary_verification,
+    'automatic_glossary_verification': automatic_glossary_verification,
     'review_frontier_decision': review_frontier_decision,
     'stage0_rendering_from_candidates': stage0_rendering_from_candidates,
     'stage0_rendering_from_excerpt': stage0_rendering_from_excerpt,
@@ -303,6 +335,7 @@ CASES = {
     'quality_adequacy_fluency': quality_adequacy_fluency,
     'quality_candidate_judge': quality_candidate_judge,
     'shared_terminology_context': shared_terminology_context,
+    'shared_terminology_context_with_notes': shared_terminology_context_with_notes,
 }
 
 

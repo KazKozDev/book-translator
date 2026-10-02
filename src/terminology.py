@@ -27,6 +27,30 @@ class GlossaryTerm:
     source: str
     target: str
     mode: str = "inflectable"
+    #: Free text the author wrote about the term — its gender, its age, the
+    #: ambiguity in the source that a rendering alone cannot settle. It reaches
+    #: the models as prompt context and nothing else: unlike ``exact``, no check
+    #: can enforce prose, so it is guidance the model may still ignore.
+    note: str = ""
+
+
+#: A trailing ``{note}`` on a glossary line. Braces rather than a third
+#: delimiter because ``=>`` and ``|`` both occur inside terms, and a note is
+#: free text that may contain either. Peeled from the end of the line before
+#: the arrow is split, so nothing downstream has to know notes exist.
+NOTE_SUFFIX = re.compile(r"\s*\{([^{}]*)\}\s*$")
+
+
+def split_note(line: str) -> Tuple[str, str]:
+    """Peel a trailing ``{note}`` off one line, without judging the rest.
+
+    Deliberately tolerant: frontier verification exists to repair damaged
+    entries, so it must be able to read a line ``from_text`` would reject.
+    """
+    match = NOTE_SUFFIX.search(line)
+    if not match:
+        return line.strip(), ""
+    return line[:match.start()].strip(), match.group(1).strip()
 
 
 class TerminologyManager:
@@ -35,6 +59,7 @@ class TerminologyManager:
     VALID_MODES = {"exact", "inflectable", "preferred"}
     MAX_TERMS = 500
     MAX_TERM_LENGTH = 200
+    MAX_NOTE_LENGTH = 200
 
     def __init__(self, terms: Optional[List[GlossaryTerm]] = None):
         deduplicated = {}
@@ -42,14 +67,46 @@ class TerminologyManager:
             deduplicated[term.source.casefold()] = term
         self.terms = list(deduplicated.values())
 
+    @staticmethod
+    def format_line(
+        source: str, target: str, mode: str, note: str = "",
+    ) -> str:
+        """One glossary line in the textarea's format.
+
+        Every place that rebuilds the text from stored terms goes through here,
+        so a note written once survives reopening a job instead of being dropped
+        the first time the editor is refilled from the database.
+        """
+        line = f"{source} => {target} | {mode}"
+        return f"{line} {{{note}}}" if note else line
+
     @classmethod
     def from_text(cls, glossary_text: str):
-        """Parse `source => target | mode` or TSV lines; mode defaults to inflectable."""
+        """Parse `source => target | mode {note}` or TSV lines; mode defaults to
+        inflectable, note to nothing."""
         terms = []
         for line_number, raw_line in enumerate(glossary_text.splitlines(), 1):
             line = raw_line.strip()
             if not line or line.startswith("#"):
                 continue
+
+            # Before anything else, because the note is the one field that can
+            # hold text the arrow and the mode would otherwise fight over.
+            line, note = split_note(line)
+            if "{" in line or "}" in line:
+                raise ValueError(
+                    f"Glossary line {line_number}: an unbalanced brace — a note is "
+                    f"written {{like this}} at the end of the line"
+                )
+            if note and len(note) > cls.MAX_NOTE_LENGTH:
+                raise ValueError(
+                    f"Glossary line {line_number}: a note exceeds "
+                    f"{cls.MAX_NOTE_LENGTH} characters"
+                )
+            if line and not note and NOTE_SUFFIX.search(raw_line):
+                # `Rom => Rom | inflectable {}`: the braces were there, so the
+                # empty value is a mistake rather than an absent field.
+                raise ValueError(f"Glossary line {line_number}: the note is empty")
 
             mode = "inflectable"
             if "\t" in line:
@@ -84,7 +141,9 @@ class TerminologyManager:
                 raise ValueError(
                     f"Glossary line {line_number}: mode must be exact, inflectable, or preferred"
                 )
-            terms.append(GlossaryTerm(source=source, target=target, mode=mode))
+            terms.append(GlossaryTerm(
+                source=source, target=target, mode=mode, note=note,
+            ))
 
         if len(terms) > cls.MAX_TERMS:
             raise ValueError(f"Glossary supports at most {cls.MAX_TERMS} terms")
@@ -99,19 +158,30 @@ class TerminologyManager:
         if not relevant:
             return ""
 
-        lines = [
-            prompts.render(
-                "shared/terminology", "entry",
-                source=term.source,
-                target=term.target,
-                rule=prompts.render("shared/terminology", f"mode_{term.mode}"),
-            )
-            for term in relevant
-        ]
+        lines = []
+        any_note = False
+        for term in relevant:
+            rule = prompts.render("shared/terminology", f"mode_{term.mode}")
+            if term.note:
+                any_note = True
+                lines.append(prompts.render(
+                    "shared/terminology", "entry_with_note",
+                    source=term.source, target=term.target,
+                    rule=rule, note=term.note,
+                ))
+            else:
+                lines.append(prompts.render(
+                    "shared/terminology", "entry",
+                    source=term.source, target=term.target, rule=rule,
+                ))
+        # A glossary with no notes anywhere renders exactly as it always has.
+        # Only a glossary the author actually annotated pays for the extra
+        # instruction explaining what a note is and that it is not text.
+        block = "entries_with_notes" if any_note else prompts.MAIN
         # The two blank lines belong to the prompt this block is spliced into,
         # not to the block, so they are added here rather than in the file.
         return "\n\n" + prompts.render(
-            "shared/terminology", entries="\n".join(lines),
+            "shared/terminology", block, entries="\n".join(lines),
         )
 
     def exact_violations(self, source_text: str, translated_text: str) -> List[Dict[str, str]]:
@@ -152,8 +222,12 @@ class TerminologyManager:
         return result, replacements
 
     def fingerprint(self) -> str:
+        # The note is part of the tuple on purpose. It changes the prompt the
+        # models receive, so a glossary whose note was edited must not resolve
+        # to the cached chunks translated under the old one.
         canonical = sorted(
-            (term.source.casefold(), term.target, term.mode) for term in self.terms
+            (term.source.casefold(), term.target, term.mode, term.note)
+            for term in self.terms
         )
         payload = json.dumps(canonical, ensure_ascii=False, separators=(",", ":"))
         return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
