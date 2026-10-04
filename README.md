@@ -272,6 +272,12 @@ The test suite does not require Ollama, downloaded models, or network access.
 
 </details>
 
+## Contributors
+
+- [@StellarNear](https://github.com/StellarNear) — glossary notes, pause and resume, Prepare progress, and the Stage 2 guards against untranslated and duplicated passages ([#23](https://github.com/KazKozDev/book-translator/pull/23)).
+- [@kroryan](https://github.com/kroryan) — the Windows desktop build, Korean support, and the v2 refactoring ([#9](https://github.com/KazKozDev/book-translator/pull/9)).
+- [@moonixt](https://github.com/moonixt) — Portuguese support ([#6](https://github.com/KazKozDev/book-translator/pull/6)).
+
 ## License
 
 Tolmach Book Translator is free and open-source software licensed under the [GNU Affero General Public License version 3 only](LICENSE) (`AGPL-3.0-only`).
