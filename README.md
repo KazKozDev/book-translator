@@ -59,7 +59,7 @@ Download:        TXT, PDF, or EPUB
 
 A PDF is read for its text only. Tolmach removes running heads and page numbers and rejoins the printed lines back into paragraphs; bookmarks or clear chapter headings become chapter breaks when detected. Layout and images are not carried over. A scanned PDF with no text layer is refused — run OCR first, or use TXT, EPUB, or DOCX. A DOCX keeps Heading 1 sections as chapters when present.
 
-Click **→ 2 START** to create the draft translation. Finished sections appear in the Translation panel while the rest of the book continues processing. Click **→ 3 CONTINUE** when you want Tolmach to refine that draft into the final version.
+Click **→ 2 START** to create the draft translation. Finished sections appear in the Translation panel while the rest of the book continues processing. Click **→ 3 CONTINUE** when you want Tolmach to refine that draft into the final version. **Refinement mode** in Settings decides what that does: apply verified fixes automatically (the default), *Suggest only* — nothing is written into the text and every proposed fix waits in the Review desk for you to apply, or *Skip refinement* — the draft becomes the final text without a model call.
 
 The job is saved locally, so you can reopen it from the Archive. A complete book can take 10–15 hours; the actual time depends on its length, your models, and your computer.
 

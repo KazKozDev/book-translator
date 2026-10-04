@@ -4,6 +4,9 @@ Notable changes to Tolmach are documented here.
 
 ## Unreleased
 
+- Added a **Refinement mode** setting for **CONTINUE**: apply verified fixes automatically (the default), *Suggest only* — every proposed fix waits in the Review desk and nothing is written into the text without you, or *Skip refinement* — the draft becomes the final text without a model call (#27).
+- Review desk has a **Restore draft** button that puts a chunk's draft back into Final.
+
 ## [3.1.0] — 2026-10-02
 
 - Changed the license from MIT to AGPL-3.0-only.

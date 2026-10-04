@@ -333,6 +333,12 @@ def _heal_orphaned_runs() -> None:
 #       are counted per guard instead of vanishing from the chunk log
 STAGE2_PIPELINE_VERSION = 'v9'
 
+# What Continue does with the draft. 'auto' is the estimate -> patch -> verify
+# pass. 'manual' still runs the estimate, but writes nothing into the text:
+# every reported fix waits in the review desk for the reader to apply. 'skip'
+# makes no model call at all and the draft becomes the final text as it is.
+REFINEMENT_MODES = ('auto', 'manual', 'skip')
+
 
 # Error handling setup
 class TranslationError(Exception):
@@ -481,6 +487,9 @@ def init_db():
             # rebind its editable glossary draft in workspace_glossaries
             # instead of showing an empty editor.
             ('document_fingerprint', 'ALTER TABLE translations ADD COLUMN document_fingerprint TEXT'),
+            # Which REFINEMENT_MODES the last Continue ran in, so a reopened
+            # job can tell a skipped refinement from one that never started.
+            ('refinement_mode', 'ALTER TABLE translations ADD COLUMN refinement_mode TEXT'),
         ):
             if column not in existing_columns:
                 conn.execute(ddl)
@@ -1885,9 +1894,14 @@ class BookTranslator(QualityTests):
         target_lang: str,
         genre: str = 'unknown',
         terminology: Optional[TerminologyManager] = None,
+        mode: str = 'auto',
     ):
         """STAGE 2 only: reflection/refinement over an already-drafted
-        translation, loaded from the DB row saved by translate_stage1()."""
+        translation, loaded from the DB row saved by translate_stage1().
+
+        `mode` is one of REFINEMENT_MODES."""
+        if mode not in REFINEMENT_MODES:
+            raise ValueError(f'Unknown refinement mode: {mode}')
         start_time = time.time()
         success = False
 
@@ -1928,10 +1942,11 @@ class BookTranslator(QualityTests):
 
             logger.translation_logger.info(
                 "Starting stage 2 for translation %s with %s chunks (genre: %s, "
-                "reviewer: %s, verifier: %s)",
-                translation_id, total_chunks, genre, self.model_name, self.verifier_model,
+                "reviewer: %s, verifier: %s, mode: %s)",
+                translation_id, total_chunks, genre, self.model_name,
+                self.verifier_model, mode,
             )
-            if self.verifier_model == self.model_name:
+            if mode == 'auto' and self.verifier_model == self.model_name:
                 logger.translation_logger.warning(
                     "Stage 2 verifier is the reviewing model (%s) — it will be "
                     "grading its own edits, and its A/B verdict tends to follow "
@@ -1944,9 +1959,17 @@ class BookTranslator(QualityTests):
             with sqlite3.connect(DB_PATH) as conn:
                 conn.execute('''
                     UPDATE translations
-                    SET status = 'in_progress', genre = ?, updated_at = CURRENT_TIMESTAMP
+                    SET status = 'in_progress', genre = ?, refinement_mode = ?,
+                        updated_at = CURRENT_TIMESTAMP
                     WHERE id = ?
-                ''', (genre, translation_id))
+                ''', (genre, mode, translation_id))
+                if mode == 'skip':
+                    # Findings from an earlier Continue describe a final text
+                    # this run is about to replace with the draft.
+                    conn.execute(
+                        'DELETE FROM chunk_reviews WHERE translation_id = ?',
+                        (translation_id,),
+                    )
             claim_run(translation_id)
 
             # STAGE 2: Reflection and improvement
@@ -1986,13 +2009,17 @@ class BookTranslator(QualityTests):
                     stage2_cache_model = self._stage2_cache_model(
                         glossary_fingerprint
                     )
-                    # Check cache
+                    # Check cache. Only 'auto' reads it: a cached result is a
+                    # patched text with no findings attached, which is exactly
+                    # what the other two modes exist to avoid.
                     cached_result = cache.get_cached_translation(
                         original_chunk, source_lang, target_lang, stage2_cache_model
-                    )
+                    ) if mode == 'auto' else None
                     stage2_warning = None
                     stage2_details = {}
-                    if cached_result:
+                    if mode == 'skip':
+                        final_translation = draft_chunk
+                    elif cached_result:
                         final_translation = cached_result['translated_text']
                         stage2_details = {
                             'cache_hit': True,
@@ -2019,6 +2046,7 @@ class BookTranslator(QualityTests):
                             agreed_targets={
                                 term.target for term in relevant_terms
                             },
+                            apply_fixes=mode == 'auto',
                         )
                         errors_found += stage2_details.get('errors_found', 0)
                         errors_applied += stage2_details.get('errors_applied', 0)
@@ -2052,7 +2080,7 @@ class BookTranslator(QualityTests):
                         # Don't cache a fallback result — a draft cached as if
                         # it were a real refinement would keep being reused on
                         # every future run instead of retrying the model.
-                        if stage2_warning is None:
+                        if stage2_warning is None and mode == 'auto':
                             cache.cache_translation(
                                 original_chunk, final_translation, draft_chunk,
                                 source_lang, target_lang, stage2_cache_model
@@ -2076,14 +2104,15 @@ class BookTranslator(QualityTests):
                         original_chunk, final_translation
                     )
                     final_violation_count += len(terminology_violations)
-                    stage2_details['exact_replacements'] = exact_replacements
-                    stage2_details['terminology_violations'] = terminology_violations
-                    save_chunk_review(
-                        translation_id,
-                        i - 1,
-                        details=stage2_details,
-                        warning=stage2_warning,
-                    )
+                    if mode != 'skip':
+                        stage2_details['exact_replacements'] = exact_replacements
+                        stage2_details['terminology_violations'] = terminology_violations
+                        save_chunk_review(
+                            translation_id,
+                            i - 1,
+                            details=stage2_details,
+                            warning=stage2_warning,
+                        )
 
                     progress = (i / total_chunks) * 100
                     with sqlite3.connect(DB_PATH) as conn:
@@ -2127,6 +2156,7 @@ class BookTranslator(QualityTests):
                             'review_failures': review_failures,
                             'verifier_model': self.verifier_model,
                             'review_model': self.model_name,
+                            'mode': mode,
                         },
                     }
 
@@ -2192,6 +2222,7 @@ class BookTranslator(QualityTests):
                     'review_failures': review_failures,
                     'verifier_model': self.verifier_model,
                     'review_model': self.model_name,
+                    'mode': mode,
                 },
             }
             logger.translation_logger.info(
@@ -3625,9 +3656,13 @@ class BookTranslator(QualityTests):
         terminology_context: str = "",
         terminology_violations: Optional[List[Dict[str, str]]] = None,
         agreed_targets: Optional[Set[str]] = None,
+        apply_fixes: bool = True,
     ) -> Tuple[str, Optional[str], Dict]:
         """STAGE 2: estimate, patch, verify — the whole refinement of one
         chunk.
+
+        With `apply_fixes=False` only the estimate runs: the draft is returned
+        untouched and every reported error is left for the review desk.
 
         Returns (text, warning, details). The text is either the patched
         draft or the draft itself; it is never freshly generated prose, so a
@@ -3669,6 +3704,9 @@ class BookTranslator(QualityTests):
             'review_model': self.model_name,
             'verifier_model': self.verifier_model,
         }
+        if not apply_fixes:
+            details['mode'] = 'manual'
+            return draft_translation, warning, details
         if warning or not actionable:
             return draft_translation, warning, details
 
@@ -4301,6 +4339,7 @@ def _review_chunks_payload(conn, translation_row) -> Dict:
         'review_failures': 0,
         'verifier_model': None,
         'review_model': None,
+        'mode': translation_row['refinement_mode'] or 'auto',
     }
     used_terms = set()
     violation_count = 0
@@ -5637,10 +5676,19 @@ def refine(translation_id):
     check: its A/B verdict often follows the order the versions are shown in.
     Stage 2 detects that disagreement and retries without ordered versions,
     but an independent verifier remains the supported setup.
+
+    {"mode": "..."} is one of REFINEMENT_MODES: "auto" (the default) patches
+    the draft, "manual" only reports what it would fix and leaves every edit
+    to the review desk, "skip" makes the draft final without a model call.
     """
     payload = request.get_json(silent=True) or {}
     override_model = (payload.get('model') or '').strip()
     verifier_model = (payload.get('verifier_model') or '').strip()
+    mode = payload.get('mode') or 'auto'
+    if mode not in REFINEMENT_MODES:
+        return jsonify({
+            'error': f"mode must be one of: {', '.join(REFINEMENT_MODES)}",
+        }), 400
 
     with sqlite3.connect(DB_PATH) as conn:
         conn.row_factory = sqlite3.Row
@@ -5685,7 +5733,13 @@ def refine(translation_id):
     ])
 
     refine_model = override_model or row['model']
-    for name in (refine_model, verifier_model):
+    # 'manual' never reaches the verifier and 'skip' calls no model at all.
+    models_in_use = {
+        'auto': (refine_model, verifier_model),
+        'manual': (refine_model,),
+        'skip': (),
+    }[mode]
+    for name in models_in_use:
         if name and is_translategemma(name):
             return jsonify({'error': (
                 'TranslateGemma is translation-only and cannot run the refinement '
@@ -5701,7 +5755,10 @@ def refine(translation_id):
         'progress': 1,
         'stage': 'starting',
         'translation_id': translation_id,
-        'message': 'Starting the refinement pass…',
+        'message': (
+            'Keeping the draft as the final text…' if mode == 'skip'
+            else 'Starting the refinement pass…'
+        ),
         'terminology': {
             'total': len(terminology.terms),
             'used': 0,
@@ -5710,6 +5767,7 @@ def refine(translation_id):
         'refinement': {
             'review_model': translator.model_name,
             'verifier_model': translator.verifier_model,
+            'mode': mode,
         },
     })
     register_pause_event(translation_id)
@@ -5721,6 +5779,7 @@ def refine(translation_id):
             row['target_lang'],
             genre=row['genre'],
             terminology=terminology,
+            mode=mode,
         ),
     )
 

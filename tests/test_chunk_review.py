@@ -420,6 +420,7 @@ def test_review_route_rebuilds_the_progress_rail_counters_from_stored_chunks(
         'review_failures': 0,
         'verifier_model': 'verifier:27b',
         'review_model': 'translator:12b',
+        'mode': 'auto',
     }
     # "used" counts the terms this source text puts in play, not the ones the
     # translation got right — the same thing the stream counts.
