@@ -1217,6 +1217,7 @@
                                 <textarea class="review-final-text" id="reviewFinalText" spellcheck="true"></textarea>
                                 <div class="review-actions">
                                     <button type="button" class="review-action" id="reviewApplyAllBtn" aria-label="Apply all proposed fixes to Final" disabled>Apply proposed fixes</button>
+                                    <button type="button" class="review-action" id="reviewRestoreDraftBtn" aria-label="Replace Final with the Draft text" disabled>Restore draft</button>
                                     <button type="button" class="review-action" id="reviewCloudChunkBtn" disabled>Review chunk automatically</button>
                                     <button type="button" class="review-action is-primary" id="reviewSaveBtn" disabled>Save final</button>
                                     <label class="sr-only" for="reviewAlternativeCount">Number of alternatives</label>
@@ -2043,6 +2044,7 @@
             const hasChunk = !!chunk;
             const textarea = document.getElementById('reviewFinalText');
             const applyAllButton = document.getElementById('reviewApplyAllBtn');
+            const restoreDraftButton = document.getElementById('reviewRestoreDraftBtn');
             const saveButton = document.getElementById('reviewSaveBtn');
             const generateButton = document.getElementById('reviewGenerateBtn');
             const cloudChunkButton = document.getElementById('reviewCloudChunkBtn');
@@ -2063,6 +2065,8 @@
 
             textarea.disabled = !hasChunk || reviewIsSaving;
             applyAllButton.disabled = applyBlocked || !hasApplicableIssue;
+            restoreDraftButton.disabled = applyBlocked || !(chunk.draft || '').trim()
+                || currentText === chunk.draft;
             cloudChunkButton.disabled = !hasChunk || reviewIsDirty
                 || reviewIsSaving || reviewIsGenerating || reviewIsCloudDeciding
                 || chunk.review_status === 'resolved' || !hasApplicableIssue;
@@ -2525,6 +2529,20 @@
                 setReviewActionStatus('No proposed fixes can be applied to the current Final text.');
                 syncReviewControls();
             }
+        }
+
+        // Undo every edit to this chunk at once, refinement's and the reader's.
+        function restoreReviewDraft() {
+            const chunk = currentReviewChunk();
+            if (!chunk || reviewIsSaving || reviewIsGenerating) return;
+            const textarea = document.getElementById('reviewFinalText');
+            const draft = chunk.draft || '';
+            if (!draft.trim() || textarea.value === draft) return;
+            textarea.value = draft;
+            textarea.dispatchEvent(new Event('input', { bubbles: true }));
+            setReviewActionStatus(reviewIsDirty
+                ? 'Final replaced with the Draft · Save final to keep it.'
+                : 'Final is the Draft again.');
         }
 
         async function saveReviewChunk({ candidateId = null } = {}) {
@@ -3310,6 +3328,7 @@
                 }
             });
             document.getElementById('reviewApplyAllBtn').addEventListener('click', applyAllReviewIssues);
+            document.getElementById('reviewRestoreDraftBtn').addEventListener('click', restoreReviewDraft);
             document.getElementById('reviewCloudChunkBtn').addEventListener(
                 'click',
                 () => reviewWithCloud(),
@@ -3960,6 +3979,13 @@
             }
         }
 
+        // What Continue does with the draft; chosen in Settings.
+        function savedRefinementMode() {
+            let saved = null;
+            try { saved = localStorage.getItem('refinementMode'); } catch (e) {}
+            return ['auto', 'manual', 'skip'].includes(saved) ? saved : 'auto';
+        }
+
         async function handleRefine(e) {
             if (e && e.preventDefault) e.preventDefault();
 
@@ -3971,21 +3997,24 @@
             const translateBtn = document.getElementById('translateBtn');
             const refineHeaderBtn = document.getElementById('refineHeaderBtn');
             const progressSection = document.getElementById('progressSection');
+            const refinementMode = savedRefinementMode();
 
             translateBtn.disabled = true;
             refineHeaderBtn.disabled = true;
             setTestButtonsEnabled('2', false);
             progressSection.style.display = 'block';
             document.getElementById('progressBar').style.width = '1%';
-                document.getElementById('progressInfo').textContent = 'Starting the refinement pass…';
+                document.getElementById('progressInfo').textContent = refinementMode === 'skip'
+                    ? 'Keeping the draft as the final text…'
+                    : 'Starting the refinement pass…';
                 registerActiveJob(currentTranslationId);
             translationPreviews.literaryRefinement = '';
             document.getElementById('literaryRefinement').textContent = 'Refined batches will appear here during the second pass.';
             updatePanelMeta('literaryRefinement');
-            document.getElementById('refinementStatus').textContent = 'Reviewing…';
+            document.getElementById('refinementStatus').textContent = refinementMode === 'skip' ? 'Skipping…' : 'Reviewing…';
             document.getElementById('refinementStatus').classList.remove('has-violations');
             document.getElementById('refinementDetail').hidden = true;
-            document.getElementById('deckStatus').textContent = 'Refining…';
+            document.getElementById('deckStatus').textContent = refinementMode === 'skip' ? 'Finalizing draft…' : 'Refining…';
             translationStartTime = Date.now();
             updateEta(0);
 
@@ -3995,7 +4024,7 @@
                 const response = await fetch(`${API_URL}/refine/${currentTranslationId}`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ model: selectedModel, verifier_model: verifierModel }),
+                    body: JSON.stringify({ model: selectedModel, verifier_model: verifierModel, mode: refinementMode }),
                 });
 
                 if (!response.ok) {
@@ -4009,7 +4038,7 @@
                 let lastData = null;
 
                 document.getElementById('progressBar').style.width = '50%';
-                document.getElementById('progressInfo').textContent = 'Refining...';
+                document.getElementById('progressInfo').textContent = refinementMode === 'skip' ? 'Finalizing draft...' : 'Refining...';
 
                 while (true) {
                     const { done, value } = await reader.read();
@@ -4087,7 +4116,13 @@
             const failures = Number(refinement.review_failures || 0);
             const reviewed = Number(refinement.chunks_reviewed || 0);
             const changed = Number(refinement.chunks_changed || 0);
-            if (!reviewed && !found) {
+            if (refinement.mode === 'skip') {
+                status.textContent = 'Skipped · draft kept as final';
+            } else if (refinement.mode === 'manual' && reviewed) {
+                status.textContent = found
+                    ? `${found} found · none applied · apply them in Review`
+                    : 'Nothing found · draft kept as final';
+            } else if (!reviewed && !found) {
                 status.textContent = refinement.verifier_model ? 'Ready' : 'Not started';
             } else {
                 status.textContent = `${found} found · ${applied} patched · ${changed}/${reviewed} chunks changed`;
@@ -4100,7 +4135,9 @@
             if (positionBiases) notes.push(`${positionBiases} position bias event(s) detected`);
             if (neutralChecks) notes.push(`${neutralChecks} neutral edit check(s) run`);
             if (failures) notes.push(`${failures} review call(s) returned nothing (timeout or non-JSON answer)`);
-            if (refinement.verifier_model && refinement.review_model === refinement.verifier_model) {
+            if (refinement.mode === 'skip' || refinement.mode === 'manual') {
+                // The verifier rules on applied patches, and these modes apply none.
+            } else if (refinement.verifier_model && refinement.review_model === refinement.verifier_model) {
                 notes.push(`Verifier is the refinement model (${refinement.verifier_model}) — it is grading its own edits. Pick a larger Verifier in Settings.`);
             } else if (refinement.verifier_model) {
                 notes.push(`Verifier: ${refinement.verifier_model}`);
