@@ -213,7 +213,7 @@ Glossary   Ollama   Verifier
 - A stack that personally produced good results for the author: Glossary preparation `gemma4:31b-cloud` (32.7B), Translation `translategemma:27b` (27.4B), Refinement `gemma4:31b-cloud` (32.7B), Verifier and Judge `mistral-large-3:675b-cloud` (675B) (cloud open-source models).
 - Enough memory and disk space for the models you choose.
 - Internet access on the first run to download Python dependencies, Ollama models, and optional Hugging Face components.
-- Supported languages: English, Russian, Spanish, French, German, Italian, Portuguese, Chinese, Japanese, and Korean.
+- Supported languages: English, Russian, Spanish, French, German, Italian, Portuguese, Chinese, Japanese, Korean, and Turkish.
 
 The installer uses an existing Python 3.10+ installation when available. Otherwise, it installs Python 3.12 through `uv`.
 
