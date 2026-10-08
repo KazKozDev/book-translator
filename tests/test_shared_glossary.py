@@ -360,3 +360,33 @@ def test_the_interface_names_the_glossary_and_sends_what_to_keep_out():
     assert 'appendSharedGlossaryFields(formData);' in index_html
     assert 'appendSharedGlossaryFields(formData, { withLocal: true });' in index_html
     assert "formData.append('sharedGlossaryLocal', JSON.stringify(local));" in index_html
+
+
+def test_keep_out_marks_are_saved_with_the_document_not_with_the_page():
+    """A tick that a reload forgets is a term written to the shared glossary
+    against the user's wish, with nothing on the page to say it happened."""
+    index_html = (
+        Path(app_module.__file__).parent / 'static' / 'index.html'
+    ).read_text(encoding='utf-8')
+
+    assert 'function sharedMarksStorageKey()' in index_html
+    assert '`sharedGlossaryMarks:${context.documentFingerprint}:`' in index_html
+    # Saved on every change, restored by both ways a document gets its identity.
+    assert index_html.count('saveSharedMarks();') >= 3
+    assert index_html.count('loadSharedMarks();') == 2
+
+
+def test_the_remembered_name_is_read_after_the_languages_are_restored():
+    """The name is remembered per language pair. Read before the saved pair is
+    back in the form, it was looked up under the default pair, came back
+    empty, and a reload silently switched the shared glossary off."""
+    index_html = (
+        Path(app_module.__file__).parent / 'static' / 'index.html'
+    ).read_text(encoding='utf-8')
+    startup = index_html.split("document.addEventListener('DOMContentLoaded'")[1]
+
+    assert (
+        startup.index('restoreWorkspaceFields();')
+        < startup.index('restoreSharedGlossaryChoice();')
+        < startup.index('restoreSelectedDocument();')
+    )

@@ -1545,6 +1545,7 @@
             };
             selectedDocumentFingerprint = fingerprint;
             workspaceGlossaryContext = context;
+            loadSharedMarks();
             let draft = null;
             try {
                 const response = await fetch(workspaceGlossaryUrl(context));
@@ -1602,6 +1603,7 @@
                     targetLanguage: document.getElementById('targetLanguage').value,
                 };
                 workspaceGlossaryContext = context;
+                loadSharedMarks();
                 const response = await fetch(workspaceGlossaryUrl(context));
                 const data = await response.json().catch(() => ({}));
                 if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
@@ -1760,6 +1762,47 @@
             return document.getElementById('sharedGlossaryName').value.trim();
         }
 
+        // Which entries came from the shared glossary and which are kept out
+        // of it are remembered per document and language pair — the same
+        // identity the glossary draft itself is saved under — so a reload or
+        // a reopened job does not quietly turn "keep out" back into "save".
+        function sharedMarksStorageKey() {
+            const context = workspaceGlossaryContext;
+            if (!context) return null;
+            return `sharedGlossaryMarks:${context.documentFingerprint}:`
+                + `${context.sourceLanguage}:${context.targetLanguage}`;
+        }
+
+        function saveSharedMarks() {
+            const key = sharedMarksStorageKey();
+            if (!key) return;
+            try {
+                if (!sharedAppliedSources.size && !sharedLocalSources.size) {
+                    localStorage.removeItem(key);
+                    return;
+                }
+                localStorage.setItem(key, JSON.stringify({
+                    name: sharedGlossaryName(),
+                    applied: Array.from(sharedAppliedSources),
+                    local: Array.from(sharedLocalSources),
+                }));
+            } catch (e) {}
+        }
+
+        function loadSharedMarks() {
+            const key = sharedMarksStorageKey();
+            let saved = {};
+            try { saved = JSON.parse((key && localStorage.getItem(key)) || '{}') || {}; } catch (e) {}
+            const strings = value => new Set(
+                (Array.isArray(value) ? value : []).filter(item => typeof item === 'string')
+            );
+            sharedLocalSources = strings(saved.local);
+            // "Came from" is only true of the glossary it came from.
+            sharedAppliedSources = saved.name === sharedGlossaryName()
+                ? strings(saved.applied) : new Set();
+            renderSharedEntries();
+        }
+
         function sharedGlossaryStorageKey() {
             const pair = sharedGlossaryPair();
             return `sharedGlossary:${pair.sourceLanguage}:${pair.targetLanguage}`;
@@ -1861,6 +1904,7 @@
                     box.addEventListener('change', () => {
                         if (box.checked) sharedLocalSources.add(source.toLowerCase());
                         else sharedLocalSources.delete(source.toLowerCase());
+                        saveSharedMarks();
                         renderSharedEntries();
                     });
                     const text = document.createElement('span');
@@ -3209,6 +3253,7 @@
                     sharedAppliedSources = new Set(
                         ((data.shared_glossary || {}).applied || []).map(source => source.toLowerCase())
                     );
+                    saveSharedMarks();
                 }
                 updateGlossaryStatus();
                 // Setting .value fires no input event, so persist this
@@ -3336,6 +3381,9 @@
             // book's terms can never leak into a newly selected document.
             try { localStorage.removeItem(LEGACY_WORKSPACE_GLOSSARY_KEY); } catch (e) {}
             restoreWorkspaceFields();
+            // After the languages are back: the remembered name is per pair,
+            // and read any earlier it is looked up under the default pair.
+            restoreSharedGlossaryChoice();
             restoreSelectedDocument();
             applyThemeButton();
         });
@@ -3436,11 +3484,11 @@
                 try { localStorage.setItem(sharedGlossaryStorageKey(), sharedGlossaryName()); } catch (e) {}
                 // What Prepare supplied came from the glossary named then.
                 sharedAppliedSources = new Set();
+                saveSharedMarks();
                 renderSharedEntries();
             });
             // Start may have created a glossary since the list was last read.
             sharedGlossaryField.addEventListener('focus', refreshSharedGlossaryNames);
-            restoreSharedGlossaryChoice();
             document.getElementById('prepareBtn').addEventListener('click', handlePrepare);
             document.getElementById('copyGlossaryPromptBtn').addEventListener(
                 'click',
