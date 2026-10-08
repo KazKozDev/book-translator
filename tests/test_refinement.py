@@ -698,6 +698,9 @@ SAMPLES = {
     'pt': 'Ele estava sozinho na grande casa e nao sabia o que fazer.',
     'ru': 'Он был один в большом доме и не знал, что делать.',
     'ko': '그는 큰 집에 혼자 있었고 무엇을 해야 할지 몰랐다.',
+    # No marker table of its own yet, so it is here as a target only: correct
+    # Turkish must not be read as any of the languages that do have one.
+    'tr': 'O büyük evde yalnızdı ve ne yapacağını bilmiyordu.',
 }
 
 #: Korean is in the cross-contamination matrix below but not in the recall test.
@@ -730,7 +733,7 @@ def test_correct_text_in_any_language_is_never_read_as_another(source, target):
     the property that makes the six cognate directions — it↔es, es↔it,
     es↔pt, pt↔es, it↔pt, pt↔it — the ones worth being careful about, and the
     reason every marker added in the second pass had to be absent from every
-    other table. All 56 ordered pairs, Korean included: nothing in this matrix
+    other table. All 72 ordered pairs, Korean and Turkish included: nothing in this matrix
     fires."""
     assert not BookTranslator._is_in_source_language(SAMPLES[target], source), (
         f'{target} text flagged as {source}'

@@ -8,5 +8,5 @@ front end does not require a change here to keep working.
 LANG_NAMES = {
     'en': 'English', 'es': 'Spanish', 'fr': 'French', 'de': 'German',
     'it': 'Italian', 'pt': 'Portuguese', 'ru': 'Russian', 'zh': 'Chinese',
-    'ja': 'Japanese', 'ko': 'Korean'
+    'ja': 'Japanese', 'ko': 'Korean', 'tr': 'Turkish'
 }

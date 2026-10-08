@@ -5113,6 +5113,10 @@ class UploadError(Exception):
 # UTF-8. Kept wider than this app's own language list: the source file's
 # encoding does not care which languages the interface offers.
 CYRILLIC_SOURCE_LANGUAGES = frozenset({'ru', 'uk', 'be', 'bg', 'sr', 'mk', 'kk'})
+# Turkish has a codepage of its own. It differs from cp1252 in six letters —
+# ğ, ı, ş and their capitals — which are exactly the ones a Turkish book
+# cannot do without, and which cp1252 reads back as ð, ý and þ.
+TURKISH_SOURCE_LANGUAGES = frozenset({'tr'})
 
 
 def decode_text_file(filepath: str, source_lang: Optional[str] = None) -> str:
@@ -5137,8 +5141,13 @@ def decode_text_file(filepath: str, source_lang: Optional[str] = None) -> str:
     except UnicodeDecodeError:
         pass
 
-    cyrillic = (source_lang or '').strip().lower()[:2] in CYRILLIC_SOURCE_LANGUAGES
-    fallbacks = ('cp1251', 'cp1252', 'latin-1') if cyrillic else ('cp1252', 'cp1251', 'latin-1')
+    language = (source_lang or '').strip().lower()[:2]
+    if language in CYRILLIC_SOURCE_LANGUAGES:
+        fallbacks = ('cp1251', 'cp1252', 'latin-1')
+    elif language in TURKISH_SOURCE_LANGUAGES:
+        fallbacks = ('cp1254', 'cp1252', 'latin-1')
+    else:
+        fallbacks = ('cp1252', 'cp1251', 'latin-1')
     for encoding in fallbacks:
         try:
             text = raw.decode(encoding)

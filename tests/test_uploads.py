@@ -49,6 +49,16 @@ def test_cp1252_portuguese_survives_too(tmp_path):
     assert translator.decode_text_file(path, 'pt') == PORTUGUESE
 
 
+def test_cp1254_turkish_keeps_its_own_letters(tmp_path):
+    """cp1252 decodes this without complaint and returns "Iþýk aðýr" — the six
+    letters the two codepages disagree on are the ones Turkish is written in."""
+    turkish = 'Işık ağır ağır söndü.'
+    path = _written(tmp_path, 'book.txt', turkish, 'cp1254')
+
+    assert translator.decode_text_file(path, 'tr') == turkish
+    assert translator.decode_text_file(path, 'en') != turkish
+
+
 def test_without_a_language_hint_the_western_codepage_wins(tmp_path):
     """Documented, not desired. Cyrillic in cp1251 and Western text in cp1252
     both decode to coherent-looking output under either codepage, so nothing but
