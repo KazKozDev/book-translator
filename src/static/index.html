@@ -1320,6 +1320,14 @@
         // fresh restore sees draft_chunks; this latch keeps the same state
         // without leaving the page.
         let draftReadyForRefine = false;
+        // At most one job stream per tab. The server hands every reader of a
+        // job the same progress queue, so a second reader splits the events
+        // with the first and only one of the two ever sees the end of the run.
+        let liveStreamAttached = false;
+        // Stage 1 runs this tab watched to the end. The snapshot fetched right
+        // afterwards can still say `running`, and re-attaching to that is what
+        // used to grey out CONTINUE over a draft that was already finished.
+        const stage1FinishedHere = new Set();
         const ACTIVE_TRANSLATION_KEY = 'activeTranslationId';
         const LEGACY_WORKSPACE_GLOSSARY_KEY = 'workspaceGlossary';
         let workspaceGlossaryContext = null;
@@ -1369,11 +1377,42 @@
             setJobPaused(!currentJobPaused);
         }
 
+        // Dropping the job also locks the button that acts on it. Without this
+        // the two could disagree — a blue → 3 CONTINUE over a null id, whose
+        // every press hit the "press START first" guard and did nothing
+        // visible: a button that looks alive and answers to nothing.
         function forgetActiveTranslation() {
             workspaceLoadToken += 1;
             draftReadyForRefine = false;
             currentTranslationId = null;
+            const refineBtn = document.getElementById('refineHeaderBtn');
+            if (refineBtn) refineBtn.disabled = true;
+            setTestButtonsEnabled('1', false);
             try { localStorage.removeItem(ACTIVE_TRANSLATION_KEY); } catch (e) {}
+        }
+
+        // Held for as long as this tab reads a job's SSE, across every await in
+        // between — a claim taken only inside the reader would leave the door
+        // open during the workspace load that precedes it.
+        function claimLiveStream() {
+            if (liveStreamAttached) return false;
+            liveStreamAttached = true;
+            return true;
+        }
+
+        function releaseLiveStream() {
+            liveStreamAttached = false;
+        }
+
+        function markStage1Finished(id) {
+            const numeric = Number(id);
+            if (Number.isInteger(numeric) && numeric >= 1) stage1FinishedHere.add(numeric);
+        }
+
+        // Resume and Retry send a job through Stage 1 again, so what this tab
+        // saw finish earlier no longer describes it.
+        function forgetStage1Finished(id) {
+            stage1FinishedHere.delete(Number(id));
         }
 
         function setContinueEnabled(enabled) {
@@ -3764,8 +3803,48 @@
                 const data = await response.json();
                 allTranslations = data.translations || [];
                 renderHistoryList();
+                reconcileWorkspaceFromHistory();
             } catch (error) {
                 console.error('Error loading translations:', error);
+            }
+        }
+
+        let historyReconcileInFlight = false;
+
+        // The SSE reader is the fast way to hear that a stage finished, not the
+        // only one. The work itself runs in its own thread on the server, so a
+        // reader that dies — laptop asleep, proxy timeout, a second reader
+        // splitting the job's queue — leaves the job to finish alone and this
+        // tab with nothing left to tell it: → 3 CONTINUE stayed greyed out over
+        // a draft that was ready, until a full page load. The history poll
+        // already carries that answer every few seconds.
+        async function reconcileWorkspaceFromHistory() {
+            if (historyReconcileInFlight) return;
+            // A reader in this tab owns the header while it runs, and so does
+            // the gap between pressing CONTINUE and the row turning in_progress
+            // — both hold the live-stream claim.
+            if (liveStreamAttached || !currentTranslationId) return;
+
+            const row = allTranslations.find(t => Number(t.id) === Number(currentTranslationId));
+            if (!row || row.running) return;
+            if (row.status !== 'stage1_completed' && row.status !== 'completed') return;
+            // The two states a dead stream leaves behind: a draft nobody may
+            // press CONTINUE on, and a refinement whose final text never
+            // arrived (no Download, no review desk). Once the workspace agrees
+            // with the row there is nothing left to repair.
+            const refineStranded = document.getElementById('refineHeaderBtn').disabled;
+            const finalMissing = row.status === 'completed' && !canonicalSavedFinal;
+            if (!refineStranded && !finalMissing) return;
+
+            historyReconcileInFlight = true;
+            try {
+                markStage1Finished(row.id);
+                // The full load, not a hand-patched button: a finished row also
+                // carries the draft, the final text, the exports and the review
+                // desk that the dead stream never delivered.
+                await loadTranslationIntoWorkspace(row.id, { scroll: false, silent: true });
+            } finally {
+                historyReconcileInFlight = false;
             }
         }
 
@@ -3889,6 +3968,10 @@
             translationStartTime = Date.now();
             updateEta(0);
 
+            // Start reads the job's stream itself: nothing else in this tab may
+            // open a second reader on it while that is going on.
+            const ownsLiveStream = claimLiveStream();
+
             try {
                 const response = await fetch(`${API_URL}/translate`, {
                     method: 'POST',
@@ -3962,6 +4045,7 @@
 
                 // Enable immediately so a slow workspace reload cannot leave
                 // CONTINUE stuck disabled; reload then syncs from draft_chunks.
+                markStage1Finished(currentTranslationId);
                 setContinueEnabled(true);
                 await loadTranslationIntoWorkspace(currentTranslationId, { scroll: false, silent: true });
                 if (document.getElementById('refineHeaderBtn').disabled && currentTranslationId) {
@@ -3973,9 +4057,14 @@
                 alert('Translation failed: ' + error.message);
                 translationStartTime = null;
                 updateEta(0);
+                // The upload may well have survived what killed the stream, in
+                // which case the job is still running: let the poll pick the
+                // draft up instead of waiting out its interval.
+                loadTranslations();
             } finally {
                 translateBtn.disabled = false;
                 clearActiveJob();
+                if (ownsLiveStream) releaseLiveStream();
             }
         }
 
@@ -3986,11 +4075,25 @@
             return ['auto', 'manual', 'skip'].includes(saved) ? saved : 'auto';
         }
 
+        // A refusal that only ever reached an alert() is a refusal nobody sees:
+        // a browser asked once to stop showing dialogs (this page raises a lot
+        // of them) swallows every later one, and CONTINUE then reads as a live
+        // button that does nothing at all. The desk says it too, on the page.
+        function reportRefusedRefinement(message, deckText = 'Refinement did not start') {
+            document.getElementById('progressSection').style.display = 'block';
+            document.getElementById('progressInfo').textContent = message;
+            document.getElementById('deckStatus').textContent = deckText;
+            alert(message);
+        }
+
         async function handleRefine(e) {
             if (e && e.preventDefault) e.preventDefault();
 
             if (!currentTranslationId) {
-                alert('Press START first to produce a draft translation, then CONTINUE to refine it.');
+                reportRefusedRefinement(
+                    'No translation is open in this workspace — open one from History, '
+                    + 'or press START to produce a draft, then CONTINUE to refine it.',
+                );
                 return;
             }
 
@@ -4017,6 +4120,10 @@
             document.getElementById('deckStatus').textContent = refinementMode === 'skip' ? 'Finalizing draft…' : 'Refining…';
             translationStartTime = Date.now();
             updateEta(0);
+
+            // Same rule as Start: one reader per job, or the Stage 2 events get
+            // split with whatever else this tab decided to attach to.
+            const ownsLiveStream = claimLiveStream();
 
             try {
                 const selectedModel = document.getElementById('refinementModel').value;
@@ -4089,13 +4196,22 @@
                 loadTranslations();
             } catch (error) {
                 console.error('Error:', error);
-                alert('Refinement failed: ' + error.message);
+                // The server's refusals arrive here — a model that cannot
+                // refine, an incomplete draft, a job it still counts as
+                // running — and each one is why the press looked ignored.
+                reportRefusedRefinement(
+                    'Refinement failed: ' + error.message, 'Refinement stopped',
+                );
                 translationStartTime = null;
                 updateEta(0);
+                // Same as Start: the pass may have outlived the stream that was
+                // reading it, and the poll is what notices.
+                loadTranslations();
             } finally {
                 translateBtn.disabled = false;
                 refineHeaderBtn.disabled = false;
                 clearActiveJob();
+                if (ownsLiveStream) releaseLiveStream();
             }
         }
 
@@ -4274,33 +4390,54 @@
         // Continue Stage 1 from the last finished chunk after an overnight
         // interrupt or server restart — does not start the book over.
         async function resumeTranslationFromHistory(id) {
-            await loadTranslationIntoWorkspace(id, { scroll: true, silent: false });
-            await streamStage1Job(`${API_URL}/resume-translation/${id}`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: '{}',
-            });
+            if (!claimLiveStream()) return;
+            forgetStage1Finished(id);
+            try {
+                await loadTranslationIntoWorkspace(id, { scroll: true, silent: false });
+                await streamStage1Job(`${API_URL}/resume-translation/${id}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: '{}',
+                }, { claimed: true });
+            } finally {
+                releaseLiveStream();
+            }
         }
 
         // Re-attach to a job that is still running after a page reload.
+        // The claim is taken before the workspace load, not inside the reader:
+        // loadTranslationIntoWorkspace re-attaches to anything still `running`,
+        // so an unclaimed await here calls straight back into this function.
         async function attachLiveTranslation(id, { silent = false } = {}) {
-            await loadTranslationIntoWorkspace(id, { scroll: !silent, silent });
-            await streamStage1Job(`${API_URL}/translations/${id}/stream`, {
-                method: 'GET',
-            });
+            if (!claimLiveStream()) return;
+            try {
+                await loadTranslationIntoWorkspace(id, { scroll: !silent, silent });
+                await streamStage1Job(`${API_URL}/translations/${id}/stream`, {
+                    method: 'GET',
+                }, { claimed: true });
+            } finally {
+                releaseLiveStream();
+            }
         }
 
         // Shared SSE reader for Start / Resume / Watch — keeps CONTINUE gated
         // until Stage 1 actually completes.
-        async function streamStage1Job(url, fetchInit) {
+        async function streamStage1Job(url, fetchInit, { claimed = false } = {}) {
+            const ownsLiveStream = claimed || claimLiveStream();
+            if (!ownsLiveStream) return;
+
             const translateBtn = document.getElementById('translateBtn');
             const refineHeaderBtn = document.getElementById('refineHeaderBtn');
             const progressSection = document.getElementById('progressSection');
 
             translateBtn.disabled = true;
-            refineHeaderBtn.disabled = true;
-            draftReadyForRefine = false;
-            setTestButtonsEnabled('1', false);
+            // A draft this tab already carried across the line keeps CONTINUE:
+            // a stream opened over it is a stale snapshot talking, not a job.
+            if (!stage1FinishedHere.has(Number(currentTranslationId))) {
+                refineHeaderBtn.disabled = true;
+                draftReadyForRefine = false;
+                setTestButtonsEnabled('1', false);
+            }
             setTestButtonsEnabled('2', false);
             progressSection.style.display = 'block';
             document.getElementById('deckStatus').textContent = 'Translating…';
@@ -4351,6 +4488,7 @@
                                 appendPanelPreview('machineTranslation', data.machine_translation);
                             }
                             if (data.status === 'stage1_completed') {
+                                markStage1Finished(currentTranslationId);
                                 setContinueEnabled(true);
                             }
                         } catch (e) {
@@ -4366,6 +4504,7 @@
                 document.getElementById('progressInfo').textContent = 'Draft ready — Press CONTINUE to refine';
                 document.getElementById('deckStatus').textContent = 'Draft translation ready';
                 updateEta(100);
+                markStage1Finished(currentTranslationId);
                 setContinueEnabled(true);
                 await loadTranslationIntoWorkspace(currentTranslationId, { scroll: false, silent: true });
                 if (document.getElementById('refineHeaderBtn').disabled && currentTranslationId) {
@@ -4381,6 +4520,7 @@
             } finally {
                 translateBtn.disabled = false;
                 clearActiveJob();
+                if (!claimed) releaseLiveStream();
             }
         }
 
@@ -4393,9 +4533,17 @@
             reviewSelection = null,
         } = {}) {
             const loadToken = workspaceLoadToken;
+            // Only a translation the server no longer has is worth forgetting
+            // over. Everything else — a timeout while Ollama holds the worker,
+            // a 500, a dropped connection — is this minute's problem, and
+            // giving up the id for it stranded the workspace: the button was
+            // already enabled by the caller, so it stayed blue over a job this
+            // tab could no longer name, and even the history poll skipped it.
+            let translationIsGone = false;
             try {
                 const response = await fetch(`${API_URL}/translations/${id}`);
                 if (!response.ok) {
+                    translationIsGone = response.status === 404;
                     const errorData = await response.json().catch(() => ({}));
                     throw new Error(errorData.error || 'Translation not found');
                 }
@@ -4445,6 +4593,10 @@
                 document.getElementById('refineHeaderBtn').disabled = !(
                     t.status === 'stage1_completed'
                     || t.status === 'completed'
+                    // Watched to the end of Stage 1 here: the row settles a
+                    // moment after the stream closes, and the snapshot in
+                    // between must not blink the button off.
+                    || stage1FinishedHere.has(Number(t.id))
                     // Stale in-progress snapshot must not grey out CONTINUE
                     // after this session already finished Stage 1 for this id.
                     || (draftReadyForRefine
@@ -4481,6 +4633,9 @@
                 updateEta(t.status === 'completed' || t.status === 'stage1_completed' ? 100 : 0);
 
                 if (t.status === 'interrupted' || t.status === 'error') {
+                    // A run that ended badly outranks anything this tab saw
+                    // earlier — including its own finished Stage 1.
+                    forgetStage1Finished(t.id);
                     setContinueEnabled(false);
                 }
 
@@ -4490,6 +4645,14 @@
                     // job would stay held with nothing on the page to release it.
                     registerActiveJob(t.id);
                     setJobPaused(Boolean(t.paused));
+                }
+                // `running` is worth acting on only when nobody in this tab is
+                // reading the job already, and when this tab has not just
+                // watched its Stage 1 finish — that snapshot lags the run by a
+                // moment, and attaching to it re-disables a live CONTINUE.
+                if (t.running
+                    && !liveStreamAttached
+                    && !stage1FinishedHere.has(Number(t.id))) {
                     attachLiveTranslation(t.id, { silent: true });
                 }
 
@@ -4502,14 +4665,15 @@
                 if (scroll) document.querySelector('.main-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
             } catch (error) {
                 console.error('Error loading translation:', error);
-                if (silent) forgetActiveTranslation();
-                else alert('Could not open this translation: ' + error.message);
+                if (!silent) alert('Could not open this translation: ' + error.message);
+                else if (translationIsGone) forgetActiveTranslation();
             }
         }
 
         async function retryTranslation(id) {
             if (!confirm('Retry this translation?')) return;
 
+            forgetStage1Finished(id);
             try {
                 const response = await fetch(`${API_URL}/retry-translation/${id}`, {
                     method: 'POST'

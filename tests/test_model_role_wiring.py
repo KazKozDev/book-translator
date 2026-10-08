@@ -143,6 +143,125 @@ def test_continue_button_guards_against_stale_restore_after_start():
     assert 'Number(t.id) === Number(currentTranslationId)' in main_page
 
 
+def test_a_finished_stage1_is_never_re_attached_as_a_live_job():
+    """Home must not open a second reader on a job it is already reading.
+
+    loadTranslationIntoWorkspace re-attaches to anything the server still calls
+    `running`, and attachLiveTranslation loads the workspace again — mutually
+    recursive, once per snapshot that lags the end of Stage 1. Every pass
+    re-entered streamStage1Job, whose first act is to grey out → 3 CONTINUE,
+    so a finished draft sat behind a disabled button until the next full page
+    load. Server-side each pass was one more reader of the job's single
+    progress queue, splitting its events and its end-of-run sentinel.
+    """
+    main_page = (
+        Path(__file__).resolve().parents[1] / 'src' / 'static' / 'index.html'
+    ).read_text(encoding='utf-8')
+
+    assert 'let liveStreamAttached = false;' in main_page
+    assert 'const stage1FinishedHere = new Set();' in main_page
+    assert 'function claimLiveStream()' in main_page
+
+    # The claim covers the workspace load too, not just the reader: an
+    # unclaimed await there is what called back into attachLiveTranslation.
+    assert (
+        'async function attachLiveTranslation(id, { silent = false } = {}) {\n'
+        '            if (!claimLiveStream()) return;'
+    ) in main_page
+    assert 'if (!claimLiveStream()) return;' in main_page
+    assert '}, { claimed: true });' in main_page
+    assert (
+        'async function streamStage1Job(url, fetchInit, { claimed = false } = {})'
+    ) in main_page
+
+    # The two conditions that stop the recursion at its source.
+    assert '&& !liveStreamAttached' in main_page
+    assert '&& !stage1FinishedHere.has(Number(t.id))' in main_page
+
+    # A draft this tab watched finish keeps the button across a stale snapshot.
+    assert 'markStage1Finished(currentTranslationId);' in main_page
+    assert 'if (!stage1FinishedHere.has(Number(currentTranslationId))) {' in main_page
+    assert 'stage1FinishedHere.has(Number(t.id))' in main_page
+
+    # Resume, Retry and a failed run all outrank what was seen earlier.
+    assert 'function forgetStage1Finished(id)' in main_page
+    assert main_page.count('forgetStage1Finished(') >= 4
+
+
+def test_a_dead_stream_cannot_strand_the_continue_button():
+    """The history poll, not only the SSE reader, decides the header state.
+
+    Stage 1 runs in its own thread on the server, so the reader that watches it
+    is the fast path and never the only one. When that reader dies — the laptop
+    slept, a proxy timed out, a second reader split the job's queue — the book
+    finishes alone and the tab is left with → 3 CONTINUE greyed out over a
+    draft that is ready, permanently, because nothing else ever revisits the
+    row. Home already polls /translations every five seconds; that poll must
+    reconcile the open job's workspace with what the row says.
+    """
+    main_page = (
+        Path(__file__).resolve().parents[1] / 'src' / 'static' / 'index.html'
+    ).read_text(encoding='utf-8')
+
+    assert 'async function reconcileWorkspaceFromHistory()' in main_page
+    assert 'reconcileWorkspaceFromHistory();' in main_page
+    assert 'let historyReconcileInFlight = false;' in main_page
+
+    # A live reader owns the header while it runs — including the gap between
+    # pressing CONTINUE and the row turning in_progress, which the same claim
+    # covers — so the poll must stand back for it.
+    assert 'if (liveStreamAttached || !currentTranslationId) return;' in main_page
+    assert 'if (!row || row.running) return;' in main_page
+    assert (
+        "if (row.status !== 'stage1_completed' && row.status !== 'completed') return;"
+    ) in main_page
+
+    # Both states a dead stream leaves behind: no CONTINUE over a ready draft,
+    # and no final text (so no Download, no review desk) over a finished pass.
+    assert "const finalMissing = row.status === 'completed' && !canonicalSavedFinal;" in main_page
+    assert 'if (!refineStranded && !finalMissing) return;' in main_page
+
+    # The repair is the same full load the reader would have done.
+    assert (
+        'await loadTranslationIntoWorkspace(row.id, { scroll: false, silent: true });'
+    ) in main_page
+
+    # A stream that failed should not have to wait out the poll interval.
+    assert main_page.count('loadTranslations();') >= 5
+
+
+def test_an_enabled_continue_always_has_a_job_to_refine():
+    """A blue → 3 CONTINUE that answers to nothing is worse than a grey one.
+
+    Stage 1 enables the button and only then reloads the workspace. When that
+    reload failed — a timeout while Ollama held the worker, a 500, a dropped
+    connection — the silent branch forgot the active translation, and the two
+    halves of the header disagreed: an enabled button over a null id, whose
+    every press fell straight into the "press START first" guard and did
+    nothing the page could show. Only a translation the server no longer has
+    is worth forgetting over, and forgetting must take the button with it.
+    """
+    main_page = (
+        Path(__file__).resolve().parents[1] / 'src' / 'static' / 'index.html'
+    ).read_text(encoding='utf-8')
+
+    assert 'let translationIsGone = false;' in main_page
+    assert 'translationIsGone = response.status === 404;' in main_page
+    assert 'else if (translationIsGone) forgetActiveTranslation();' in main_page
+
+    # Dropping the job locks the button that acts on it.
+    forget = main_page.split('function forgetActiveTranslation() {')[1].split('}')[0]
+    assert 'currentTranslationId = null;' in forget
+    assert 'if (refineBtn) refineBtn.disabled = true;' in forget
+    assert "setTestButtonsEnabled('1', false);" in forget
+
+    # A refusal has to reach the page: a browser told once to stop showing
+    # dialogs swallows every alert after it, and CONTINUE then reads as dead.
+    assert 'function reportRefusedRefinement(message' in main_page
+    assert main_page.count('reportRefusedRefinement(') >= 3
+    assert "document.getElementById('deckStatus').textContent = deckText;" in main_page
+
+
 def test_each_pipeline_role_uses_its_own_requested_model(tmp_path, monkeypatch):
     database_path = tmp_path / 'translations.db'
     monkeypatch.setattr(app_module, 'DB_PATH', str(database_path))
