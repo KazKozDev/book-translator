@@ -6,6 +6,7 @@ Notable changes to Tolmach are documented here.
 
 - Added a **Refinement mode** setting for **CONTINUE**: apply verified fixes automatically (the default), *Suggest only* — every proposed fix waits in the Review desk and nothing is written into the text without you, or *Skip refinement* — the draft becomes the final text without a model call (#27).
 - Review desk has a **Restore draft** button that puts a chunk's draft back into Final.
+- Added **shared glossaries**: name one above the glossary and the entries you approve carry over to the next document in the same language pair — the next chapter of a novel, say. **PREPARE** fills in the saved entry for every name it finds in the new text and lists those last; names that do not occur in the text are not added. **START** saves the approved list back under that name, and any entry can be ticked to keep it out; the ticks are remembered with the document (#28).
 
 ## [3.1.0] — 2026-10-02
 

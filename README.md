@@ -105,7 +105,9 @@ An entry may end with an optional `{note}` — free text for what you know that 
 
 **Copy frontier prompt** also offers to write notes for you. It tells the model which book this is from the title and author in the file's metadata, asks it to research the lore, and asks for a note only where it is certain — so read them before pasting the answer back. A wrong note is one the translator will obey.
 
-The glossary belongs only to this book and language pair. If you configure an optional external provider, **Verify automatically** can check the glossary and show proposed changes; Tolmach applies nothing until you approve it. That path deliberately never sees your notes and can never write one.
+The glossary belongs only to this book and language pair. To carry it over to the next document — the next chapter of the same novel — type a name into **Shared glossary** above the list: **PREPARE** then fills in the entries you approved before for the names the new text contains, and **START** saves the approved list back under that name. Tick an entry under “Saved to…” to keep it out of the shared glossary.
+
+If you configure an optional external provider, **Verify automatically** can check the glossary and show proposed changes; Tolmach applies nothing until you approve it. That path deliberately never sees your notes and can never write one.
 
 ## Review a novel translation side by side
 

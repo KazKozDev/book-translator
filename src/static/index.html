@@ -376,6 +376,20 @@
         .form-hint code { padding: 1px 5px; border-radius: 4px; background: #f3f4f6; color: var(--muted); font-size: .95em; }
         .glossary-status { display: flex; flex: none; align-items: baseline; flex-wrap: wrap; gap: 5px 12px; margin: 0; padding: 0 18px 18px; color: var(--muted); font-size: .74rem; line-height: 1.6; min-height: 1.1em; }
         .glossary-status.has-errors { color: #b91c1c; }
+        /* The shared glossary is a setting of the run, not an entry in it, so
+           it sits between the header and the text rather than inside either. */
+        .glossary-shared { display: flex; flex: none; align-items: baseline; gap: 12px; padding: 10px 18px; border-bottom: 1px solid var(--line); color: var(--muted); font-size: .74rem; }
+        .glossary-shared label { flex: none; margin: 0; }
+        .glossary-shared input { flex: 1; min-width: 0; padding: 0; border: none; background: transparent; color: var(--ink); font: inherit; }
+        .glossary-shared input:focus { outline: none; }
+        .glossary-shared input::placeholder { color: var(--faint); opacity: .7; }
+        .shared-entries { flex: none; margin: 0; padding: 0 18px 18px; color: var(--muted); font-size: .74rem; line-height: 1.6; }
+        .shared-entries[hidden] { display: none; }
+        .shared-entries summary { color: var(--accent); font-weight: 600; cursor: pointer; }
+        .shared-entries-list { max-height: 190px; margin-top: 8px; overflow-y: auto; }
+        .shared-entries-group { margin: 8px 0 2px; color: var(--faint); font-size: .68rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+        .glossary-group .shared-entries-list label { display: flex; align-items: baseline; gap: 8px; margin: 0; color: var(--ink); cursor: pointer; }
+        .shared-entries-list input:checked + span { color: var(--muted); text-decoration: line-through; }
         .glossary-prompt-action { padding: 0; border: none; border-bottom: 1px solid transparent; background: transparent; color: var(--accent); font: inherit; font-weight: 600; cursor: pointer; }
         .glossary-prompt-action:hover { border-bottom-color: currentColor; color: var(--accent-dark); }
         .glossary-prompt-action:disabled { color: var(--faint); cursor: wait; }
@@ -839,6 +853,11 @@
                         <span class="panel-title">Glossary</span>
                         <button type="button" class="header-action" id="prepareBtn" disabled title="Upload a file first">→ PREPARE</button>
                     </h3>
+                    <div class="glossary-shared">
+                        <label for="sharedGlossaryName">Shared glossary</label>
+                        <input type="text" id="sharedGlossaryName" list="sharedGlossaryNames" maxlength="80" autocomplete="off" spellcheck="false" placeholder="none — type a name">
+                        <datalist id="sharedGlossaryNames"></datalist>
+                    </div>
                     <div class="form-group glossary-group">
                         <textarea id="glossary" aria-label="Glossary" spellcheck="false" placeholder="Use: source =&gt; target | mode"></textarea>
                         <div class="glossary-status" id="glossaryStatus">
@@ -846,6 +865,10 @@
                             <button type="button" class="glossary-prompt-action" id="copyGlossaryPromptBtn" hidden>Copy frontier prompt</button>
                             <button type="button" class="glossary-prompt-action" id="verifyGlossaryFrontierBtn" hidden>Verify automatically ($)</button>
                         </div>
+                        <details class="shared-entries" id="sharedEntries" hidden>
+                            <summary id="sharedEntriesSummary"></summary>
+                            <div class="shared-entries-list" id="sharedEntriesList"></div>
+                        </details>
                         <section class="frontier-review" id="frontierReview" aria-labelledby="frontierReviewTitle" hidden>
                             <div class="frontier-review-head">
                                 <strong id="frontierReviewTitle">Frontier verification</strong>
@@ -866,6 +889,7 @@
                     <h2>Format and modes</h2>
                     <p class="form-hint" id="prepareStatus" data-default="Upload the source text with → 1 UPLOAD below, then click → PREPARE. The app scans the text, collects names and repeated terms, and fills the list on the left. This step is optional, but it improves translation quality and keeps names consistent across the whole book.">Upload the source text with → 1 UPLOAD below, then click → PREPARE. The app scans the text, collects names and repeated terms, and fills the list on the left. This step is optional, but it improves translation quality and keeps names consistent across the whole book.</p>
                     <p class="form-hint">Review the list before you start: delete what you don't need, correct a wrong translation, add what the scan missed. Entries can be edited until you click → 2 START.</p>
+                    <p class="form-hint">To carry terms from one document to the next — chapters of one novel, say — name a <strong>shared glossary</strong> above the list. → PREPARE then fills in the entries you approved before, for the names this text contains, and lists them last. → 2 START saves the list back under that name; tick an entry under “Saved to…” to keep it out.</p>
                     <p class="form-hint">Format: <code>source term =&gt; translation [| mode] {note}</code><br>One entry per line. The <code>=&gt;</code> is required. If you omit the mode, inflectable is used.</p>
                     <p class="form-hint">A <code>{note}</code> is optional free text in braces at the end of the line — anything you know that the source does not say outright: <code>Rom =&gt; Rom | inflectable {c'est un garçon de huit ans}</code>. The model is told to follow it; no test can check it. Write it in the language you are translating into, since that is the text the note has to shape. <strong>Copy frontier prompt</strong> can propose notes for you: the model identifies the book from its title and author, researches the lore, and adds a note only where it is certain. Read them before you paste the answer back — a wrong note is one the translator will obey.</p>
 
@@ -1560,6 +1584,7 @@
             };
             selectedDocumentFingerprint = fingerprint;
             workspaceGlossaryContext = context;
+            loadSharedMarks();
             let draft = null;
             try {
                 const response = await fetch(workspaceGlossaryUrl(context));
@@ -1597,6 +1622,10 @@
                 clearTimeout(workspaceGlossarySaveTimer);
                 workspaceGlossarySaveTimer = null;
             }
+            // A new document: nothing in it came from a shared glossary yet,
+            // and "keep out" marks belonged to the previous text.
+            sharedAppliedSources = new Set();
+            sharedLocalSources = new Set();
             glossaryField.value = '';
             clearFrontierReview();
             updateGlossaryStatus();
@@ -1613,6 +1642,7 @@
                     targetLanguage: document.getElementById('targetLanguage').value,
                 };
                 workspaceGlossaryContext = context;
+                loadSharedMarks();
                 const response = await fetch(workspaceGlossaryUrl(context));
                 const data = await response.json().catch(() => ({}));
                 if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
@@ -1752,6 +1782,183 @@
             ko: 'Mr. Darcy => 다아시 씨 | exact\nmachine learning => 기계 학습 | inflectable\nhome => 집 | preferred',
         };
 
+        // ---- Shared glossary -------------------------------------------
+        // A name plus the language pair picks a glossary that outlives this
+        // document. The server does the merging; this side only says which
+        // one, shows which entries it supplied, and collects the entries that
+        // should stay out of it.
+        let sharedAppliedSources = new Set();  // lower-cased, from the last Prepare
+        let sharedLocalSources = new Set();    // lower-cased, ticked "keep out"
+
+        function sharedGlossaryPair() {
+            return {
+                sourceLanguage: document.getElementById('sourceLanguage').value,
+                targetLanguage: document.getElementById('targetLanguage').value,
+            };
+        }
+
+        function sharedGlossaryName() {
+            return document.getElementById('sharedGlossaryName').value.trim();
+        }
+
+        // Which entries came from the shared glossary and which are kept out
+        // of it are remembered per document and language pair — the same
+        // identity the glossary draft itself is saved under — so a reload or
+        // a reopened job does not quietly turn "keep out" back into "save".
+        function sharedMarksStorageKey() {
+            const context = workspaceGlossaryContext;
+            if (!context) return null;
+            return `sharedGlossaryMarks:${context.documentFingerprint}:`
+                + `${context.sourceLanguage}:${context.targetLanguage}`;
+        }
+
+        function saveSharedMarks() {
+            const key = sharedMarksStorageKey();
+            if (!key) return;
+            try {
+                if (!sharedAppliedSources.size && !sharedLocalSources.size) {
+                    localStorage.removeItem(key);
+                    return;
+                }
+                localStorage.setItem(key, JSON.stringify({
+                    name: sharedGlossaryName(),
+                    applied: Array.from(sharedAppliedSources),
+                    local: Array.from(sharedLocalSources),
+                }));
+            } catch (e) {}
+        }
+
+        function loadSharedMarks() {
+            const key = sharedMarksStorageKey();
+            let saved = {};
+            try { saved = JSON.parse((key && localStorage.getItem(key)) || '{}') || {}; } catch (e) {}
+            const strings = value => new Set(
+                (Array.isArray(value) ? value : []).filter(item => typeof item === 'string')
+            );
+            sharedLocalSources = strings(saved.local);
+            // "Came from" is only true of the glossary it came from.
+            sharedAppliedSources = saved.name === sharedGlossaryName()
+                ? strings(saved.applied) : new Set();
+            renderSharedEntries();
+        }
+
+        function sharedGlossaryStorageKey() {
+            const pair = sharedGlossaryPair();
+            return `sharedGlossary:${pair.sourceLanguage}:${pair.targetLanguage}`;
+        }
+
+        // The choice is remembered per language pair: the next chapter of the
+        // same novel should not need the name typed again, and a glossary for
+        // one pair is meaningless for another.
+        function restoreSharedGlossaryChoice() {
+            let saved = '';
+            try { saved = localStorage.getItem(sharedGlossaryStorageKey()) || ''; } catch (e) {}
+            document.getElementById('sharedGlossaryName').value = saved;
+            sharedAppliedSources = new Set();
+            sharedLocalSources = new Set();
+            renderSharedEntries();
+            refreshSharedGlossaryNames();
+        }
+
+        async function refreshSharedGlossaryNames() {
+            const options = document.getElementById('sharedGlossaryNames');
+            try {
+                const response = await fetch(
+                    `${API_URL}/shared-glossaries?${new URLSearchParams(sharedGlossaryPair())}`
+                );
+                if (!response.ok) return;
+                const data = await response.json();
+                options.replaceChildren(...(data.glossaries || []).map(entry => {
+                    const option = document.createElement('option');
+                    option.value = entry.name;
+                    option.label = `${entry.terms} term${entry.terms === 1 ? '' : 's'}`;
+                    return option;
+                }));
+            } catch (error) {
+                console.warn('Could not list shared glossaries:', error);
+            }
+        }
+
+        function appendSharedGlossaryFields(formData, { withLocal = false } = {}) {
+            const name = sharedGlossaryName();
+            if (!name) return;
+            formData.append('sharedGlossary', name);
+            if (!withLocal) return;
+            const local = glossarySources(document.getElementById('glossary').value)
+                .filter(source => sharedLocalSources.has(source.toLowerCase()));
+            formData.append('sharedGlossaryLocal', JSON.stringify(local));
+        }
+
+        // The source term of every line that looks like an entry. Looser than
+        // validateGlossaryText on purpose: a line with a bad mode still names
+        // a term, and the list should not flicker while it is being typed.
+        function glossarySources(text) {
+            const sources = [];
+            const seen = new Set();
+            for (const rawLine of text.split('\n')) {
+                const line = rawLine.trim().replace(GLOSSARY_NOTE_SUFFIX, '');
+                if (!line || line.startsWith('#')) continue;
+                const separator = line.includes('\t') ? '\t'
+                    : line.includes('=>') ? '=>' : line.includes('=') ? '=' : null;
+                if (!separator) continue;
+                const source = line.split(separator)[0].trim();
+                if (!source || seen.has(source.toLowerCase())) continue;
+                seen.add(source.toLowerCase());
+                sources.push(source);
+            }
+            return sources;
+        }
+
+        function renderSharedEntries() {
+            const panel = document.getElementById('sharedEntries');
+            const list = document.getElementById('sharedEntriesList');
+            const name = sharedGlossaryName();
+            const sources = glossarySources(document.getElementById('glossary').value);
+            if (!name || !sources.length) {
+                panel.hidden = true;
+                list.replaceChildren();
+                return;
+            }
+            const fresh = sources.filter(source => !sharedAppliedSources.has(source.toLowerCase()));
+            const settled = sources.filter(source => sharedAppliedSources.has(source.toLowerCase()));
+            const kept = sources.filter(source => sharedLocalSources.has(source.toLowerCase())).length;
+            const saved = sources.length - kept;
+            document.getElementById('sharedEntriesSummary').textContent =
+                `Saved to “${name}” on Start: ${saved} of ${sources.length}`
+                + (settled.length ? ` · ${settled.length} already came from it` : '');
+
+            const rows = [];
+            const group = (title, entries) => {
+                if (!entries.length) return;
+                const heading = document.createElement('div');
+                heading.className = 'shared-entries-group';
+                heading.textContent = title;
+                rows.push(heading);
+                for (const source of entries) {
+                    const label = document.createElement('label');
+                    const box = document.createElement('input');
+                    box.type = 'checkbox';
+                    box.checked = sharedLocalSources.has(source.toLowerCase());
+                    box.title = 'Keep this entry out of the shared glossary';
+                    box.addEventListener('change', () => {
+                        if (box.checked) sharedLocalSources.add(source.toLowerCase());
+                        else sharedLocalSources.delete(source.toLowerCase());
+                        saveSharedMarks();
+                        renderSharedEntries();
+                    });
+                    const text = document.createElement('span');
+                    text.textContent = source;
+                    label.append(box, text);
+                    rows.push(label);
+                }
+            };
+            // Only split into groups when there is something to tell apart.
+            group(settled.length ? 'New in this text — tick to keep out' : 'Tick to keep out', fresh);
+            group(`From “${name}”`, settled);
+            list.replaceChildren(...rows);
+            panel.hidden = false;
+        }
+
         function updateGlossaryPlaceholder() {
             const glossary = document.getElementById('glossary');
             const targetLanguage = document.getElementById('targetLanguage').value;
@@ -1830,6 +2037,7 @@
 
         function updateGlossaryStatus() {
             const text = document.getElementById('glossary').value;
+            renderSharedEntries();
             const statusEl = document.getElementById('glossaryStatus');
             const statusText = document.getElementById('glossaryStatusText');
             const copyPromptBtn = document.getElementById('copyGlossaryPromptBtn');
@@ -3007,6 +3215,7 @@
             // it is absent, so nothing needs sending for the second role.
             formData.append('model', document.getElementById('generalInstructModel').value);
             formData.append('genre', document.getElementById('genre').value);
+            appendSharedGlossaryFields(formData);
 
             button.disabled = true;
             status.classList.remove('has-errors');
@@ -3078,6 +3287,12 @@
                 if (data.glossary && !glossaryHadContent) {
                     glossaryField.value = data.glossary;
                     glossaryInputRevision += 1;
+                    // Only when the proposal was actually taken: entries the
+                    // user already had in the box did not come from anywhere.
+                    sharedAppliedSources = new Set(
+                        ((data.shared_glossary || {}).applied || []).map(source => source.toLowerCase())
+                    );
+                    saveSharedMarks();
                 }
                 updateGlossaryStatus();
                 // Setting .value fires no input event, so persist this
@@ -3205,6 +3420,9 @@
             // book's terms can never leak into a newly selected document.
             try { localStorage.removeItem(LEGACY_WORKSPACE_GLOSSARY_KEY); } catch (e) {}
             restoreWorkspaceFields();
+            // After the languages are back: the remembered name is per pair,
+            // and read any earlier it is looked up under the default pair.
+            restoreSharedGlossaryChoice();
             restoreSelectedDocument();
             applyThemeButton();
         });
@@ -3288,6 +3506,7 @@
                 document.getElementById(id).addEventListener('change', () => {
                     rememberWorkspaceField(id);
                     updateGlossaryPlaceholder();
+                    restoreSharedGlossaryChoice();
                     if (selectedFile) loadWorkspaceGlossaryForSelectedDocument();
                     // A glossary bound to a reopened job belongs to that job's
                     // language pair. Once the pair changes, rebind — otherwise
@@ -3299,6 +3518,16 @@
             document.getElementById('genre').addEventListener('change', () => {
                 rememberWorkspaceField('genre');
             });
+            const sharedGlossaryField = document.getElementById('sharedGlossaryName');
+            sharedGlossaryField.addEventListener('input', () => {
+                try { localStorage.setItem(sharedGlossaryStorageKey(), sharedGlossaryName()); } catch (e) {}
+                // What Prepare supplied came from the glossary named then.
+                sharedAppliedSources = new Set();
+                saveSharedMarks();
+                renderSharedEntries();
+            });
+            // Start may have created a glossary since the list was last read.
+            sharedGlossaryField.addEventListener('focus', refreshSharedGlossaryNames);
             document.getElementById('prepareBtn').addEventListener('click', handlePrepare);
             document.getElementById('copyGlossaryPromptBtn').addEventListener(
                 'click',
@@ -3921,6 +4150,7 @@
             // Persist that fact with the job rather than leaving every term
             // marked "proposed" after the user has launched translation.
             formData.append('glossaryApproved', 'true');
+            appendSharedGlossaryFields(formData, { withLocal: true });
             // The job carries the book's identity so that reopening it later
             // finds this same glossary draft again, in an editor still bound
             // to it. Pasted text has no fingerprint; that job falls back to
@@ -4574,6 +4804,7 @@
                 updateModelNote();
                 // After the languages are in place: the glossary is scoped to
                 // this job's own pair, not to whatever the form was left at.
+                restoreSharedGlossaryChoice();
                 loadWorkspaceGlossaryForTranslation(t);
 
                 document.getElementById('originalText').textContent = t.original_text || 'No content yet';
