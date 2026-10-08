@@ -1330,3 +1330,11 @@ def test_stage2_cache_key_changes_when_only_the_verifier_changes():
     assert first != second
     assert 'verifier-a:27b' in first
     assert 'verifier-b:27b' in second
+
+
+def test_is_cjk_matches_chinese_and_japanese_but_not_korean():
+    assert BookTranslator._is_cjk('漢字') is True
+    assert BookTranslator._is_cjk('ひらがな') is True
+    assert BookTranslator._is_cjk('カタカナ') is True
+    assert BookTranslator._is_cjk('한글') is False
+    assert BookTranslator._is_cjk('English') is False

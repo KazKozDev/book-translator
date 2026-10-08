@@ -3137,7 +3137,6 @@ class BookTranslator(QualityTests):
             'CJK' in unicodedata.name(char, '')
             or 'HIRAGANA' in unicodedata.name(char, '')
             or 'KATAKANA' in unicodedata.name(char, '')
-            or 'HANGUL' in unicodedata.name(char, '')
             for char in text
         )
 
