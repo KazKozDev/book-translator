@@ -105,7 +105,9 @@ An entry may end with an optional `{note}` — free text for what you know that 
 
 **Copy frontier prompt** also offers to write notes for you. It tells the model which book this is from the title and author in the file's metadata, asks it to research the lore, and asks for a note only where it is certain — so read them before pasting the answer back. A wrong note is one the translator will obey.
 
-The glossary belongs only to this book and language pair. If you configure an optional external provider, **Verify automatically** can check the glossary and show proposed changes; Tolmach applies nothing until you approve it. That path deliberately never sees your notes and can never write one.
+The glossary belongs only to this book and language pair. To carry it over to the next document — the next chapter of the same novel — type a name into **Shared glossary** above the list: **PREPARE** then fills in the entries you approved before for the names the new text contains, and **START** saves the approved list back under that name. Tick an entry under “Saved to…” to keep it out of the shared glossary.
+
+If you configure an optional external provider, **Verify automatically** can check the glossary and show proposed changes; Tolmach applies nothing until you approve it. That path deliberately never sees your notes and can never write one.
 
 ## Review a novel translation side by side
 
@@ -187,6 +189,7 @@ Glossary   Ollama   Verifier
 | Setting | Default | What it means |
 |---|---|---|
 | App address | `http://localhost:5001` | Local browser interface; set `PORT` to change the port |
+| Reachable from | This computer only | The app has no login. Set `HOST=0.0.0.0` to open it to your network, and only on a network you trust |
 | Ollama address | `http://localhost:11434` | Local server that runs the language models |
 | Translation model | `translategemma:12b` preferred | Creates the first translation during **START** |
 | Glossary model | First suitable local instruct model | Builds glossary suggestions during **PREPARE** |
@@ -211,7 +214,7 @@ Glossary   Ollama   Verifier
 - A stack that personally produced good results for the author: Glossary preparation `gemma4:31b-cloud` (32.7B), Translation `translategemma:27b` (27.4B), Refinement `gemma4:31b-cloud` (32.7B), Verifier and Judge `mistral-large-3:675b-cloud` (675B) (cloud open-source models).
 - Enough memory and disk space for the models you choose.
 - Internet access on the first run to download Python dependencies, Ollama models, and optional Hugging Face components.
-- Supported languages: English, Russian, Spanish, French, German, Italian, Portuguese, Chinese, Japanese, and Korean.
+- Supported languages: English, Russian, Spanish, French, German, Italian, Portuguese, Chinese, Japanese, Korean, and Turkish.
 
 The installer uses an existing Python 3.10+ installation when available. Otherwise, it installs Python 3.12 through `uv`.
 

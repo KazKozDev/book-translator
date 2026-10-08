@@ -237,7 +237,10 @@ def port_free() -> bool:
     with socket.socket() as probe:
         probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         try:
-            probe.bind(("0.0.0.0", PORT))
+            # The address the server itself binds unless HOST says otherwise.
+            # A wildcard probe can succeed beside a loopback listener, and would
+            # then report a port as free while the old server still holds it.
+            probe.bind((os.environ.get("HOST", "127.0.0.1"), PORT))
         except OSError:
             return False
     return True

@@ -4,8 +4,11 @@ Notable changes to Tolmach are documented here.
 
 ## Unreleased
 
+- **The app now answers on this computer only.** It used to listen on every network interface with cross-origin access open, so any device on the same network — and any web page open in your own browser — could read stored books and delete jobs; there is no login to stop them. It now binds to `127.0.0.1`, refuses requests from other origins and under other host names, and no longer depends on Flask-CORS. Set `HOST=0.0.0.0` if you do want to reach it from another machine.
 - Added a **Refinement mode** setting for **CONTINUE**: apply verified fixes automatically (the default), *Suggest only* — every proposed fix waits in the Review desk and nothing is written into the text without you, or *Skip refinement* — the draft becomes the final text without a model call (#27).
 - Review desk has a **Restore draft** button that puts a chunk's draft back into Final.
+- Added **shared glossaries**: name one above the glossary and the entries you approve carry over to the next document in the same language pair — the next chapter of a novel, say. **PREPARE** fills in the saved entry for every name it finds in the new text and lists those last; names that do not occur in the text are not added. **START** saves the approved list back under that name, and any entry can be ticked to keep it out; the ticks are remembered with the document (#28).
+- Added **Turkish** as a source and target language. A Turkish `.txt` that is not UTF-8 is read as Windows-1254, so ğ, ı and ş survive. The check that catches a paragraph left in the source language has no Turkish word list yet, so for a Turkish source it relies on the comparison against the source text alone, as it does for Chinese and Japanese (#30).
 
 ## [3.1.0] — 2026-10-02
 

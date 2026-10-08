@@ -21,17 +21,16 @@ from concurrent.futures import ThreadPoolExecutor
 from functools import lru_cache, wraps
 from pathlib import Path
 from queue import Empty, Queue
+from urllib.parse import urlsplit
 
 try:
     import sacrebleu
 except ImportError:
     sacrebleu = None
 from flask import Flask, request, jsonify, Response, send_file, send_from_directory
-from flask_cors import CORS
 from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
-CORS(app)
 
 import prompts  # noqa: E402
 from frontier_glossary import (  # noqa: E402
@@ -93,6 +92,7 @@ for folder in [UPLOAD_FOLDER, TRANSLATIONS_FOLDER, STATIC_FOLDER, LOG_FOLDER]:
 # the one live cache instance stays here.
 from translation_cache import TranslationCache  # noqa: E402
 from terminology import GlossaryTerm, TerminologyManager  # noqa: E402,F401
+import shared_glossary  # noqa: E402
 
 cache = TranslationCache(CACHE_DB_PATH)
 
@@ -466,6 +466,7 @@ def init_db():
                 FOREIGN KEY (translation_id) REFERENCES translations (id)
             );
         ''')
+        conn.executescript(shared_glossary.SCHEMA)
 
         # translations existed before source_format/translated_chapters/book_title/book_author
         # were added — CREATE TABLE IF NOT EXISTS won't retrofit columns onto an existing table.
@@ -3819,6 +3820,42 @@ def _cleanup_failed_translations(days: int = 7):
             (f'-{int(days)} days',),
         )
 
+LOOPBACK_HOSTS = frozenset({'localhost', '127.0.0.1', '::1'})
+
+
+def bind_host() -> str:
+    """The address the server listens on: this computer only, unless told otherwise.
+
+    The app has no accounts and no password, so whoever can reach the port can
+    read every stored book and delete every job. HOST is the deliberate way to
+    open it — to a second machine on a network you trust — and nothing else is.
+    """
+    return os.environ.get('HOST', '127.0.0.1')
+
+
+@app.before_request
+def refuse_requests_from_elsewhere():
+    """Turn away pages and names that are not this app.
+
+    Listening on loopback keeps other machines out; it does not keep out a web
+    page open in this machine's own browser, which can post to localhost like
+    anything else. Two checks close that:
+
+    - A request that names its origin must name this one. The interface is
+      served from here and reads ``window.location.origin``, so a different
+      Origin is another site's page.
+    - While the server is loopback-only, the Host it is addressed by must be a
+      loopback name. A hostile domain re-pointed at 127.0.0.1 passes the first
+      check — its Origin and Host agree — and fails this one.
+    """
+    host = urlsplit(f'//{request.host}')
+    origin = request.headers.get('Origin')
+    if origin and urlsplit(origin).netloc.lower() != host.netloc.lower():
+        return jsonify({'error': 'Cross-origin requests are not accepted'}), 403
+    if bind_host() in LOOPBACK_HOSTS and (host.hostname or '') not in LOOPBACK_HOSTS:
+        return jsonify({'error': 'This app only answers on this computer'}), 403
+
+
 # Health checking middleware
 @app.before_request
 def check_ollama():
@@ -3831,6 +3868,7 @@ def check_ollama():
         'update_review_chunk', 'download_translation',
         'stream_translation_progress',
         'source_preview', 'get_workspace_glossary', 'save_workspace_glossary',
+        'list_shared_glossaries', 'get_shared_glossary', 'delete_shared_glossary',
         'get_glossary_verification_prompt', 'get_frontier_providers',
         'verify_glossary_with_frontier',
         'decide_review_chunk_with_frontier',
@@ -4130,6 +4168,67 @@ def save_workspace_glossary(document_fingerprint):
     with sqlite3.connect(DB_PATH) as conn:
         _store_workspace_glossary(conn, context, glossary)
     return jsonify({'status': 'saved'})
+
+
+def _requested_shared_glossary(name, source_lang, target_lang):
+    """The shared glossary a request names, or None when it names none.
+
+    Raises ValueError for a name that is present but unusable, so a typo is
+    reported instead of quietly running without the glossary the user chose.
+    """
+    if name is None or (isinstance(name, str) and not name.strip()):
+        return None
+    return shared_glossary.scope(name, source_lang, target_lang)
+
+
+@app.route('/shared-glossaries', methods=['GET'])
+@with_error_handling
+def list_shared_glossaries():
+    """Name the shared glossaries available for one language pair."""
+    source_lang = (request.args.get('sourceLanguage') or '').strip()
+    target_lang = (request.args.get('targetLanguage') or '').strip()
+    if not source_lang or not target_lang:
+        return jsonify({'error': 'Source and target languages are required'}), 400
+    with sqlite3.connect(DB_PATH) as conn:
+        return jsonify({
+            'glossaries': shared_glossary.listing(conn, source_lang, target_lang),
+        })
+
+
+@app.route('/shared-glossaries/<path:name>', methods=['GET'])
+@with_error_handling
+def get_shared_glossary(name):
+    """Return one shared glossary in the editor's own text format."""
+    try:
+        shared = shared_glossary.scope(
+            name, request.args.get('sourceLanguage'), request.args.get('targetLanguage'),
+        )
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+    with sqlite3.connect(DB_PATH) as conn:
+        terms = shared_glossary.load(conn, shared)
+    return jsonify({
+        'name': shared[0],
+        'glossary': shared_glossary.to_text(terms),
+        'terms': len(terms),
+        'found': bool(terms),
+    })
+
+
+@app.route('/shared-glossaries/<path:name>', methods=['DELETE'])
+@with_error_handling
+def delete_shared_glossary(name):
+    try:
+        shared = shared_glossary.scope(
+            name, request.args.get('sourceLanguage'), request.args.get('targetLanguage'),
+        )
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+    with sqlite3.connect(DB_PATH) as conn:
+        deleted = shared_glossary.delete(conn, shared)
+    if not deleted:
+        return jsonify({'error': 'Shared glossary not found'}), 404
+    return jsonify({'status': 'deleted', 'terms': deleted})
 
 
 @app.route('/translations', methods=['GET'])
@@ -5048,6 +5147,10 @@ class UploadError(Exception):
 # UTF-8. Kept wider than this app's own language list: the source file's
 # encoding does not care which languages the interface offers.
 CYRILLIC_SOURCE_LANGUAGES = frozenset({'ru', 'uk', 'be', 'bg', 'sr', 'mk', 'kk'})
+# Turkish has a codepage of its own. It differs from cp1252 in six letters —
+# ğ, ı, ş and their capitals — which are exactly the ones a Turkish book
+# cannot do without, and which cp1252 reads back as ð, ý and þ.
+TURKISH_SOURCE_LANGUAGES = frozenset({'tr'})
 
 
 def decode_text_file(filepath: str, source_lang: Optional[str] = None) -> str:
@@ -5072,8 +5175,13 @@ def decode_text_file(filepath: str, source_lang: Optional[str] = None) -> str:
     except UnicodeDecodeError:
         pass
 
-    cyrillic = (source_lang or '').strip().lower()[:2] in CYRILLIC_SOURCE_LANGUAGES
-    fallbacks = ('cp1251', 'cp1252', 'latin-1') if cyrillic else ('cp1252', 'cp1251', 'latin-1')
+    language = (source_lang or '').strip().lower()[:2]
+    if language in CYRILLIC_SOURCE_LANGUAGES:
+        fallbacks = ('cp1251', 'cp1252', 'latin-1')
+    elif language in TURKISH_SOURCE_LANGUAGES:
+        fallbacks = ('cp1254', 'cp1252', 'latin-1')
+    else:
+        fallbacks = ('cp1252', 'cp1251', 'latin-1')
     for encoding in fallbacks:
         try:
             text = raw.decode(encoding)
@@ -5235,6 +5343,19 @@ def prepare():
                     'switch back to TranslateGemma for Start if you like.'
                 )}), 400
 
+        # Read before the worker starts, so a bad name is a 400 on this request
+        # and not an error event halfway through a long Prepare.
+        try:
+            shared = _requested_shared_glossary(
+                request.form.get('sharedGlossary'), source_lang, target_lang,
+            )
+        except ValueError as e:
+            return jsonify({'error': str(e)}), 400
+        shared_terms = []
+        if shared:
+            with sqlite3.connect(DB_PATH) as conn:
+                shared_terms = shared_glossary.load(conn, shared)
+
         try:
             text, _, _, _, _, filepath = read_uploaded_book(request.files['file'], source_lang)
         except UploadError as e:
@@ -5313,6 +5434,14 @@ def prepare():
                 emit_prepare_stage(
                     'rendering', 1.0, f"Rendered {len(records)} glossary record(s)",
                 )
+                # Before the conflict check, so it judges the renderings the
+                # run will actually use rather than ones about to be replaced.
+                records, from_shared = shared_glossary.apply(records, shared_terms)
+                if shared:
+                    logger.translation_logger.info(
+                        f"Stage 0: {len(from_shared)} of {len(records)} record(s) "
+                        f"taken from shared glossary '{shared[0]}'"
+                    )
                 run_pause_checkpoint(prepare_id)
                 emit_prepare_stage('conflicts', 0.0, 'Checking for rendering conflicts…')
                 rendering_conflicts = translator.find_rendering_conflicts(records)
@@ -5325,10 +5454,12 @@ def prepare():
                 # Serialised in the glossary's own text format, so the proposal
                 # lands in the existing textarea and goes through the same parser
                 # and the same validation as anything typed by hand. Stage 0 has
-                # no basis for a note, so it proposes none.
+                # no basis for a note, so it proposes none; one that appears
+                # here was written by the user and came from a shared glossary.
                 glossary = '\n'.join(
                     TerminologyManager.format_line(
                         record['source'], record['target'], record['mode'],
+                        record.get('note', ''),
                     )
                     for record in records
                 )
@@ -5354,6 +5485,12 @@ def prepare():
                     },
                     'rendering_conflicts': rendering_conflicts,
                     'source_chars': len(text),
+                    # Which entries were settled in an earlier run, so the
+                    # interface can set them apart from the ones to read.
+                    'shared_glossary': {
+                        'name': shared[0],
+                        'applied': from_shared,
+                    } if shared else None,
                 }
             except Exception as e:
                 logger.translation_logger.error(f"Stage 0 failed: {e}")
@@ -5415,6 +5552,23 @@ def translate():
         if not WORKSPACE_GLOSSARY_FINGERPRINT.fullmatch(document_fingerprint):
             document_fingerprint = None
 
+        # sharedGlossaryLocal is a JSON list of source terms that belong to
+        # this text only — a one-off correction, a name that means something
+        # else here — and so must not be written back.
+        try:
+            shared = _requested_shared_glossary(
+                request.form.get('sharedGlossary'), source_lang, target_lang,
+            )
+            local_sources = json.loads(request.form.get('sharedGlossaryLocal') or '[]')
+            if not isinstance(local_sources, list) or not all(
+                isinstance(source, str) for source in local_sources
+            ):
+                raise ValueError('sharedGlossaryLocal must be a JSON list of source terms')
+        except json.JSONDecodeError:
+            return jsonify({'error': 'sharedGlossaryLocal must be a JSON list of source terms'}), 400
+        except ValueError as e:
+            return jsonify({'error': str(e)}), 400
+
         try:
             text, chapters, book_title, book_author, source_format, filepath = read_uploaded_book(file, source_lang)
         except UploadError as e:
@@ -5463,6 +5617,10 @@ def translate():
                     (document_fingerprint, source_lang, target_lang),
                     request.form.get('glossary', '')[:MAX_WORKSPACE_GLOSSARY_LENGTH],
                 )
+            # In the transaction that creates the job: a Start that fails
+            # leaves the shared glossary exactly as it was.
+            if shared:
+                shared_glossary.store(conn, shared, terminology.terms, local_sources)
 
         translator = BookTranslator(model_name=model_name)
 
@@ -6362,7 +6520,7 @@ if __name__ == "__main__":
 
     # Start the Flask application
     app.run(
-        host='0.0.0.0',
+        host=bind_host(),
         port=int(os.environ.get('PORT', 5001)),
         debug=os.environ.get('FLASK_DEBUG', 'false').lower() == 'true'
     )
