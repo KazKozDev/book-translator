@@ -21,17 +21,16 @@ from concurrent.futures import ThreadPoolExecutor
 from functools import lru_cache, wraps
 from pathlib import Path
 from queue import Empty, Queue
+from urllib.parse import urlsplit
 
 try:
     import sacrebleu
 except ImportError:
     sacrebleu = None
 from flask import Flask, request, jsonify, Response, send_file, send_from_directory
-from flask_cors import CORS
 from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
-CORS(app)
 
 import prompts  # noqa: E402
 from frontier_glossary import (  # noqa: E402
@@ -3822,6 +3821,42 @@ def _cleanup_failed_translations(days: int = 7):
             (f'-{int(days)} days',),
         )
 
+LOOPBACK_HOSTS = frozenset({'localhost', '127.0.0.1', '::1'})
+
+
+def bind_host() -> str:
+    """The address the server listens on: this computer only, unless told otherwise.
+
+    The app has no accounts and no password, so whoever can reach the port can
+    read every stored book and delete every job. HOST is the deliberate way to
+    open it — to a second machine on a network you trust — and nothing else is.
+    """
+    return os.environ.get('HOST', '127.0.0.1')
+
+
+@app.before_request
+def refuse_requests_from_elsewhere():
+    """Turn away pages and names that are not this app.
+
+    Listening on loopback keeps other machines out; it does not keep out a web
+    page open in this machine's own browser, which can post to localhost like
+    anything else. Two checks close that:
+
+    - A request that names its origin must name this one. The interface is
+      served from here and reads ``window.location.origin``, so a different
+      Origin is another site's page.
+    - While the server is loopback-only, the Host it is addressed by must be a
+      loopback name. A hostile domain re-pointed at 127.0.0.1 passes the first
+      check — its Origin and Host agree — and fails this one.
+    """
+    host = urlsplit(f'//{request.host}')
+    origin = request.headers.get('Origin')
+    if origin and urlsplit(origin).netloc.lower() != host.netloc.lower():
+        return jsonify({'error': 'Cross-origin requests are not accepted'}), 403
+    if bind_host() in LOOPBACK_HOSTS and (host.hostname or '') not in LOOPBACK_HOSTS:
+        return jsonify({'error': 'This app only answers on this computer'}), 403
+
+
 # Health checking middleware
 @app.before_request
 def check_ollama():
@@ -6486,7 +6521,7 @@ if __name__ == "__main__":
 
     # Start the Flask application
     app.run(
-        host='0.0.0.0',
+        host=bind_host(),
         port=int(os.environ.get('PORT', 5001)),
         debug=os.environ.get('FLASK_DEBUG', 'false').lower() == 'true'
     )

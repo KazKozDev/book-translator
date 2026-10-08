@@ -189,6 +189,7 @@ Glossary   Ollama   Verifier
 | Setting | Default | What it means |
 |---|---|---|
 | App address | `http://localhost:5001` | Local browser interface; set `PORT` to change the port |
+| Reachable from | This computer only | The app has no login. Set `HOST=0.0.0.0` to open it to your network, and only on a network you trust |
 | Ollama address | `http://localhost:11434` | Local server that runs the language models |
 | Translation model | `translategemma:12b` preferred | Creates the first translation during **START** |
 | Glossary model | First suitable local instruct model | Builds glossary suggestions during **PREPARE** |
