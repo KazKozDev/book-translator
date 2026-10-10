@@ -9,5 +9,5 @@
 # and reads its rules from pyproject.toml, so the local run and the CI run
 # cannot drift apart.
 -r requirements.txt
-pytest==7.4.3
+pytest==9.0.3
 ruff==0.12.2
