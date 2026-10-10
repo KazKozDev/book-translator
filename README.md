@@ -1,4 +1,4 @@
-<h1 align="center">Tolmach</h1>
+<h1 align="center">Tolmach — AI Book Translator</h1>
 
 <p align="center">
   <b>Translate a whole novel on your own computer.</b><br>
