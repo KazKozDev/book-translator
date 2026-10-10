@@ -207,10 +207,6 @@ Tests need no Ollama, models, or network.
 
 </details>
 
-## Contributors
-
-[@StellarNear](https://github.com/StellarNear) ([#23](https://github.com/KazKozDev/book-translator/pull/23)) · [@kroryan](https://github.com/kroryan) ([#9](https://github.com/KazKozDev/book-translator/pull/9)) · [@moonixt](https://github.com/moonixt) ([#6](https://github.com/KazKozDev/book-translator/pull/6))
-
 ## License
 
 [AGPL-3.0-only](LICENSE)
