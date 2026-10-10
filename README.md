@@ -17,8 +17,6 @@
   </video>
 </p>
 
----
-
 ## Get started in one command
 
 ```bash
@@ -41,8 +39,6 @@ py -3 launch.py
 
 The launcher creates a virtual environment, installs dependencies, checks Ollama and models, starts Tolmach at `http://localhost:5001`, and opens your browser. Then pick a model per role in **Settings** and follow the numbered buttons.
 
----
-
 ## Chat translators break books
 
 Paste a chapter into a chatbot and you get a decent page. Do it for 400 pages and the problems show up:
@@ -54,8 +50,6 @@ Paste a chapter into a chatbot and you get a decent page. Do it for 400 pages an
 | Untranslated passages slip through | Source-language leftovers are detected and patched |
 | You paste chunks, then reassemble by hand | Upload the book, download the book |
 | Your manuscript goes to someone else's server | Runs on your computer with local Ollama models; cloud models only if you choose them |
-
----
 
 ## How the AI book translator works
 
@@ -81,8 +75,6 @@ Upload → Prepare → Start → Continue → Review → Download
 </table>
 
 Then open the **Review desk**: source, first draft, and editable final text side by side. Export to **TXT, PDF, or EPUB**.
-
----
 
 ## Features
 
@@ -112,8 +104,6 @@ Mr. Darcy   => мистер Дарси | inflectable
 - The app, glossary, and job data run on `localhost` with SQLite
 - **Local models** keep the book on your computer. **Ollama Cloud models** (the `-cloud` ones) send text to Ollama's servers, so use local models for sensitive manuscripts
 - Optional cloud glossary verification sends only the glossary and language pair, never the book
-
----
 
 ## Translate EPUB and PDF books in 11 languages
 
@@ -145,23 +135,17 @@ Any of 11 languages as source or target: English, Russian, Spanish, French, Germ
 
 </details>
 
----
-
 ## What you need
 
 - **Ollama** on the same computer, Python 3.10+ (installed via `uv` if missing), and enough memory and disk for your models
 - **Minimum models:** `translategemma:12b` for translation plus `gemma4:31b` for the other roles
 - **Author's stack** (cloud open-source models): Glossary and Refinement `gemma4:31b-cloud`, Translation `translategemma:27b`, Verifier and Judge `mistral-large-4:cloud`
 
----
-
 ## Honest expectations
 
 - A full book takes **10–15 hours** on local hardware. This is a pipeline, not a chat reply.
 - Quality depends on your models; smaller ones run with lower quality.
 - Models can still miss errors. Proofread before you publish.
-
----
 
 <details>
 <summary><b>Under the hood</b></summary>
@@ -222,8 +206,6 @@ ruff check .
 Tests need no Ollama, models, or network.
 
 </details>
-
----
 
 ## Contributors
 
