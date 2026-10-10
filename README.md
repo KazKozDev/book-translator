@@ -2,7 +2,8 @@
 
 <p align="center">
   <b>Translate a whole novel on your own computer.</b><br>
-  Consistent names. Verified edits. Your text never leaves your machine.
+  Open-source AI book translator powered by Ollama, with local models or Ollama Cloud.<br>
+  Consistent names. Verified edits. Your text stays under your control.
 </p>
 
 <p align="center">
@@ -52,11 +53,11 @@ Paste a chapter into a chatbot and you get a decent page. Do it for 400 pages an
 | "Improve this" passes rewrite good wording | Only small, located edits — each checked against the source |
 | Untranslated passages slip through | Source-language leftovers are detected and patched |
 | You paste chunks, then reassemble by hand | Upload the book, download the book |
-| Your manuscript goes to someone else's server | Everything runs locally through Ollama |
+| Your manuscript goes to someone else's server | Runs on your computer with local Ollama models; cloud models only if you choose them |
 
 ---
 
-## How it works
+## How the AI book translator works
 
 ```text
 Upload → Prepare → Start → Continue → Review → Download
@@ -108,12 +109,13 @@ Mr. Darcy   => мистер Дарси | inflectable
 - DOCX keeps Heading 1 sections as chapters
 
 **Private by design**
-- Runs on `localhost` with Ollama and SQLite
+- The app, glossary, and job data run on `localhost` with SQLite
+- **Local models** keep the book on your computer. **Ollama Cloud models** (the `-cloud` ones) send text to Ollama's servers, so use local models for sensitive manuscripts
 - Optional cloud glossary verification sends only the glossary and language pair, never the book
 
 ---
 
-## 11 languages, one desk
+## Translate EPUB and PDF books in 11 languages
 
 Any of 11 languages as source or target: English, Russian, Spanish, French, German, Italian, Portuguese, Chinese, Japanese, Korean, and Turkish. Click a thumbnail for the full size.
 
