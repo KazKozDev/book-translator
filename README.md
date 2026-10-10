@@ -10,24 +10,10 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/KazKozDev/book-translator/archive/refs/heads/main.zip"><b>Download</b></a> ·
-  <a href="#get-started-in-one-command">Get started</a> ·
-  <a href="https://www.youtube.com/watch?v=-lMNAKOp1Kc">Watch the demo</a>
-</p>
-
-<p align="center">
   <video src="https://github.com/user-attachments/assets/eae8eae5-6ca9-4b2c-8f67-cf7a39848794" controls muted playsinline width="820">
     Your browser does not support inline video.
     <a href="https://www.youtube.com/watch?v=-lMNAKOp1Kc" target="_blank" rel="noopener noreferrer">Watch on YouTube</a>
   </video>
-</p>
-
-<p align="center">
-  <img alt="Local-first" src="https://img.shields.io/badge/Local--first-Ollama-black">
-  <img alt="Offline" src="https://img.shields.io/badge/Private-no%20cloud%20required-2ea44f">
-  <img alt="Languages" src="https://img.shields.io/badge/Languages-11-blue">
-  <a href="LICENSE"><img alt="License: AGPL-3.0-only" src="https://img.shields.io/badge/License-AGPL--3.0--only-blue.svg"></a>
-  <a href="https://github.com/KazKozDev/book-translator/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/KazKozDev/book-translator/actions/workflows/ci.yml/badge.svg"></a>
 </p>
 
 ---
@@ -52,9 +38,7 @@ py -3 launch.py
   <a href="Launch%20Book-Translator.sh"><img src="assets/badges/linux.png" alt="Linux" height="36"></a>
 </p>
 
-The launcher creates a virtual environment, installs dependencies, checks Ollama and models, starts Tolmach at `http://localhost:5001`, and opens your browser.
-
-Then: **Settings** → pick a model per role → **Save setup** → **1 UPLOAD** → **2 START** → **3 CONTINUE** → export.
+The launcher creates a virtual environment, installs dependencies, checks Ollama and models, starts Tolmach at `http://localhost:5001`, and opens your browser. Then pick a model per role in **Settings** and follow the numbered buttons.
 
 ---
 
@@ -102,51 +86,36 @@ Then open the **Review desk**: source, first draft, and editable final text side
 ## Features
 
 **Glossary that stays consistent**
-- Built from the full text, not one chapter at a time
-- `exact`, `inflectable`, and `preferred` rules per term
-- Notes like `{he is a boy}` that the translator obeys
-- Reuse one glossary across chapters of the same novel: name it under **Shared glossary**, and **PREPARE** fills in entries you approved before for names in the new text
-- **Copy frontier prompt** asks an external model to research the lore and write notes, only where it is certain. Read them before pasting back: a wrong note is one the translator will obey
+- Built from the full book, with `exact`, `inflectable`, and `preferred` rules and `{notes}` the translator obeys
+- **Shared glossary** carries approved entries across chapters of one novel
+- **Copy frontier prompt** has an external model research the lore and write notes only where it is certain. Read them first: a wrong note is one the translator will obey
 
 ```text
 Netherfield => Незерфилд | exact
 Mr. Darcy   => мистер Дарси | inflectable
 ```
 
-**Edits that cannot ruin good text**
-- The model returns located fixes, not a rewritten chunk
-- Python rejects edits that leak source text, duplicate a passage, or delete most of a span
-- A verifier checks both orderings to avoid position bias
-
-**You stay in control**
-- Review desk with *Needs review* filter
-- Apply fixes one by one, or let a cloud provider decide apply/keep
-- Ask for 2–3 alternatives on any passage
+**Safe edits, full control**
+- Only small, located edits, each verified against the source. Edits that leak source text or delete passages are rejected
+- Review desk: source, draft, and editable final text side by side, with a *Needs review* filter and 2–3 alternatives on any passage
 - Refinement mode: *auto-apply*, *suggest only*, or *skip*
-- **Pause** any job (Prepare, Start, or Continue) at the next chunk boundary to free the GPU, then press it again to carry on
-- **Resume** from History after an interrupt or server restart; the job continues from the last finished chunk
-- Everything is saved locally, so any job can be reopened from the Archive
-
-**Quality diagnostics**
-- Missing text, changed numbers, glossary violations, repetition, wrong-language passages
-- Optional LLM judge, backtranslation chrF, LaBSE alignment, COMET-Kiwi
-- Reports only — never rewrites your book
+- **Pause** at the next chunk boundary to free the GPU, **Resume** after a restart, reopen any job from the Archive
+- Quality checks flag missing text, changed numbers, glossary violations, and repetition. They report, never rewrite
 
 **Books in, books out**
-- Input: TXT, EPUB, PDF, DOCX. Output: TXT, PDF, EPUB
-- PDF is read as text: running heads and page numbers are removed, printed lines are rejoined into paragraphs, and bookmarks or clear headings become chapters
+- In: TXT, EPUB, PDF, DOCX. Out: TXT, PDF, EPUB
+- PDF is read as text: running heads and page numbers removed, chapters from bookmarks or headings. Layout and images are not kept; scanned PDFs need OCR first
 - DOCX keeps Heading 1 sections as chapters
-- A scanned PDF with no text layer is refused: run OCR first, or use TXT, EPUB, or DOCX
 
 **Private by design**
 - Runs on `localhost` with Ollama and SQLite
-- Cloud glossary verification is optional and sends only the glossary and language pair, never the book
+- Optional cloud glossary verification sends only the glossary and language pair, never the book
 
 ---
 
 ## 11 languages, one desk
 
-Any of 11 languages as source or target: English, Russian, Spanish, French, German, Italian, Portuguese, Chinese, Japanese, Korean, and Turkish. Screenshots below show English → nine of them; click a thumbnail for the full size.
+Any of 11 languages as source or target: English, Russian, Spanish, French, German, Italian, Portuguese, Chinese, Japanese, Korean, and Turkish. Click a thumbnail for the full size.
 
 <table>
   <tr>
@@ -154,6 +123,12 @@ Any of 11 languages as source or target: English, Russian, Spanish, French, Germ
     <td align="center"><a href="assets/locales/es_ES.png"><img src="assets/locales/thumbs/es_ES.png" alt="English to Spanish" width="260"></a><br><code>es_ES</code></td>
     <td align="center"><a href="assets/locales/fr_FR.png"><img src="assets/locales/thumbs/fr_FR.png" alt="English to French" width="260"></a><br><code>fr_FR</code></td>
   </tr>
+</table>
+
+<details>
+<summary>More screenshots</summary>
+
+<table>
   <tr>
     <td align="center"><a href="assets/locales/de_DE.png"><img src="assets/locales/thumbs/de_DE.png" alt="English to German" width="260"></a><br><code>de_DE</code></td>
     <td align="center"><a href="assets/locales/it_IT.png"><img src="assets/locales/thumbs/it_IT.png" alt="English to Italian" width="260"></a><br><code>it_IT</code></td>
@@ -166,32 +141,23 @@ Any of 11 languages as source or target: English, Russian, Spanish, French, Germ
   </tr>
 </table>
 
+</details>
+
 ---
 
 ## What you need
 
-- **Ollama** on the same computer
-- Minimum models: `translategemma:12b` for translation plus `gemma4:31b` for the other roles
-- Python 3.10+ (installed automatically via `uv` if missing)
-- Memory and disk space for the models you choose
-
-**Recommended stack** (author's tested setup, cloud open-source models):
-
-| Role | Model |
-|---|---|
-| Glossary, Refinement | `gemma4:31b-cloud` |
-| Translation | `translategemma:27b` |
-| Verifier, Judge | `mistral-large-4:cloud` |
+- **Ollama** on the same computer, Python 3.10+ (installed via `uv` if missing), and enough memory and disk for your models
+- **Minimum models:** `translategemma:12b` for translation plus `gemma4:31b` for the other roles
+- **Author's stack** (cloud open-source models): Glossary and Refinement `gemma4:31b-cloud`, Translation `translategemma:27b`, Verifier and Judge `mistral-large-4:cloud`
 
 ---
 
 ## Honest expectations
 
 - A full book takes **10–15 hours** on local hardware. This is a pipeline, not a chat reply.
-- Quality depends on your models. Smaller ones run, with lower quality.
-- PDFs are read as text only; scanned PDFs without a text layer are refused. Layout and images are not preserved.
+- Quality depends on your models; smaller ones run with lower quality.
 - Models can still miss errors. Proofread before you publish.
-- No official Docker image.
 
 ---
 
@@ -214,6 +180,7 @@ Glossary   Ollama   Verifier
 - **Prepare** — text harvesting and GLiNER collect candidates; BGE-M3 groups spelling variants; an instruct model proposes renderings.
 - **Start** — chunks of about 1200 characters split at paragraph and sentence boundaries, streamed to SQLite and the browser.
 - **Continue** — located edits, deterministic guards, verifier with position-bias retry.
+- **Quality checks** — deterministic checks plus optional LLM judge, backtranslation chrF, LaBSE alignment, and COMET-Kiwi; wrong-language passages are flagged too.
 - **Storage** — `translations.db` (jobs, chunks, glossary, review state), `cache.db` (chunk cache for resumes).
 
 Key files: `launch.py`, `src/translator.py`, `src/terminology.py`, `src/quality_tests.py`, `src/epub_io.py`, `src/pdf_io.py`, `src/frontier_glossary.py`, `src/translation_cache.py`, `src/prompts/`, `tests/`.
@@ -258,13 +225,19 @@ Tests need no Ollama, models, or network.
 
 ## Contributors
 
-- [@StellarNear](https://github.com/StellarNear) — glossary notes, pause/resume, Prepare progress, Stage 2 guards ([#23](https://github.com/KazKozDev/book-translator/pull/23))
-- [@kroryan](https://github.com/kroryan) — Windows build, Korean support, v2 refactoring ([#9](https://github.com/KazKozDev/book-translator/pull/9))
-- [@moonixt](https://github.com/moonixt) — Portuguese support ([#6](https://github.com/KazKozDev/book-translator/pull/6))
+[@StellarNear](https://github.com/StellarNear) ([#23](https://github.com/KazKozDev/book-translator/pull/23)) · [@kroryan](https://github.com/kroryan) ([#9](https://github.com/KazKozDev/book-translator/pull/9)) · [@moonixt](https://github.com/moonixt) ([#6](https://github.com/KazKozDev/book-translator/pull/6))
 
 ## License
 
 [AGPL-3.0-only](LICENSE)
+
+<br><br>
+
+<p align="center">
+  <a href="https://github.com/KazKozDev/book-translator/blob/main/LICENSE"><img alt="License: AGPL-3.0-only" src="https://img.shields.io/badge/License-AGPL--3.0--only-blue.svg"></a>
+  <a href="https://github.com/KazKozDev/book-translator/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/KazKozDev/book-translator/actions/workflows/ci.yml/badge.svg"></a>
+  <a href="https://www.python.org/"><img alt="Python 3.10+" src="https://img.shields.io/badge/Python-3.10%2B-3776AB.svg?logo=python&amp;logoColor=white"></a>
+</p>
 
 <p align="center">
   <a href="https://github.com/KazKozDev/book-translator/issues">Issues</a> ·
