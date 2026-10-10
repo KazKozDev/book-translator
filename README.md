@@ -1,13 +1,46 @@
-# Tolmach — AI Book Translator for EPUB, PDF, and Novels
+<h1 align="center">Tolmach</h1>
 
-Professional literary translation software for translating entire TXT, EPUB, PDF, and DOCX books with local Ollama models, document glossaries, guarded refinement, and side-by-side review.
+<p align="center">
+  <b>Translate a whole novel on your own computer.</b><br>
+  Consistent names. Verified edits. Your text never leaves your machine.
+</p>
+
+<p align="center">
+  EPUB · PDF · DOCX · TXT &nbsp;→&nbsp; a finished book in your language, ready to read.
+</p>
+
+<p align="center">
+  <a href="https://github.com/KazKozDev/book-translator/archive/refs/heads/main.zip"><b>Download</b></a> ·
+  <a href="#get-started-in-one-command">Get started</a> ·
+  <a href="https://www.youtube.com/watch?v=-lMNAKOp1Kc">Watch the demo</a>
+</p>
+
+<p align="center">
+  <video src="https://github.com/user-attachments/assets/eae8eae5-6ca9-4b2c-8f67-cf7a39848794" controls muted playsinline width="820">
+    Your browser does not support inline video.
+    <a href="https://www.youtube.com/watch?v=-lMNAKOp1Kc" target="_blank" rel="noopener noreferrer">Watch on YouTube</a>
+  </video>
+</p>
+
+<p align="center">
+  <img alt="Local-first" src="https://img.shields.io/badge/Local--first-Ollama-black">
+  <img alt="Offline" src="https://img.shields.io/badge/Private-no%20cloud%20required-2ea44f">
+  <img alt="Languages" src="https://img.shields.io/badge/Languages-11-blue">
+  <a href="LICENSE"><img alt="License: AGPL-3.0-only" src="https://img.shields.io/badge/License-AGPL--3.0--only-blue.svg"></a>
+  <a href="https://github.com/KazKozDev/book-translator/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/KazKozDev/book-translator/actions/workflows/ci.yml/badge.svg"></a>
+</p>
+
+---
+
+## Get started in one command
 
 ```bash
 # macOS / Linux
 git clone https://github.com/KazKozDev/book-translator.git && cd book-translator && python3 launch.py
 ```
+
 ```bash
-# Windows (PowerShell or cmd, after cloning)
+# Windows
 git clone https://github.com/KazKozDev/book-translator.git
 cd book-translator
 py -3 launch.py
@@ -19,133 +52,151 @@ py -3 launch.py
   <a href="Launch%20Book-Translator.sh"><img src="assets/badges/linux.png" alt="Linux" height="36"></a>
 </p>
 
-<p align="center">Launchers after clone — double-click <code>.command</code> / <code>.bat</code>, or run <code>.sh</code>.</p>
+The launcher creates a virtual environment, installs dependencies, checks Ollama and models, starts Tolmach at `http://localhost:5001`, and opens your browser.
 
-<p align="center">
-  <video src="https://github.com/user-attachments/assets/eae8eae5-6ca9-4b2c-8f67-cf7a39848794" controls muted playsinline width="820">
-    Your browser does not support inline video.
-    <a href="https://www.youtube.com/watch?v=-lMNAKOp1Kc" target="_blank" rel="noopener noreferrer">Watch on YouTube</a>
-  </video>
-</p>
+Then: **Settings** → pick a model per role → **Save setup** → **1 UPLOAD** → **2 START** → **3 CONTINUE** → export.
 
 ---
 
-## Quick start
+## Chat translators break books
 
-1. Run the command above. On macOS and Linux it clones the repository and starts `launch.py`; on Windows, clone first, then run `py -3 launch.py` or double-click `Launch Book-Translator.bat`. The launcher creates `venv`, installs the Python dependencies, checks Ollama and the required local models, starts Tolmach at `http://localhost:5001`, and opens it in your browser.
+Paste a chapter into a chatbot and you get a decent page. Do it for 400 pages and the problems show up:
 
-2. Open **Settings**, choose a local model for each role, and click **Save setup**.
+| Without Tolmach | With Tolmach |
+|---|---|
+| The hero's name changes between chapters | A glossary built from the whole book locks every name, place, and term |
+| "Improve this" passes rewrite good wording | Only small, located edits — each checked against the source |
+| Untranslated passages slip through | Source-language leftovers are detected and patched |
+| You paste chunks, then reassemble by hand | Upload the book, download the book |
+| Your manuscript goes to someone else's server | Everything runs locally through Ollama |
 
-3. Return to the main page and follow the numbered buttons:
-
-   ```text
-   → 1 UPLOAD → PREPARE (optional) → 2 START → 3 CONTINUE → TXT / PDF / EPUB
-   ```
-
-   **START** creates the first translation. **CONTINUE** reviews and refines it. When the job finishes, use the export buttons to download the book.
-
-   While a job runs, the rail on the right shows its progress and a **Pause** button. Pause suspends **PREPARE**, **START**, or **CONTINUE** at the next chunk or batch boundary, which frees the GPU without writing anything; press it again to carry on from there. Nothing is saved while a job is paused, so quitting the app at that point loses only the chunk that had not been written yet.
-
-## Translate an entire EPUB or PDF book with AI
-
-Choose the source language, target language, and text genre. Click **→ 1 UPLOAD** and select the complete book—not one chapter at a time.
-
-```text
-Source language: English
-Target language: Russian
-Input:           TXT, EPUB, PDF, or DOCX
-Download:        TXT, PDF, or EPUB
-```
-
-A PDF is read for its text only. Tolmach removes running heads and page numbers and rejoins the printed lines back into paragraphs; bookmarks or clear chapter headings become chapter breaks when detected. Layout and images are not carried over. A scanned PDF with no text layer is refused — run OCR first, or use TXT, EPUB, or DOCX. A DOCX keeps Heading 1 sections as chapters when present.
-
-Click **→ 2 START** to create the draft translation. Finished sections appear in the Translation panel while the rest of the book continues processing. Click **→ 3 CONTINUE** when you want Tolmach to refine that draft into the final version. **Refinement mode** in Settings decides what that does: apply verified fixes automatically (the default), *Suggest only* — nothing is written into the text and every proposed fix waits in the Review desk for you to apply, or *Skip refinement* — the draft becomes the final text without a model call.
-
-The job is saved locally, so you can reopen it from the Archive. A complete book can take 10–15 hours; the actual time depends on its length, your models, and your computer.
-
-## Same desk, nine target languages
-
-The translation desk stays the same across targets. Click a thumbnail for the full screenshot.
-
-<table>
-  <tr>
-    <td align="center"><a href="assets/locales/ru_RU.png"><img src="assets/locales/thumbs/ru_RU.png" alt="Tolmach translating English to Russian" width="260"></a><br><code>ru_RU</code></td>
-    <td align="center"><a href="assets/locales/es_ES.png"><img src="assets/locales/thumbs/es_ES.png" alt="Tolmach translating English to Spanish" width="260"></a><br><code>es_ES</code></td>
-    <td align="center"><a href="assets/locales/fr_FR.png"><img src="assets/locales/thumbs/fr_FR.png" alt="Tolmach translating English to French" width="260"></a><br><code>fr_FR</code></td>
-  </tr>
-  <tr>
-    <td align="center"><a href="assets/locales/de_DE.png"><img src="assets/locales/thumbs/de_DE.png" alt="Tolmach translating English to German" width="260"></a><br><code>de_DE</code></td>
-    <td align="center"><a href="assets/locales/it_IT.png"><img src="assets/locales/thumbs/it_IT.png" alt="Tolmach translating English to Italian" width="260"></a><br><code>it_IT</code></td>
-    <td align="center"><a href="assets/locales/pt_BR.png"><img src="assets/locales/thumbs/pt_BR.png" alt="Tolmach translating English to Portuguese" width="260"></a><br><code>pt_BR</code></td>
-  </tr>
-  <tr>
-    <td align="center"><a href="assets/locales/zh_CN.png"><img src="assets/locales/thumbs/zh_CN.png" alt="Tolmach translating English to Chinese" width="260"></a><br><code>zh_CN</code></td>
-    <td align="center"><a href="assets/locales/ja_JP.png"><img src="assets/locales/thumbs/ja_JP.png" alt="Tolmach translating English to Japanese" width="260"></a><br><code>ja_JP</code></td>
-    <td align="center"><a href="assets/locales/ko_KR.png"><img src="assets/locales/thumbs/ko_KR.png" alt="Tolmach translating English to Korean" width="260"></a><br><code>ko_KR</code></td>
-  </tr>
-</table>
-
-## Use an AI book translator with a glossary
-
-After uploading the book, click **→ PREPARE**. Tolmach scans the complete source and creates an editable glossary of recurring names, places, organisations, and terms. The scan can take a while on a full novel; the rail on the right reports which stage it is on — extracting names, resolving which source forms name one entity, proposing renderings, checking for conflicts — and the Pause button there works on it like any other job.
-
-```text
-Netherfield => Незерфилд | exact
-Mr. Darcy => мистер Дарси | inflectable
-Rom => Rom | inflectable {c'est un garçon de huit ans}
-```
-
-Review this list before starting the translation: delete noise, correct a wrong translation, and add anything the scan missed.
-
-- `exact` keeps the target wording unchanged.
-- `inflectable` lets the model change the grammatical form.
-- `preferred` tells the model which wording to favor.
-
-An entry may end with an optional `{note}` — free text for what you know that the book does not state outright, such as the gender of a name. The Translation and Refinement models are told to follow it; no test can check it. Write it in the language you are translating into, since that is the text the note has to shape.
-
-**Copy frontier prompt** also offers to write notes for you. It tells the model which book this is from the title and author in the file's metadata, asks it to research the lore, and asks for a note only where it is certain — so read them before pasting the answer back. A wrong note is one the translator will obey.
-
-The glossary belongs only to this book and language pair. To carry it over to the next document — the next chapter of the same novel — type a name into **Shared glossary** above the list: **PREPARE** then fills in the entries you approved before for the names the new text contains, and **START** saves the approved list back under that name. Tick an entry under “Saved to…” to keep it out of the shared glossary.
-
-If you configure an optional external provider, **Verify automatically** can check the glossary and show proposed changes; Tolmach applies nothing until you approve it. That path deliberately never sees your notes and can never write one.
-
-## Review a novel translation side by side
-
-After **→ 3 CONTINUE** finishes, open **Review desk**. Each chunk shows the original source, the first draft, and the editable final translation next to each other.
-
-Proposed fixes can be applied manually, decided and saved by the configured cloud provider for one chunk, or processed for every open chunk with **Review all automatically**. Cloud decisions are restricted to apply/keep for the existing proposed fixes; they cannot rewrite the chunk or invent another option.
-
-```text
-Source → Draft → Final → Save final → Download
-```
-
-Start with **Needs review**, inspect the proposed fixes, and apply only the changes you want. You can edit the final text directly or ask for two or three alternatives. Tolmach never replaces your final choice automatically.
-
-Optional quality checks flag possible terminology errors, missing text, changed numbers, wrong-language passages, repetition, and meaning drift. They are diagnostics: they do not rewrite the book or prevent export.
+---
 
 ## How it works
 
-The browser sends your TXT, EPUB, PDF, or DOCX to a Flask server running on your computer.<br>
-**PREPARE** scans the whole book and builds a glossary for that document.<br>
-**START** splits the book into chunks and translates them with the selected Ollama model.<br>
-**CONTINUE** proposes small edits, and a separate verifier checks each edit against the source.<br>
-Any of the three can be paused from the job rail while it runs.<br>
-SQLite saves the job, glossary, aligned text, review state, quality results, and cache locally.
-
 ```text
-Book → Glossary → Draft translation → Verified refinement → Human review → Download
+Upload → Prepare → Start → Continue → Review → Download
 ```
 
+<table>
+  <tr>
+    <td width="33%" valign="top">
+      <h3>1. Prepare</h3>
+      Scans the entire book and proposes a glossary of characters, places, organisations, and terms. You approve it before anything is translated.
+    </td>
+    <td width="33%" valign="top">
+      <h3>2. Start</h3>
+      Translates in chunks with genre, glossary rules, and the previous paragraph as context. Finished sections appear while the rest keeps running.
+    </td>
+    <td width="33%" valign="top">
+      <h3>3. Continue</h3>
+      A refinement model proposes small edits. A separate verifier checks each one against the source before it touches the text.
+    </td>
+  </tr>
+</table>
+
+Then open the **Review desk**: source, first draft, and editable final text side by side. Export to **TXT, PDF, or EPUB**.
+
+---
+
+## Features
+
+**Glossary that stays consistent**
+- Built from the full text, not one chapter at a time
+- `exact`, `inflectable`, and `preferred` rules per term
+- Notes like `{he is a boy}` that the translator obeys
+- Reuse one glossary across chapters of the same novel: name it under **Shared glossary**, and **PREPARE** fills in entries you approved before for names in the new text
+- **Copy frontier prompt** asks an external model to research the lore and write notes, only where it is certain. Read them before pasting back: a wrong note is one the translator will obey
+
+```text
+Netherfield => Незерфилд | exact
+Mr. Darcy   => мистер Дарси | inflectable
+```
+
+**Edits that cannot ruin good text**
+- The model returns located fixes, not a rewritten chunk
+- Python rejects edits that leak source text, duplicate a passage, or delete most of a span
+- A verifier checks both orderings to avoid position bias
+
+**You stay in control**
+- Review desk with *Needs review* filter
+- Apply fixes one by one, or let a cloud provider decide apply/keep
+- Ask for 2–3 alternatives on any passage
+- Refinement mode: *auto-apply*, *suggest only*, or *skip*
+- **Pause** any job (Prepare, Start, or Continue) at the next chunk boundary to free the GPU, then press it again to carry on
+- **Resume** from History after an interrupt or server restart; the job continues from the last finished chunk
+- Everything is saved locally, so any job can be reopened from the Archive
+
+**Quality diagnostics**
+- Missing text, changed numbers, glossary violations, repetition, wrong-language passages
+- Optional LLM judge, backtranslation chrF, LaBSE alignment, COMET-Kiwi
+- Reports only — never rewrites your book
+
+**Books in, books out**
+- Input: TXT, EPUB, PDF, DOCX. Output: TXT, PDF, EPUB
+- PDF is read as text: running heads and page numbers are removed, printed lines are rejoined into paragraphs, and bookmarks or clear headings become chapters
+- DOCX keeps Heading 1 sections as chapters
+- A scanned PDF with no text layer is refused: run OCR first, or use TXT, EPUB, or DOCX
+
+**Private by design**
+- Runs on `localhost` with Ollama and SQLite
+- Cloud glossary verification is optional and sends only the glossary and language pair, never the book
+
+---
+
+## 11 languages, one desk
+
+Any of 11 languages as source or target: English, Russian, Spanish, French, German, Italian, Portuguese, Chinese, Japanese, Korean, and Turkish. Screenshots below show English → nine of them; click a thumbnail for the full size.
+
+<table>
+  <tr>
+    <td align="center"><a href="assets/locales/ru_RU.png"><img src="assets/locales/thumbs/ru_RU.png" alt="English to Russian" width="260"></a><br><code>ru_RU</code></td>
+    <td align="center"><a href="assets/locales/es_ES.png"><img src="assets/locales/thumbs/es_ES.png" alt="English to Spanish" width="260"></a><br><code>es_ES</code></td>
+    <td align="center"><a href="assets/locales/fr_FR.png"><img src="assets/locales/thumbs/fr_FR.png" alt="English to French" width="260"></a><br><code>fr_FR</code></td>
+  </tr>
+  <tr>
+    <td align="center"><a href="assets/locales/de_DE.png"><img src="assets/locales/thumbs/de_DE.png" alt="English to German" width="260"></a><br><code>de_DE</code></td>
+    <td align="center"><a href="assets/locales/it_IT.png"><img src="assets/locales/thumbs/it_IT.png" alt="English to Italian" width="260"></a><br><code>it_IT</code></td>
+    <td align="center"><a href="assets/locales/pt_BR.png"><img src="assets/locales/thumbs/pt_BR.png" alt="English to Portuguese" width="260"></a><br><code>pt_BR</code></td>
+  </tr>
+  <tr>
+    <td align="center"><a href="assets/locales/zh_CN.png"><img src="assets/locales/thumbs/zh_CN.png" alt="English to Chinese" width="260"></a><br><code>zh_CN</code></td>
+    <td align="center"><a href="assets/locales/ja_JP.png"><img src="assets/locales/thumbs/ja_JP.png" alt="English to Japanese" width="260"></a><br><code>ja_JP</code></td>
+    <td align="center"><a href="assets/locales/ko_KR.png"><img src="assets/locales/thumbs/ko_KR.png" alt="English to Korean" width="260"></a><br><code>ko_KR</code></td>
+  </tr>
+</table>
+
+---
+
+## What you need
+
+- **Ollama** on the same computer
+- Minimum models: `translategemma:12b` for translation plus `gemma4:31b` for the other roles
+- Python 3.10+ (installed automatically via `uv` if missing)
+- Memory and disk space for the models you choose
+
+**Recommended stack** (author's tested setup, cloud open-source models):
+
+| Role | Model |
+|---|---|
+| Glossary, Refinement | `gemma4:31b-cloud` |
+| Translation | `translategemma:27b` |
+| Verifier, Judge | `mistral-large-4:cloud` |
+
+---
+
+## Honest expectations
+
+- A full book takes **10–15 hours** on local hardware. This is a pipeline, not a chat reply.
+- Quality depends on your models. Smaller ones run, with lower quality.
+- PDFs are read as text only; scanned PDFs without a text layer are refused. Layout and images are not preserved.
+- Models can still miss errors. Proofread before you publish.
+- No official Docker image.
+
+---
+
 <details>
-<summary>Technical architecture</summary>
-
-### Translation pipeline
-
-1. **Upload** — the Flask backend reads TXT, EPUB, PDF, or DOCX and stores the source in `uploads/`. A PDF is read as text (with chapter breaks from bookmarks/headings when detected); a DOCX uses Heading 1 sections as chapters when present.
-2. **Prepare** — deterministic text harvesting and GLiNER collect entity candidates. BGE-M3 groups likely spelling variants, then the selected instruct model resolves ambiguous groups and proposes target renderings. The editable glossary is stored for this document fingerprint and language pair.
-3. **Start** — the source is split into chunks of about 1200 characters at paragraph and sentence boundaries. The Translation model receives each chunk with its genre, glossary constraints, and previous-paragraph context. Completed chunks are written to SQLite and streamed to the browser.
-4. **Continue** — unlike a typical LLM “improve this” pass that rewrites the whole chunk and can replace already-good wording, the Refinement model returns located edits instead of rewriting an entire chunk. Python applies only those replacements, and refuses an edit that would carry the source text back into the page, restate the passage that follows it, put a source word back as a rendering, or delete most of the span it replaces — a refused edit leaves the draft exactly as it was and is counted in the log, as is an error reported about text that is not in the draft at all. A name the glossary agreed to keep, such as `Rom => Rom`, counts as a rendering rather than a refused edit. The Verifier compares each patched version with the source, checks the alternatives in both orders, and retries without ordered A/B versions when it detects position bias. A passage left in the source language is its own error category and is patched at any severity, because whether a passage is translated is not a matter of degree.
-5. **Review and export** — Review desk keeps Source, Draft, and editable Final text aligned. Exporters write the accepted final text as TXT, PDF, or EPUB.
+<summary><b>Under the hood</b></summary>
 
 ```text
 Browser
@@ -156,112 +207,40 @@ Prepare → Start → Continue → Review
    ↓         ↓         ↓
 Glossary   Ollama   Verifier
    └───────── SQLite ─────────┘
-                   ↓
-             TXT / PDF / EPUB
+                ↓
+          TXT / PDF / EPUB
 ```
 
-### Storage and quality checks
+- **Prepare** — text harvesting and GLiNER collect candidates; BGE-M3 groups spelling variants; an instruct model proposes renderings.
+- **Start** — chunks of about 1200 characters split at paragraph and sentence boundaries, streamed to SQLite and the browser.
+- **Continue** — located edits, deterministic guards, verifier with position-bias retry.
+- **Storage** — `translations.db` (jobs, chunks, glossary, review state), `cache.db` (chunk cache for resumes).
 
-- `translations.db` stores jobs, aligned chunks, glossary drafts, review state, and saved quality results.
-- `cache.db` stores completed chunk translations so resumed jobs do not repeat finished work.
-- Deterministic checks inspect the complete document for missing chunks, changed numbers, glossary violations, source-script leakage, unusual length, and repetition.
-- Optional model checks include draft/final LLM judging, backtranslation chrF, LaBSE alignment, language identification, and COMET-Kiwi. They report evidence but do not edit the translation.
-
-### Important files
-
-- `launch.py` — cross-platform bootstrap used by the macOS, Linux, and Windows launchers.
-- `src/translator.py` — Flask application, API, translation stages, persistence, and export orchestration.
-- `src/frontier_glossary.py` — optional external glossary verification.
-- `src/quality_tests.py` — deterministic and model-based quality checks.
-- `src/terminology.py` — glossary parsing and enforcement rules.
-- `src/epub_io.py` — EPUB input and output.
-- `src/pdf_io.py` — PDF input: text extraction and paragraph reconstruction.
-- `src/translation_cache.py` — persistent chunk cache.
-- `src/prompts/` — prompts sent to each model role.
-- `src/static/` — browser interface, Settings, Guide, and live Log pages.
-- `tests/` — model-free unit and integration tests.
+Key files: `launch.py`, `src/translator.py`, `src/terminology.py`, `src/quality_tests.py`, `src/epub_io.py`, `src/pdf_io.py`, `src/frontier_glossary.py`, `src/translation_cache.py`, `src/prompts/`, `tests/`.
 
 </details>
 
 <details>
-<summary>Configuration</summary>
+<summary><b>Configuration</b></summary>
 
-| Setting | Default | What it means |
+| Setting | Default | Meaning |
 |---|---|---|
-| App address | `http://localhost:5001` | Local browser interface; set `PORT` to change the port |
-| Reachable from | This computer only | The app has no login. Set `HOST=0.0.0.0` to open it to your network, and only on a network you trust |
-| Ollama address | `http://localhost:11434` | Local server that runs the language models |
-| Translation model | `translategemma:12b` preferred | Creates the first translation during **START** |
-| Glossary model | First suitable local instruct model | Builds glossary suggestions during **PREPARE** |
-| Refinement model | First suitable local instruct model | Proposes improvements during **CONTINUE** |
-| Verifier model | A model different from Refinement | Checks whether proposed edits preserve the source meaning |
-| Judge model | A model different from Translation | Runs optional translation-quality diagnostics |
-| Chunk size | `1200` characters | Splits first on paragraphs, then on sentence boundaries |
-| Source language | English | Chosen separately for each book |
-| Target language | Spanish | Chosen separately for each book |
-| Text genre | Unknown / Auto | Also supports Fiction, Technical, Academic, Business, and Poetry |
-| Glossary verification | Off | Optional: configure `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, or `GEMINI_API_KEY` |
-| COMET-Kiwi access | Off | Optional: set `HF_TOKEN` after receiving access to the gated model |
+| App address | `http://localhost:5001` | Set `PORT` to change |
+| Reachable from | This computer only | `HOST=0.0.0.0` opens it to your network (no login — trusted networks only) |
+| Ollama address | `http://localhost:11434` | Local model server |
+| Translation model | `translategemma:12b` preferred | Used by **START** |
+| Glossary / Refinement | First suitable instruct model | Used by **PREPARE** / **CONTINUE** |
+| Verifier | Different from Refinement | Checks proposed edits |
+| Judge | Different from Translation | Optional diagnostics |
+| Chunk size | `1200` characters | Paragraphs first, then sentences |
+| Genre | Auto | Fiction, Technical, Academic, Business, Poetry |
+| Glossary verification | Off | Set `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, or `GEMINI_API_KEY` |
+| COMET-Kiwi | Off | Set `HF_TOKEN` after gated-model access |
 
 </details>
 
 <details>
-<summary>Requirements</summary>
-
-- **macOS or Linux** for the one-command installer. Windows users can run the repository launcher.
-- **Ollama** running on the same computer.
-- The minimum local setup is `translategemma:12b` for translation plus `gemma4:31b` for the other roles. For a more independent refinement check, choose a third instruct model as Verifier.
-- A stack that personally produced good results for the author: Glossary preparation `gemma4:31b-cloud` (32.7B), Translation `translategemma:27b` (27.4B), Refinement `gemma4:31b-cloud` (32.7B), Verifier and Judge `mistral-large-3:675b-cloud` (675B) (cloud open-source models).
-- Enough memory and disk space for the models you choose.
-- Internet access on the first run to download Python dependencies, Ollama models, and optional Hugging Face components.
-- Supported languages: English, Russian, Spanish, French, German, Italian, Portuguese, Chinese, Japanese, Korean, and Turkish.
-
-The installer uses an existing Python 3.10+ installation when available. Otherwise, it installs Python 3.12 through `uv`.
-
-</details>
-
-<details>
-<summary>Limitations</summary>
-
-- Tolmach is not a one-prompt translator. A finished book needs the staged workflow (glossary → START → CONTINUE → review) and several local model roles working in sequence; expecting chat-app turnaround will disappoint.
-- Translation quality depends heavily on the model stack. A stack that personally produced good results for the author is Glossary preparation `gemma4:31b-cloud` (32.7B), Translation `translategemma:27b` (27.4B), Refinement `gemma4:31b-cloud` (32.7B), Verifier and Judge `mistral-large-3:675b-cloud` (675B) (cloud open-source models). Smaller local models still run; expect lower quality.
-- A long Start run keeps going if you close the browser tab; use **Resume** in History to continue from the last finished chunk after an interrupt or server restart. A full machine sleep or Ollama crash still stops the model calls themselves.
-- Tolmach accepts TXT, EPUB, PDF, and DOCX. A scanned PDF without a text layer is refused; layout/images are not preserved.
-- Translating a complete book can take 10–15 hours on local hardware.
-- Translation and review models can still miss errors or make good text worse. Proofread the final book before publishing it.
-- Large Ollama models need substantial memory and disk space; Tolmach cannot make a model fit hardware that is too small.
-- Optional glossary verification sends the glossary and language pair—not the full book—to the selected API provider and may cost money.
-- COMET-Kiwi is optional, downloads a multi-gigabyte gated checkpoint, and requires Hugging Face access.
-- Tolmach does not currently provide an official Docker image.
-
-</details>
-
-<details>
-<summary>Manual installation, Docker, development setup</summary>
-
-### Manual installation
-
-```bash
-git clone https://github.com/KazKozDev/book-translator.git
-cd book-translator
-python3 launch.py
-```
-
-`launch.py` creates the virtual environment, installs runtime dependencies, checks Ollama and the required models, starts the server, and opens the browser.
-
-The platform launchers use the same setup:
-
-- macOS: double-click `Launch Book-Translator.command`
-- Linux: run `./Launch Book-Translator.sh`
-- Windows: double-click `Launch Book-Translator.bat`
-
-To use optional glossary verification, copy `.env.example` to `.env.local` and add the provider key. On macOS and Linux, set the file permissions to `600`.
-
-### Docker
-
-This repository does not currently include a Dockerfile or published image. Use the native launcher so Tolmach can detect Ollama, installed models, and local hardware.
-
-### Development setup
+<summary><b>Development</b></summary>
 
 ```bash
 python3 -m venv .venv
@@ -271,33 +250,26 @@ python -m pytest tests -q
 ruff check .
 ```
 
-The test suite does not require Ollama, downloaded models, or network access.
+Tests need no Ollama, models, or network.
 
 </details>
 
+---
+
 ## Contributors
 
-- [@StellarNear](https://github.com/StellarNear) — glossary notes, pause and resume, Prepare progress, and the Stage 2 guards against untranslated and duplicated passages ([#23](https://github.com/KazKozDev/book-translator/pull/23)).
-- [@kroryan](https://github.com/kroryan) — the Windows desktop build, Korean support, and the v2 refactoring ([#9](https://github.com/KazKozDev/book-translator/pull/9)).
-- [@moonixt](https://github.com/moonixt) — Portuguese support ([#6](https://github.com/KazKozDev/book-translator/pull/6)).
+- [@StellarNear](https://github.com/StellarNear) — glossary notes, pause/resume, Prepare progress, Stage 2 guards ([#23](https://github.com/KazKozDev/book-translator/pull/23))
+- [@kroryan](https://github.com/kroryan) — Windows build, Korean support, v2 refactoring ([#9](https://github.com/KazKozDev/book-translator/pull/9))
+- [@moonixt](https://github.com/moonixt) — Portuguese support ([#6](https://github.com/KazKozDev/book-translator/pull/6))
 
 ## License
 
-Tolmach Book Translator is free and open-source software licensed under the [GNU Affero General Public License version 3 only](LICENSE) (`AGPL-3.0-only`).
-
-<br><br>
-
-<p align="center">
-  <a href="https://github.com/KazKozDev/book-translator/blob/main/LICENSE"><img alt="License: AGPL-3.0-only" src="https://img.shields.io/badge/License-AGPL--3.0--only-blue.svg"></a>
-  <a href="https://github.com/KazKozDev/book-translator/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/KazKozDev/book-translator/actions/workflows/ci.yml/badge.svg"></a>
-  <a href="https://www.python.org/"><img alt="Python 3.10+" src="https://img.shields.io/badge/Python-3.10%2B-3776AB.svg?logo=python&amp;logoColor=white"></a>
-</p>
+[AGPL-3.0-only](LICENSE)
 
 <p align="center">
   <a href="https://github.com/KazKozDev/book-translator/issues">Issues</a> ·
-  <a href="https://github.com/KazKozDev/book-translator/blob/main/CHANGELOG.md">Changelog</a> ·
-  <a href="https://github.com/KazKozDev/book-translator/blob/main/CONTRIBUTING.md">Contributing</a> ·
-  <a href="https://github.com/KazKozDev/book-translator/blob/main/LICENSE">LICENSE</a> ·
-  <a href="https://github.com/KazKozDev/book-translator/blob/main/DISCLAIMER.md">DISCLAIMER</a> ·
+  <a href="CHANGELOG.md">Changelog</a> ·
+  <a href="CONTRIBUTING.md">Contributing</a> ·
+  <a href="DISCLAIMER.md">Disclaimer</a> ·
   <a href="https://www.linkedin.com/in/kazkozdev/">LinkedIn</a>
 </p>
