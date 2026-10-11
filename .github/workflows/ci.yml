@@ -13,6 +13,11 @@ on:
   pull_request:
   workflow_dispatch:
 
+# Every job here only reads the checkout; none of them pushes, comments or
+# publishes, so the token gets nothing beyond that.
+permissions:
+  contents: read
+
 jobs:
   tests:
     name: Tests · ${{ matrix.os }} · Python ${{ matrix.python-version }}

@@ -49,11 +49,20 @@ LOCAL_ENV_NAMES = {
 }
 VALID_MODES = {'exact', 'inflectable', 'preferred'}
 MODEL_ID = re.compile(r'^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$')
-OUTPUT_LINE = re.compile(
-    r'^(?P<source>.+?)\s*=>\s*(?P<target>.+?)\s*\|\s*'
-    r'(?P<mode>exact|inflectable|preferred)\s*$',
-    re.IGNORECASE,
-)
+def parse_output_line(line: str) -> Optional[Tuple[str, str, str]]:
+    """Split ``source => target | mode`` into its three parts, or return None.
+
+    Plain string splitting, not a regex: the pattern this replaces put a lazy
+    ``.+?`` next to ``\\s*`` twice, so a provider response padded with spaces
+    took quadratic time to reject. The source ends at the first ``=>`` and the
+    mode starts after the last ``|``, which is what that pattern matched.
+    """
+    source, arrow, rest = line.partition('=>')
+    target, bar, mode = rest.rpartition('|')
+    source, target, mode = source.strip(), target.strip(), mode.strip().lower()
+    if not arrow or not bar or not source or not target or mode not in VALID_MODES:
+        return None
+    return source, target, mode
 
 
 class FrontierGlossaryError(RuntimeError):
@@ -401,7 +410,7 @@ def strip_notes(glossary: str) -> str:
     received cannot be damaged, dropped, or hallucinated. So notes are taken
     out before the call and put back verbatim after it, matched by source term.
     That also keeps the provider's output contract exactly as strict as it was:
-    ``OUTPUT_LINE`` still ends at the mode.
+    ``parse_output_line`` still ends at the mode.
     """
     return '\n'.join(split_note(line)[0] for line in glossary.splitlines())
 
@@ -436,14 +445,12 @@ def validate_frontier_output(
         zip(original_entries, candidate_lines),
         start=1,
     ):
-        match = OUTPUT_LINE.fullmatch(line)
-        if not match:
+        parsed = parse_output_line(line)
+        if not parsed:
             raise FrontierGlossaryError(
                 f'The frontier model returned a malformed glossary line {index}'
             )
-        source = match.group('source').strip()
-        target = match.group('target').strip()
-        mode = match.group('mode').lower()
+        source, target, mode = parsed
         if source != expected_source:
             raise FrontierGlossaryError(
                 f'The frontier model changed source term on line {index}'
@@ -469,7 +476,7 @@ def validate_frontier_output(
             #   before = 'Hermione => Гермиона | inflectable'
             #   after  = 'Hermione => Гермиона | preferred {the heroine, a girl}'
             # The provider never saw a note (strip_notes), never returned one
-            # (OUTPUT_LINE rejects it), so the diff is exactly "what the
+            # (parse_output_line rejects it), so the diff is exactly "what the
             # provider changed". The note still reaches the editor through
             # `normalized`, which is what index.html applies.
             changes.append({

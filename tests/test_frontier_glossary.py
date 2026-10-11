@@ -221,6 +221,19 @@ def test_a_provider_that_invents_a_note_is_rejected_like_any_other_extra_text():
         frontier.validate_frontier_output(ANNOTATED, invented)
 
 
+def test_a_line_padded_with_spaces_is_parsed_and_rejected_quickly():
+    assert frontier.parse_output_line('Rom  =>  Ром | Ром  |  Inflectable') == (
+        'Rom', 'Ром | Ром', 'inflectable',
+    )
+    # Both of these took seconds with the old patterns, which backtracked over
+    # every run of spaces; a provider response is not a trusted input.
+    padding = ' ' * 200_000
+    assert frontier.parse_output_line(f'Rom{padding}x') is None
+    assert frontier.split_note(f'Rom => Ром | exact{padding}x') == (
+        f'Rom => Ром | exact{padding}x', '',
+    )
+
+
 def test_a_change_to_an_annotated_entry_does_not_look_like_the_note_was_written():
     """The review list shows what the provider did, and the provider never saw
     a note. A stripped `before` beside an annotated `after` rendered as though
