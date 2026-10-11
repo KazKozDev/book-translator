@@ -31,10 +31,12 @@ cd book-translator
 py -3 launch.py
 ```
 
+No Git? Download the ZIP, unpack it, and double-click the launcher for your system: `Launch Book-Translator.command` on macOS, `Launch Book-Translator.bat` on Windows, `Launch Book-Translator.sh` on Linux. Python 3.10+ has to be installed.
+
 <p align="center">
-  <a href="Launch%20Book-Translator.command"><img src="assets/badges/macos.png" alt="macOS" height="36"></a>
-  <a href="Launch%20Book-Translator.bat"><img src="assets/badges/windows.png" alt="Windows" height="36"></a>
-  <a href="Launch%20Book-Translator.sh"><img src="assets/badges/linux.png" alt="Linux" height="36"></a>
+  <a href="https://github.com/KazKozDev/book-translator/archive/refs/heads/main.zip"><img src="assets/badges/macos.png" alt="Download ZIP for macOS" height="36"></a>
+  <a href="https://github.com/KazKozDev/book-translator/archive/refs/heads/main.zip"><img src="assets/badges/windows.png" alt="Download ZIP for Windows" height="36"></a>
+  <a href="https://github.com/KazKozDev/book-translator/archive/refs/heads/main.zip"><img src="assets/badges/linux.png" alt="Download ZIP for Linux" height="36"></a>
 </p>
 
 The launcher creates a virtual environment, installs dependencies, checks Ollama and models, starts Tolmach at `http://localhost:5001`, and opens your browser. Then pick a model per role in **Settings** and follow the numbered buttons.
