@@ -38,7 +38,9 @@ class GlossaryTerm:
 #: delimiter because ``=>`` and ``|`` both occur inside terms, and a note is
 #: free text that may contain either. Peeled from the end of the line before
 #: the arrow is split, so nothing downstream has to know notes exist.
-NOTE_SUFFIX = re.compile(r"\s*\{([^{}]*)\}\s*$")
+# No leading `\s*`: with search() it made every run of spaces a place to start
+# matching from, which is quadratic on a line of blanks. Callers strip the head.
+NOTE_SUFFIX = re.compile(r"\{([^{}]*)\}\s*$")
 
 
 def split_note(line: str) -> Tuple[str, str]:
