@@ -23,7 +23,7 @@ sacrebleu==2.4.3
 # Local multilingual named-entity extraction used by Stage 0 Prepare.
 gliner==0.2.28
 # Prepare also clusters recurring source variants before target renderings are proposed.
-sentence-transformers==3.4.1
+sentence-transformers==5.7.0
 rapidfuzz==3.9.7
 # COMET-Kiwi, the reference-free quality estimate on the Tests panel. Torch is
 # already here through sentence-transformers, so this adds lightning and a few
